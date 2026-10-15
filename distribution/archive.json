@@ -1,17 +1,19 @@
 {
-  "version": "20261011",
-  "tag": "v2026.10.11",
-  "original_file": "Cube助手-Windows64-便携版-20261011.zip",
-  "asset": "MTG_Cube_Builder-Windows-x64-20261011.zip",
-  "sha256": "535d5b8f1e8d3c7badb9c9a3db04ebb27d9ab06207ffa46e3bb717527ab212bf",
-  "bytes": 829898175,
-  "files": 24907,
+  "version": "20261015",
+  "tag": "v2026.10.15",
+  "original_file": "Cube助手-Windows64-便携版-20261015.zip",
+  "asset": "MTG_Cube_Builder-Windows-x64-20261015.zip",
+  "sha256": "a777ed4f410cae2c906e54502dd6ae9ac6984746e4b5c7030fdabcbc1348962b",
+  "bytes": 833896389,
+  "files": 25090,
   "private_findings": 0,
   "application_source_sha256": {
     "cube_ai/__init__.py": "ec0715526873ddfe1c827fb02130c567ea1eaab122dd3ab0395385cb72a88086",
     "cube_ai/__main__.py": "018685077fdaecef9c5d3f3be30605adf0eb12416cadd4b79143b53c3be2ff81",
+    "cube_ai/ai_settings.py": "aa9ccad470e3dd35e63cb0c7d0b8a0d7592d4b8d2d7044ad37fe8cee260dc514",
     "cube_ai/brackets.py": "f1906c2c84f3fb6b73d03cec0735a6bdfa5f4fb909e5af3f6b93e8783f2974fd",
     "cube_ai/catalog.py": "8ac8100ac715a7a099a1769d8ee2518ccba5cadf8c5453c90bce8321a7d8ee9d",
+    "cube_ai/chatgpt_auth.py": "586fd71804be1a8def4773364a2caf32662e666e7ba650050d0db71e46c8498f",
     "cube_ai/config.py": "c57a3f132c2395c2c6e87d313db1c912d661ce3da25a28eff50d48b6d6793713",
     "cube_ai/design.py": "ed96317a0677171311c618726a41e6955805675610116ea2996aa1cd4ef314f6",
     "cube_ai/draft.py": "4f527fea88691811fd59ea7ca37771ebb473a623d32e8a25a1f0b8783e0f09d4",
@@ -24,8 +26,8 @@
     "cube_ai/import_catalog.py": "3e08e4fa814a24f0f84dd98654c4acc80df5f65f52b973240b39cd1200e44f32",
     "cube_ai/knowledge.py": "00240b1987aaee50b65ccd4adc319dd4428a585b9adff96dffbf35a553c9a6e8",
     "cube_ai/launcher.py": "595eb89ca117db1a95bdbf304bb5c11a98227fb86fbd75af0cbb8434a639355c",
-    "cube_ai/llm.py": "28afb6f88807a7042e596911eb1edf2b7106183fe6ae5991acd4a01a56fd04bd",
+    "cube_ai/llm.py": "f4089c7ba412fc440d3b17ba6d2c319f84d63647c3281c848e7d0d5aa42d7422",
     "cube_ai/optimize.py": "6db1efe0f2c076b158896b1a620e7e03bf5818ff8a449ca5dff3a31d1c55b20b",
-    "cube_ai/server.py": "b9d4770a6a78b0572d1c436d2093e46b47492d694f7e05be372e6198f8d62cd0"
+    "cube_ai/server.py": "988d2d90284941c7a18dbb9cbfc08c9f52b157e8ea8e4b99afe93ea06dbc19d4"
   }
 }

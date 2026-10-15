@@ -9,7 +9,7 @@ CPython 3.13.16：运行环境/python/LICENSE.txt（或该目录中的原始许�
 官方发布页：https://www.python.org/downloads/release/python-31316/
 Python 来源压缩包 SHA256 见发布说明.json。
 
-NumPy、SciPy、Requests 与依赖：许可证保留在运行环境/python/site-packages 的各 .dist-info 目录中。
+NumPy、SciPy、Requests、PyJWT、Cryptography 与依赖：许可证保留在运行环境/python/site-packages 的各 .dist-info 目录中。
 官方 Python 包索引：https://pypi.org/
 NumPy / SciPy 所附 BLAS 等组件的声明随其原有文件保留。
 
