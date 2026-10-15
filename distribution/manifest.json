@@ -1,5 +1,5 @@
 {
-  "version": "20261015-portable-ai",
+  "version": "20261015-r2-portable-ai",
   "platform": "Windows 10/11 x64",
   "python": "3.13.16",
   "python_sha256": "97dae5274cc54867065e8d5a3226e48c35017ed332a0fdb0e27d5b5821961297",
@@ -66,5 +66,9 @@
     "user_cubes_included": false,
     "preferences_included": false
   },
-  "card_snapshot": "2026-10-08"
+  "card_snapshot": "2026-10-08",
+  "fixes": [
+    "保留并组装流式完整输出项，兼容完成通知的空 output",
+    "规划空回复、截断、拒绝与格式错误分别提示"
+  ]
 }

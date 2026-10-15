@@ -137,13 +137,28 @@ class LLMClient:
 
     @staticmethod
     def _completed_stream(response):
-        chunks=[];size=0
+        chunks=[];size=0;completed_items={}
         def consume():
             if not chunks:return None
             try:event=json.loads('\n'.join(chunks))
             except ValueError:raise ValueError('ChatGPT 流式响应无效') from None
+            if not isinstance(event,dict):raise ValueError('ChatGPT 流式事件格式无效')
             kind=event.get('type','')
-            if kind=='response.completed' and event.get('response',{}).get('status')=='completed':return event['response']
+            if kind=='response.output_item.done':
+                index=event.get('output_index');item=event.get('item')
+                if type(index) is not int or index<0 or not isinstance(item,dict):raise ValueError('ChatGPT 完整输出项格式无效')
+                completed_items[index]=item
+            if kind=='response.completed':
+                result=event.get('response')
+                if not isinstance(result,dict) or result.get('status')!='completed':raise ValueError('ChatGPT 输出未完成，请重试')
+                # This route can leave output=[] on lifecycle events. The done
+                # items carry the actual text, complete tool calls and reasoning.
+                output=result.get('output') or []
+                if not isinstance(output,list):raise ValueError('ChatGPT 返回的输出列表格式无效')
+                items=dict(enumerate(output));items.update(completed_items)
+                result=dict(result,output=[items[i] for i in sorted(items)])
+                if not result['output']:raise ValueError('模型报告已完成，但未收到正文或完整工具调用；请重试，若持续出现请检查连接通道')
+                return result
             if kind in {'response.failed','response.incomplete','error'}:
                 code=event.get('code') or (event.get('error') or {}).get('code') or ((event.get('response') or {}).get('error') or {}).get('code','')
                 if code in {'subscription_sharing_usage_limit_exceeded','subscription_sharing_usage_unavailable'}:
@@ -163,6 +178,22 @@ class LLMClient:
             if result is not None:return result
         except requests.RequestException:raise ValueError('ChatGPT 连接中断，尚未收到完整结果') from None
         raise ValueError('ChatGPT 输出未完成；连接结束前未收到完成事件')
+
+
+def response_text(response,style):
+    """Reject unfinished/refused/empty replies before JSON parsing obscures the cause."""
+    if style=='responses':
+        if response.get('status') in {'incomplete','failed','cancelled'}:raise ValueError('模型输出未完成，请缩小需求或稍后重试')
+        parts=[c for x in response.get('output',[]) if x.get('type')=='message' for c in x.get('content',[])]
+        if any(c.get('type')=='refusal' for c in parts):raise ValueError('模型拒绝了本次请求，请调整需求后重试')
+        text=''.join(c.get('text','') for c in parts if c.get('type')=='output_text')
+    else:
+        choices=response.get('choices') or [{}];choice=choices[0];message=choice.get('message') or {}
+        if choice.get('finish_reason')=='length':raise ValueError('模型输出被长度上限截断，请缩小需求或更换模型')
+        if message.get('refusal') or choice.get('finish_reason')=='content_filter':raise ValueError('模型拒绝了本次请求，请调整需求后重试')
+        text=message.get('content') or ''
+    if not isinstance(text,str) or not text.strip():raise ValueError('模型没有返回规划正文；请重试或检查所选模型的输出能力')
+    return text
 
 def replacements(catalog,spec,rows,name,limit=8):
     from .brackets import score_adjustment, cube_report
@@ -272,10 +303,12 @@ def plan(message,base_spec,knowledge,client=None):
     messages=[{"role":"system","content":"把用户 Cube 需求转换成构筑参数。只修改需求明确涉及的字段。其他参数沿用当前配置。不要生成整份牌表；程序将从真实牌库构筑。普通 Cube 专用指挥官设 0。不要把牌力改进承诺当作实战结论。"},
               {"role":"user","content":json.dumps({"current":base_spec.to_dict(),"knowledge":knowledge.search(message,3),"request":message},ensure_ascii=False)}]
     response=client.request(messages,schema=schema)
-    if client.style=="responses":text="".join(c.get("text","") for x in response.get("output",[]) if x.get("type")=="message" for c in x.get("content",[]) if c.get("type")=="output_text")
-    else:text=response.get("choices",[{}])[0].get("message",{}).get("content","")
-    try:data=validate_output(json.loads(text),schema);explanation=data.pop("explanation")
-    except (ValueError,KeyError,TypeError):raise ValueError("模型没有返回完整可用的构筑规划") from None
+    text=response_text(response,client.style)
+    try:data=json.loads(text)
+    except (ValueError,TypeError):raise ValueError('模型返回的规划不是有效 JSON，请重试或检查 AI 设置中的 JSON 输出方式') from None
+    try:validate_output(data,schema)
+    except ValueError as error:raise ValueError('构筑规划格式不完整：'+str(error)) from None
+    explanation=data.pop('explanation')
     merged=base_spec.to_dict();merged.update(data)
     if merged['mode']=='classic':merged.update(bracket=None,cube_gc_limit=None)
     # Changing mode also resets draft rules to the matching preset unless the user edits them later.
