@@ -29,10 +29,10 @@ def bridge_signature():
 
 class Worker:
     def __init__(self,config,make_home,out):
-        self.key=(config['java'],config['jar']);self.busy=True;self.closed=False
+        self.key=worker_key(config);self.busy=True;self.closed=False
         self.home=make_home(config,out)
         classes=(RUNTIME/'acceleration/classes').resolve()
-        self.command=[config['java'],'-Xmx2048m','-Dfile.encoding=UTF-8','-Djava.awt.headless=true',
+        self.command=[config['java'],f'-Xmx{config.get("heap_mib",2048)}m',*config.get('jvm_options',[]),'-Dfile.encoding=UTF-8','-Djava.awt.headless=true',
             '-cp',str(classes)+os.pathsep+config['jar'],'cube.worker.CubeWorker']
         self.process=subprocess.Popen(self.command,cwd=self.home,stdin=subprocess.PIPE,stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,text=True,encoding='utf-8',errors='replace',bufsize=1,
@@ -86,12 +86,15 @@ class Worker:
             command=self.command,wall_seconds=time.monotonic()-started,worker_game=self.games,
             worker_directory=str(self.home),backend=BRIDGE_VERSION)
 
+def worker_key(config):return (config['java'],config['jar'],config.get('heap_mib',2048),tuple(config.get('jvm_options',[])))
+
+
 def run(config,make_home,deck_dir,order,seed,clock,out,log_name):
     if not available():raise WorkerUnavailable('常驻引擎组件尚未编译')
     started=time.monotonic()
     with _guard:
         _workers[:]=[w for w in _workers if not w.closed]
-        worker=next((w for w in _workers if not w.busy and not w.closed and w.key==(config['java'],config['jar'])),None)
+        worker=next((w for w in _workers if not w.busy and not w.closed and w.key==worker_key(config)),None)
         if worker:worker.busy=True
     if worker is None:
         worker=Worker(config,make_home,out)

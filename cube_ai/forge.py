@@ -106,7 +106,8 @@ def configuration():
         if available() and verified.get('passed') and verified.get('jar_sha256')==actual and verified.get('bridge_sha256')==bridge_signature():
             value['backend']='resident'
     except (OSError,ValueError,KeyError):pass
-    return value
+    from .tuning import apply
+    return apply(value)
 
 def status():
     try:
@@ -209,7 +210,7 @@ def run_battle(config,deck_dir,order,seed,clock_seconds,out,log_name):
         from .forge_worker import bridge_signature
         cache_key=key('game',['native-cache-2',fingerprint(config['jar']),fingerprint(config['java']),
             bridge_signature() if config.get('backend')=='resident' else '',
-            config.get('backend','isolated'),order,seed,clock_seconds,
+            config.get('backend','isolated'),config.get('heap_mib',2048),config.get('jvm_options',[]),order,seed,clock_seconds,
             [fingerprint(deck_dir/(n+'.dck')) for n in order]])
         cached=get(cache_key)
         if cached and isinstance(cached.get('record'),dict) and isinstance(cached.get('log'),str) and cached['record'].get('outcome') in {'win','draw'}:
@@ -242,7 +243,7 @@ def _run_battle(config,deck_dir,order,seed,clock_seconds,out,log_name):
             return value
         except WorkerUnavailable as e:
             fallback=str(e) # Startup unavailable: the untouched native CLI is the fallback.
-    command=[config['java'],'-Xmx2048m','-Dfile.encoding=UTF-8','-Djava.awt.headless=true',
+    command=[config['java'],f'-Xmx{config.get("heap_mib",2048)}m',*config.get('jvm_options',[]),'-Dfile.encoding=UTF-8','-Djava.awt.headless=true',
         '-jar',config['jar'],'sim','-D',str(deck_dir.resolve()),'-d',*[n+'.dck' for n in order],
         '-f','Commander','-n','1','-s',str(seed),'-c',str(clock_seconds)]
     home=worker_home(config,out)

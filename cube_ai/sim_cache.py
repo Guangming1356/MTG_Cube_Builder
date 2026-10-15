@@ -36,6 +36,33 @@ def draft(catalog,rows,spec,seed,prefs):
     put(k,pod,'draft')
     return pod,False
 
+
+class DraftWorkspace:
+    """Bounded per-search memory. Reuse requires identical *entire* pack layout.
+
+    Trial cubes are not written to disk. Changed tables are redrafted completely;
+    unchanged tables reuse both their draft and deck metrics. No picked-pool shortcut.
+    """
+    def __init__(self,catalog,spec,limit=4096):
+        from collections import OrderedDict
+        self.catalog=catalog;self.settings=spec.to_dict();self.entries=OrderedDict();self.limit=limit
+
+    def table(self,catalog,rows,spec,seed,prefs,summarize):
+        import random
+        from .draft import deal,draft_pod
+        if catalog is not self.catalog or spec.to_dict()!=self.settings:
+            raise ValueError('增量轮抓工作区不能跨卡池或构筑参数复用')
+        rng=random.Random(seed);packs=deal(catalog,rows,spec,rng)
+        layout=tuple(tuple((r['name'],r['role']) for r in pack) for pack in packs)
+        token=(seed,tuple(prefs),layout)
+        if token in self.entries:
+            result=self.entries[token];self.entries.move_to_end(token)
+            return result,True
+        pod=draft_pod(catalog,rows,spec,rng,prefs,readiness_hands=0,_packs=packs)
+        result=(pod,summarize(pod));self.entries[token]=result
+        if len(self.entries)>self.limit:self.entries.popitem(last=False)
+        return result,False
+
 def key(kind,value):
     return kind+':'+hashlib.sha256(json.dumps(value,sort_keys=True,separators=(',',':'),ensure_ascii=False).encode()).hexdigest()
 

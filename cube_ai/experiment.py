@@ -38,11 +38,14 @@ def execution_resources(workers=0):
     memory_cap = max(1, int((available / 2**30 - 3) // 2.75)) if available else 2
     maximum = min(MAX_WORKERS, max(1, cpu // 2), memory_cap)
     automatic = min(4, max(1, cpu // 4), maximum)
+    from .tuning import recommendation
+    calibrated=recommendation(maximum) if not workers else None
+    if calibrated:automatic=calibrated
     if workers > maximum:
         raise ValueError(f'当前空闲资源建议最多同时 {maximum} 局；请选择自动或减少同时对局数')
     return dict(requested=workers, workers=workers or automatic, automatic=automatic,
                 maximum=maximum, cpu_count=cpu, available_memory_bytes=available,
-                heap_mib_per_game=2048, pipeline=True)
+                heap_mib_per_game=2048, pipeline=True,calibrated=bool(calibrated))
 
 
 def experiment_budget(profile='standard', training_pods=None, max_swaps=None, cube_size=600):

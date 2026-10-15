@@ -8,6 +8,7 @@ import re
 import statistics
 import uuid
 import zipfile
+import time
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
@@ -23,9 +24,10 @@ from .features import VERSION
 from .forge import card_index, configuration, engine_name, run_battle, simulate, write_deck, forge_session, evidence_files,campaign_resources
 from .design import design_bonus, deck_design_report, package_roles
 from .experiment import experiment_budget, execution_resources
+from .performance import Timings
 
 OPTIMIZATIONS=ROOT/'optimizations'
-POLICY_VERSION='forge-feedback-1.3'
+POLICY_VERSION='forge-feedback-1.4'
 _eligible_cache={}
 # Sparse self-play cannot justify cutting these efficient, broadly useful spells.
 # This expert guard is versioned policy, not invented training labels.
@@ -56,21 +58,33 @@ def deck_metrics(catalog,deck):
     return dict(buildable=True,identity=deck['identity'],preferred=deck['guild'],commander=deck['commander'],
         strength=round(value,6),components=parts,design=deck_design_report(catalog,deck),bracket=deck.get('bracket'),**counts)
 
-def draft_evaluation(catalog,rows,spec,seeds,guilds,include_tables=False,learned=None):
+def _pod_metrics(catalog,pod):
+    metrics=[];counts=defaultdict(Counter)
+    for d in pod['decks']:
+        metrics.append(dict(seat=d['seat'],**deck_metrics(catalog,d)))
+        used=set(d.get('spells',[])+d.get('lands',[])+([d['commander']] if d.get('commander') else []))
+        for n in d['drafted']:
+            c=catalog.cards[n];stat=counts[n];stat['drafted']+=1
+            if d['buildable'] and (c['identity']=='C' or set(c['identity'])<=set(d['identity'])):
+                stat['eligible_pool']+=1
+                if n in used:stat['included']+=1
+    return metrics,counts
+
+
+def draft_evaluation(catalog,rows,spec,seeds,guilds,include_tables=False,learned=None,workspace=None):
     from .sim_cache import draft as cached_draft
-    observations=[];tables=[];card_counts=defaultdict(Counter);cache_hits=0
+    if len(seeds)!=len(guilds) or not seeds:raise ValueError('轮抓种子与色组安排需非空且长度相同')
+    started=time.perf_counter();observations=[];tables=[];card_counts=defaultdict(Counter);cache_hits=0
     for p,(seed,prefs) in enumerate(zip(seeds,guilds)):
-        pod,hit=cached_draft(catalog,rows,spec,seed,prefs);cache_hits+=hit
-        pod['pod']=p;pod['draft_seed']=seed
+        if workspace:
+            (original,(metrics,counts)),hit=workspace.table(catalog,rows,spec,seed,prefs,lambda pod:_pod_metrics(catalog,pod))
+            pod=dict(original)
+        else:
+            pod,hit=cached_draft(catalog,rows,spec,seed,prefs);metrics,counts=_pod_metrics(catalog,pod)
+        cache_hits+=hit;pod['pod']=p;pod['draft_seed']=seed
         tables.append(pod)
-        for d in pod['decks']:
-            m=deck_metrics(catalog,d);observations.append(dict(pod=p,seat=d['seat'],**m))
-            used=set(d.get('spells',[])+d.get('lands',[])+([d['commander']] if d.get('commander') else []))
-            for n in d['drafted']:
-                c=catalog.cards[n];stat=card_counts[n];stat['drafted']+=1
-                if d['buildable'] and (c['identity']=='C' or set(c['identity'])<=set(d['identity'])):
-                    stat['eligible_pool']+=1
-                    if n in used:stat['included']+=1
+        observations.extend(dict(pod=p,**m) for m in metrics)
+        for n,stat in counts.items():card_counts[n].update(stat)
     values=[m['strength'] for m in observations]
     groups={}
     for g in GUILDS:
@@ -91,7 +105,8 @@ def draft_evaluation(catalog,rows,spec,seeds,guilds,include_tables=False,learned
         predicted=predict_tables(catalog,tables,learned)
         if predicted is not None:
             report['mean_predicted_activity']=float(np.mean(predicted));report['learned_model_id']=learned['id']
-    report['execution']=dict(cache_hits=cache_hits,cache_misses=len(seeds)-cache_hits,opening_hand_sampling=False)
+    report['execution']=dict(cache_hits=cache_hits,cache_misses=len(seeds)-cache_hits,opening_hand_sampling=False,
+        incremental=workspace is not None,wall_seconds=round(time.perf_counter()-started,6))
     return report
 
 def log_events(log):
@@ -181,17 +196,19 @@ def collect_training(catalog,rows,spec,out,pods=30,workers=0,clock=120,progress=
         ranking_seeds=schedule(budget['ranking_pods'],seed+1000000)[0],ranking_guilds=schedule(budget['ranking_pods'],seed+1000000)[1],
         structural_holdout_seeds=schedule(budget['structural_pods'],seed+3000000)[0],structural_holdout_guilds=schedule(budget['structural_pods'],seed+3000000)[1],
         max_swaps=budget['max_swaps'],max_evaluated_alternatives=budget['alternatives'],game_workers=workers,clock_seconds=clock,
+        search=dict(version='screen-1',mode='full',batch_size=8,patience=3,stages=sorted({10,30,budget['ranking_pods']})),
         cross_strategy='每个发生牌组变化的独立轮抓席位：旧牌组、新牌组、旧桌下一席位锚牌组；三局轮换座位；种子=对应保留桌种子+50000+席位*100+局序号',
         adoption='结构均值与低分位改善、色组差不扩大、所有硬约束通过；实战用于确认正常终结、行为节奏及回归。少量实战不宣称统计显著牌力提升。',
         risks=['原生 AI 驾驶偏差','同桌三局相关','启发式语义标签可能错误','结构强度不是胜率','未施放不等于抽到但不能用'])
     save(out/'protocol.json',protocol);save(out/'base_cube.json',dict(cards=rows,spec=spec.to_dict()))
     progress(f'收集训练：{pods} 桌 / {pods*3} 局，最多同时 {workers} 局；另做开发轮抓')
     # CPU drafting runs while native JVMs play. Selection waits for both datasets.
+    timing=Timings(out/'timings.json')
     with ThreadPoolExecutor(max_workers=1) as pool:
-        pending=pool.submit(draft_evaluation,catalog,rows,spec,protocol['ranking_seeds'],protocol['ranking_guilds'],learned=learned)
-        match=simulate(catalog,rows,spec,pods,3,clock,progress,pod_seeds=seeds,preferred_guilds=guilds,workers=workers)
+        pending=pool.submit(timing.call,'development_drafts',draft_evaluation,catalog,rows,spec,protocol['ranking_seeds'],protocol['ranking_guilds'],learned=learned)
+        match=timing.call('training_forge',simulate,catalog,rows,spec,pods,3,clock,progress,pod_seeds=seeds,preferred_guilds=guilds,workers=workers)
         offline=pending.result()
-    evidence=evidence_from_match(catalog,match)
+    evidence=timing.call('training_trace_analysis',evidence_from_match,catalog,match)
     save(out/'training_match.json',match);save(out/'training_evidence.json',evidence)
     save(out/'training_drafts.json',offline)
     return protocol,match,evidence,offline
@@ -295,44 +312,62 @@ def propose_revision(catalog,rows,spec,protocol,evidence,drafts,progress=print):
             if row['role']=='Main' and (improvement<-.4 or c['quality']<old['quality']-.45):continue
             ranked.append((priority+improvement*.75,i,c,improvement))
     ranked.sort(key=lambda x:(-x[0],x[1],x[2]['name']))
-    # Test a small number of audited alternatives per outgoing card, then promote
-    # only on development seeds. Holdout data is not consulted here.
-    candidate=list(dict(r) for r in rows);changes=[];taken=set();considered=[]
-    current=drafts;best_value=objective(current);attempts=Counter()
-    for _,i,c,gain in ranked:
-        if len(changes)>=protocol['max_swaps']:break
-        if len(considered)>=protocol.get('max_evaluated_alternatives',80):break
-        if i in taken or c['name'] in {r['name'] for r in candidate}:continue
-        if attempts[i]>=3:continue
-        old=catalog.cards[candidate[i]['name']]
-        trial=[dict(r) for r in candidate];trial[i]['name']=c['name']
-        checked=audit(catalog,trial,spec,strict=True)
-        if checked['hard_errors']:continue
-        attempts[i]+=1
-        progress(f'评估替换 {old["name"]} → {c["name"]}；已采用 {len(changes)} 张')
-        evaluated=draft_evaluation(catalog,trial,spec,protocol['ranking_seeds'],protocol['ranking_guilds'],learned=protocol.get('learned_model'))
-        value=objective(evaluated)
-        supported=not engine_name(old['name'],index)
-        group_changes={g:evaluated['guilds'][g]['mean_strength']-drafts['guilds'][g]['mean_strength'] for g in GUILDS}
-        accept=(value>best_value+.000015 and evaluated['mean_strength']>=current['mean_strength']-.00015
-                and evaluated['p10_strength']>=current['p10_strength']-.0008
-                and evaluated['guild_gap']<=drafts['guild_gap']+.002
-                and min(group_changes.values())>=-.006) or (supported and value>=best_value-.0005)
-        record=dict(remove=old['name'],add=c['name'],role=trial[i]['role'],identity=old['identity'],
-            bucket=old['bucket'],draft_usage=drafts['cards'].get(old['name'],{}),
-            forge_usage=evidence['cards'].get(old['name'],{}),utility_gain=round(gain,5),
-            development_objective_before=round(best_value,6),development_objective_after=round(value,6),
-            accepted=accept,reason=('Forge 未实现，换为同色合规指挥官' if supported else
-                '训练轮抓中使用率与牌组缺口触发候选；Forge 行为与收缩色组信号参与排序；同色同费用档替换后，训练桌低分位与均衡目标改善'))
-        considered.append(record)
-        if accept:
-            candidate=trial;current=evaluated;best_value=value;taken.add(i);changes.append(record)
+    # All candidates within a batch share one immutable base. Commit at most one,
+    # then build the next batch against the updated base; no stale combinations.
+    from .search import CandidateEvaluator
+    candidate=[dict(r) for r in rows];changes=[];taken=set();considered=[]
+    current=drafts;best_value=objective(current);attempts=Counter();cursor=0;tested=0;empty_batches=0
+    started=time.perf_counter();search_policy=protocol.get('search',{})
+    batch_size=search_policy.get('batch_size',8);patience=search_policy.get('patience',3)
+    with CandidateEvaluator(catalog,spec,protocol['ranking_seeds'],protocol['ranking_guilds'],
+            protocol.get('learned_model'),workers=search_policy.get('workers'),adaptive=search_policy.get('mode','full')=='adaptive') as evaluator:
+        while len(changes)<protocol['max_swaps'] and tested<protocol.get('max_evaluated_alternatives',80):
+            batch=[];present={r['name'] for r in candidate}
+            while cursor<len(ranked) and len(batch)<batch_size and tested+len(batch)<protocol.get('max_evaluated_alternatives',80):
+                _,i,c,gain=ranked[cursor];cursor+=1
+                if i in taken or c['name'] in present or attempts[i]>=3:continue
+                trial=[dict(r) for r in candidate];trial[i]['name']=c['name']
+                if audit(catalog,trial,spec,strict=True)['hard_errors']:continue
+                attempts[i]+=1
+                batch.append(dict(index=i,rows=trial,remove=candidate[i]['name'],add=c['name'],gain=gain))
+            if not batch:break
+            tested+=len(batch)
+            survivors,rejected=evaluator.screen(batch,candidate,progress);considered.extend(rejected)
+            passing=[]
+            for item in survivors:
+                i=item['index'];old=catalog.cards[item['remove']];evaluated=item['evaluation'];value=objective(evaluated)
+                supported=not engine_name(old['name'],index)
+                group_changes={g:evaluated['guilds'][g]['mean_strength']-drafts['guilds'][g]['mean_strength'] for g in GUILDS}
+                passes=(value>best_value+.000015 and evaluated['mean_strength']>=current['mean_strength']-.00015
+                    and evaluated['p10_strength']>=current['p10_strength']-.0008
+                    and evaluated['guild_gap']<=drafts['guild_gap']+.002 and min(group_changes.values())>=-.006
+                    ) or (supported and value>=best_value-.0005)
+                record=dict(remove=old['name'],add=item['add'],role=item['rows'][i]['role'],identity=old['identity'],
+                    bucket=old['bucket'],draft_usage=drafts['cards'].get(old['name'],{}),forge_usage=evidence['cards'].get(old['name'],{}),
+                    utility_gain=round(item['gain'],5),development_objective_before=round(best_value,6),
+                    development_objective_after=round(value,6),stage_pods=len(protocol['ranking_seeds']),
+                    accepted=False,passes_full_gate=passes,status='full_evaluation',
+                    reason=('Forge 未实现，换为同色合规指挥官' if supported else
+                        '实战行为与开发轮抓缺口筛选；完整开发集检查均值、弱牌组及色组均衡后采用'))
+                considered.append(record)
+                if passes:passing.append((value,item,record))
+            if passing:
+                passing.sort(key=lambda x:(-x[0],x[1]['index'],x[1]['add']))
+                value,item,record=passing[0];record['accepted']=True
+                candidate=item['rows'];current=item['evaluation'];best_value=value;taken.add(item['index']);changes.append(record)
+                empty_batches=0;progress(f'采用替换 {item["remove"]} → {item["add"]}；共 {len(changes)} 张')
+            else:empty_batches+=1
+            if empty_batches>=patience:
+                progress(f'连续 {patience} 批没有通过完整检查的改进，提前结束搜索');break
+        search=dict(evaluator.stats,wall_seconds=round(time.perf_counter()-started,3),fallback=evaluator.fallback,
+            stop_reason='no_improvement' if empty_batches>=patience else 'budget_or_candidates',
+            approximate=search_policy.get('mode','full')=='adaptive',note='分轮筛选可能遗漏候选；只在完整开发集通过后采用。独立验收不参与选择。')
     if not changes:raise ValueError('训练数据下没有通过约束与开发集门槛的替换；未生成虚假改进')
     result=dict(cards=candidate,spec=spec.to_dict(),audit=audit(catalog,candidate,spec,strict=True),solver=None,
         changes=dict(removed=[r['remove'] for r in changes],added=[r['add'] for r in changes]),
         provenance=dict(snapshot=catalog.snapshot,catalog=catalog.signature,features=VERSION,source=POLICY_VERSION,
             feedback=model,scoring=scoring,training_match=evidence['match_id'],training_draft_seeds=protocol['ranking_seeds']))
-    return result,dict(model=model,swaps=changes,considered=considered,training_before=drafts,training_after=current)
+    return result,dict(model=model,swaps=changes,considered=considered,training_before=drafts,training_after=current,search=search)
 
 def paired_structural(before,after):
     a={(r['pod'],r['seat']):r['strength'] for r in before['observations']}
@@ -440,6 +475,7 @@ def finish_revision(catalog,out,progress=print):
     with forge_session():return _finish_revision(catalog,out,progress)
 
 def _finish_revision(catalog,out,progress=print):
+    timing=Timings(out/'timings.json')
     read=lambda n:json.loads((out/n).read_text(encoding='utf-8'))
     base=read('base_cube.json');candidate=read('candidate.json');selection=read('selection.json');protocol=read('protocol.json')
     spec=BuildSpec.from_dict(base['spec']);rows=candidate['cards']
@@ -451,17 +487,17 @@ def _finish_revision(catalog,out,progress=print):
     progress(f'独立测试：{structural_pods} 桌 / {structural_pods*3} 副牌组，新旧使用同样轮抓种子与色组')
     for label,items in [('before',base['cards']),('after',rows)]:
         file=out/f'holdout_drafts_{label}.json'
-        if not file.exists():save(file,draft_evaluation(catalog,items,spec,protocol['structural_holdout_seeds'],protocol['structural_holdout_guilds'],learned=protocol.get('learned_model')))
+        if not file.exists():save(file,timing.call('holdout_structure_'+label,draft_evaluation,catalog,items,spec,protocol['structural_holdout_seeds'],protocol['structural_holdout_guilds'],learned=protocol.get('learned_model')))
     paired=paired_structural(read('holdout_drafts_before.json'),read('holdout_drafts_after.json'))
     for label,items in [('before',base['cards']),('after',rows)]:
         file=out/f'holdout_match_{label}.json'
         if not file.exists():
             progress(f'独立 Forge 对局：{label}，{holdout_pods} 桌 / {holdout_pods*3} 局')
-            value=simulate(catalog,items,spec,holdout_pods,3,protocol['clock_seconds'],progress,
+            value=timing.call('holdout_forge_'+label,simulate,catalog,items,spec,holdout_pods,3,protocol['clock_seconds'],progress,
                 pod_seeds=protocol['holdout_seeds'],preferred_guilds=protocol['holdout_guilds'],workers=protocol['game_workers'])
             save(file,value)
-        save(out/f'holdout_evidence_{label}.json',evidence_from_match(catalog,read(f'holdout_match_{label}.json')))
-    if not (out/'cross_match.json').exists():cross_cube(catalog,read('holdout_match_before.json'),read('holdout_match_after.json'),protocol,out,progress)
+        save(out/f'holdout_evidence_{label}.json',timing.call('holdout_trace_'+label,evidence_from_match,catalog,read(f'holdout_match_{label}.json')))
+    if not (out/'cross_match.json').exists():timing.call('cross_forge',cross_cube,catalog,read('holdout_match_before.json'),read('holdout_match_after.json'),protocol,out,progress)
     before=read('holdout_evidence_before.json');after=read('holdout_evidence_after.json');cross=read('cross_match.json')
     sampling=sampling_report(protocol,before,after,cross,read('training_evidence.json'))
     interval=sampling['cross']['pod_bootstrap95'];margin=sampling['cross']['mean_new_minus_old']
@@ -483,7 +519,7 @@ def _finish_revision(catalog,out,progress=print):
         save(out/'exported_candidate.json',export_run(catalog,candidate))
     revision=read('exported_candidate.json')
     report=dict(optimization_id=out.name,status=status,gates=gates,revision=revision,swaps=selection['swaps'],
-        sampling=sampling,budget=protocol.get('budget'),execution=protocol.get('resources'),
+        sampling=sampling,budget=protocol.get('budget'),execution=protocol.get('resources'),timings=timing.snapshot(),search=selection.get('search'),
         structural=paired,behavior=paired_behavior(before,after),training=read('training_evidence.json')['summary'],
         forge_before=before['summary'],forge_after=after['summary'],cross=cross['summary'],cross_games=cross['attempted'],
         matches=dict(training=read('training_match.json')['match_id'],before=read('holdout_match_before.json')['match_id'],after=read('holdout_match_after.json')['match_id']),
@@ -509,35 +545,38 @@ def _finish_revision(catalog,out,progress=print):
         '## 替换明细','']
     lines.extend(f'- {r["remove"]} → **{r["add"]}**（{r["identity"]}）：{r["reason"]}' for r in selection['swaps'])
     (out/'report.md').write_text('\n\n'.join(lines)+'\n',encoding='utf-8')
-    with zipfile.ZipFile(out/'evidence.zip','w',zipfile.ZIP_DEFLATED) as z:
+    with timing.span('export_evidence'),zipfile.ZipFile(out/'evidence.zip','w',zipfile.ZIP_DEFLATED) as z:
         for p in evidence_files(out):z.write(p,p.relative_to(out))
         for label,id_ in report['matches'].items():
             from .forge import MATCHES
             for p in evidence_files(MATCHES/id_):z.write(p,Path('native_matches')/label/p.relative_to(MATCHES/id_))
+    report['timings']=timing.snapshot();save(out/'report.json',report)
     return report
 
-def optimize(catalog,rows,spec,progress=print,workers=0,clock=120,training_pods=None,profile='standard',max_swaps=None,scoring_backend='auto'):
+def optimize(catalog,rows,spec,progress=print,workers=0,clock=120,training_pods=None,profile='standard',max_swaps=None,scoring_backend='auto',search_mode='full'):
     if audit(catalog,rows,spec,strict=True)['hard_errors']:raise ValueError('先修复严格审计中的错误')
     budget=experiment_budget(profile,training_pods,max_swaps,len(rows))
     resources=execution_resources(workers)
     if scoring_backend not in {'auto','cpu','gpu'}:raise ValueError('评分后端需为 auto、cpu 或 gpu')
+    if search_mode not in {'adaptive','full'}:raise ValueError('候选搜索方式无效')
     if type(clock)!=int or not 15<=clock<=300:raise ValueError('单局时限需为 15–300 秒')
     with forge_session():
-        return _optimize(catalog,rows,spec,progress,resources['workers'],clock,budget,scoring_backend)
+        return _optimize(catalog,rows,spec,progress,resources['workers'],clock,budget,scoring_backend,search_mode)
 
-def _optimize(catalog,rows,spec,progress,workers,clock,budget,scoring_backend='auto'):
+def _optimize(catalog,rows,spec,progress,workers,clock,budget,scoring_backend='auto',search_mode='full'):
     id_=datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')+'_'+uuid.uuid4().hex[:8]
     out=OPTIMIZATIONS/id_;out.mkdir(parents=True)
     # Each subsequent optimization receives fresh declared seeds; a new card list
     # must not repeatedly be selected against a previously inspected holdout.
     seed=random.SystemRandom().randrange(1,1_000_000_000)
     protocol,match,evidence,drafts=collect_training(catalog,rows,spec,out,budget['training_pods'],workers,clock,progress,experiment_seed=seed,budget=budget)
-    protocol['scoring_backend']=scoring_backend;save(out/'protocol.json',protocol)
-    candidate,selection=propose_revision(catalog,rows,spec,protocol,evidence,drafts,progress)
+    protocol['scoring_backend']=scoring_backend;protocol['search']['mode']=search_mode;save(out/'protocol.json',protocol)
+    candidate,selection=Timings(out/'timings.json').call('candidate_search',propose_revision,catalog,rows,spec,protocol,evidence,drafts,progress)
     save(out/'candidate.json',candidate);save(out/'selection.json',selection)
     report=finish_revision(catalog,out,progress)
     from .surrogate import train
-    try:report['learning_update']=train(catalog,progress)
+    timing=Timings(out/'timings.json')
+    try:report['learning_update']=timing.call('learning_update',train,catalog,progress)
     except (OSError,ValueError,RuntimeError,np.linalg.LinAlgError) as e:report['learning_update']=dict(status='failed',reason=str(e))
-    save(out/'report.json',report)
+    report['timings']=timing.snapshot();save(out/'report.json',report)
     return report
