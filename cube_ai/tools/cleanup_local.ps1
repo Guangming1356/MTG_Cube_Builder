@@ -1,4 +1,4 @@
-﻿param([switch]$Preview)
+﻿param([switch]$Preview, [switch]$VerifyOnly)
 $ErrorActionPreference = 'Stop'
 $cubeRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path.TrimEnd('\')
 $cubePlanPath = Join-Path $cubeRoot 'cube_ai\private\cleanup-plan.json'
@@ -26,6 +26,21 @@ foreach ($cubeEntry in $cubePlan.targets) {
             throw "目标不是已审查的普通路径：$cubeAbsolute"
         }
         $cubeTargets += $cubeEntry
+    }
+}
+# Protect both individual settings and whole user-record directories from the target list.
+$cubeProtectedPaths = @()
+foreach ($cubeGroup in @($cubePlan.preserved_hashes, $cubePlan.preserved_records)) {
+    foreach ($cubeProperty in $cubeGroup.PSObject.Properties) {
+        $cubeProtectedPaths += [IO.Path]::GetFullPath((Join-Path $cubeRoot $cubeProperty.Name))
+    }
+}
+foreach ($cubeEntry in $cubeTargets) {
+    $cubeTargetPath = [IO.Path]::GetFullPath($cubeEntry.path).TrimEnd('\')
+    foreach ($cubeProtectedPath in $cubeProtectedPaths) {
+        if ($cubeTargetPath -eq $cubeProtectedPath -or $cubeProtectedPath.StartsWith($cubeTargetPath + '\', [StringComparison]::OrdinalIgnoreCase) -or $cubeTargetPath.StartsWith($cubeProtectedPath + '\', [StringComparison]::OrdinalIgnoreCase)) {
+            throw "清理范围与保留资料重叠：$cubeTargetPath"
+        }
     }
 }
 if ($Preview) {
@@ -62,13 +77,27 @@ foreach ($cubeRelease in $cubeReceipt.releases) {
         }
     }
 }
+function Get-CubeSharedHash([string]$Path) {
+    $cubeStream = [IO.File]::Open($Path, [IO.FileMode]::Open, [IO.FileAccess]::Read, ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete))
+    $cubeHasher = [Security.Cryptography.SHA256]::Create()
+    try { return ([BitConverter]::ToString($cubeHasher.ComputeHash($cubeStream))).Replace('-', '') }
+    finally { $cubeHasher.Dispose(); $cubeStream.Dispose() }
+}
 $cubePreserved = @{}
+$cubeLiveFiles = @()
 foreach ($cubeProperty in $cubePlan.preserved_hashes.PSObject.Properties) {
     $cubeFile = Join-Path $cubeRoot $cubeProperty.Name
     if (!(Test-Path -LiteralPath $cubeFile -PathType Leaf)) { throw "需要保留的文件不存在：$($cubeProperty.Name)" }
-    $cubePreserved[$cubeProperty.Name] = (Get-FileHash -LiteralPath $cubeFile -Algorithm SHA256).Hash
+    # A live SQLite file may be locked or legitimately change while the app runs.
+    # Its directory is excluded above; do not take an inconsistent raw-file hash.
+    if ([IO.Path]::GetExtension($cubeFile) -eq '.sqlite') { $cubeLiveFiles += $cubeProperty.Name; continue }
+    $cubePreserved[$cubeProperty.Name] = Get-CubeSharedHash $cubeFile
 }
-$cubeReport = [ordered]@{ time = (Get-Date -Format o); status = 'running'; deleted_bytes = 0; removed = @(); preserved_files_verified = $false }
+if ($VerifyOnly) {
+    Write-Host '检查通过：远端附件完整、清理目标与保留资料无重叠、运行中的偏好数据库已排除。未删除任何文件。'
+    exit 0
+}
+$cubeReport = [ordered]@{ time = (Get-Date -Format o); status = 'running'; deleted_bytes = 0; removed = @(); preserved_files_verified = $false; live_files_excluded_from_hashing = $cubeLiveFiles }
 try {
     foreach ($cubeEntry in $cubeTargets) {
         $cubeTarget = (Resolve-Path -LiteralPath $cubeEntry.path).Path
@@ -92,9 +121,12 @@ try {
         Write-Host ('已清理：' + $cubeTarget.Substring($cubeRoot.Length + 1))
     }
     foreach ($cubeName in $cubePreserved.Keys) {
-        if ((Get-FileHash -LiteralPath (Join-Path $cubeRoot $cubeName) -Algorithm SHA256).Hash -ne $cubePreserved[$cubeName]) {
+        if ((Get-CubeSharedHash (Join-Path $cubeRoot $cubeName)) -ne $cubePreserved[$cubeName]) {
             throw "保留文件在清理期间发生变化：$cubeName"
         }
+    }
+    foreach ($cubeName in $cubeLiveFiles) {
+        if (!(Test-Path -LiteralPath (Join-Path $cubeRoot $cubeName) -PathType Leaf)) { throw "保留的运行中数据不存在：$cubeName" }
     }
     $cubeReport.preserved_files_verified = $true
     $cubeReport.status = 'done'
