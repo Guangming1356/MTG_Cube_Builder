@@ -102,33 +102,6 @@ def scan_archive(path, needles):
     return dict(sha256=digest,bytes=path.stat().st_size,files=count,private_findings=0)
 
 
-def sanitize_legacy_example(original,version):
-    """Change only a legacy illustrative path; retain the local original."""
-    folder=OUTPUT/version;folder.mkdir(parents=True,exist_ok=True)
-    target=folder/f'MTG_Cube_Builder-Windows-x64-{version}.zip'
-    changed=[];original_digest=sha(original)
-    with zipfile.ZipFile(original) as source,zipfile.ZipFile(target,'w',allowZip64=True) as dest:
-        for item in source.infolist():
-            replacement=None
-            if item.filename.endswith('/forge.profile.properties.example'):
-                replacement=b'# Optional example. The launcher generates the actual profile.\n# userDir=./userdata\n# cacheDir=./cache\n'
-                changed.append(item.filename)
-            elif item.filename=='Cube助手/发布说明.json':
-                value=json.loads(source.read(item).decode('utf-8-sig'))
-                value['privacy_cleanup']=dict(original_archive_sha256=original_digest,
-                    note='Replaced an illustrative local filesystem path with a relative-path example; application modules and bundled dependencies are unchanged.')
-                replacement=json.dumps(value,ensure_ascii=False,indent=2).encode()
-            elif item.filename=='Cube助手/隐私检查.json':
-                replacement=json.dumps(dict(private_patterns_found=0,state_files_included=0,
-                    note='Rescanned before GitHub publication after normalizing a legacy example path.'),indent=2).encode()
-            if replacement is not None:dest.writestr(item,replacement)
-            else:
-                with source.open(item) as inp,dest.open(item,'w',force_zip64=True) as out:shutil.copyfileobj(inp,out,1024*1024)
-    digest=sha(target)
-    target.with_suffix('.zip.sha256.txt').write_text(digest+'  '+target.name+'\n',encoding='ascii')
-    return target,dict(original_sha256=original_digest,sanitized_members=changed)
-
-
 def source_member(rel):
     p=PurePosixPath(rel);parts=p.parts
     if not parts:return False
@@ -355,23 +328,15 @@ def prepare(repo):
     existing=set(run(['git','tag'],CHECKOUT).splitlines())
     for index,version in enumerate(VERSIONS):
         original=SOURCE/'发布包'/f'Cube助手-Windows64-便携版-{version}.zip'
-        archive=original;cleanup={}
+        archive=original
         print('Scanning '+archive.name,flush=True)
         scan_file=STATE/('scan-'+version+'.json')
         # Only reuse a completed scan if the full archive digest still matches.
         cached=json.loads(scan_file.read_text(encoding='utf8')) if scan_file.exists() else None
         if cached and cached['sha256']==sha(archive) and cached['private_findings']==0:proof=cached
         else:
-            try:proof=scan_archive(archive,needles)
-            except ValueError:
-                findings_file=STATE/('failed-scan-'+archive.stem+'.json')
-                findings=json.loads(findings_file.read_text(encoding='utf8')) if findings_file.exists() else []
-                if not findings or any(f['kind']!='personal_path_or_email' or not f['file'].endswith('/forge.profile.properties.example') for f in findings):raise
-                print('Normalizing legacy example path in upload copy: '+version,flush=True)
-                archive,cleanup=sanitize_legacy_example(original,version)
-                proof=scan_archive(archive,needles)
-            atomic(scan_file,dict(proof,**cleanup))
-        proof.update(cleanup)
+            proof=scan_archive(archive,needles)
+            atomic(scan_file,proof)
         if tag(version) not in existing:
             metadata,files=export_snapshot(archive,repo,version,proof,needles,version==VERSIONS[-1])
             run(['git','add','--all'],CHECKOUT)
@@ -404,10 +369,6 @@ def prepare(repo):
 
 详细能力与限制见本标签 README 和包内说明。模型是否可用、API 费用按各用户自行配置的服务规则执行。
 '''
-        if metadata.get('sanitized_members'):
-            notes=notes.replace('这是历史便携包的原始内容，未改写包内版本日期。',
-                '此上传副本清理了配置示例中的本机路径，并更新隐私说明；应用程序与依赖未改动，包内版本日期保留。')
-            notes+='\n### 历史包隐私清理\n原始本地包校验：`'+metadata['original_sha256']+'`。上传副本的校验以上方 SHA256 为准。\n'
         (folder/'notes.md').write_text(notes,encoding='utf8')
         releases.append(dict(version=version,tag=tag(version),title=f'{tag(version)} · {DESCRIPTIONS[index]}',
                              sha256=proof['sha256'],asset=asset.name,bytes=proof['bytes']))
