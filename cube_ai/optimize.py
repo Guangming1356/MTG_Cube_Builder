@@ -10,7 +10,7 @@ import uuid
 import zipfile
 import time
 from collections import Counter, defaultdict
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -188,6 +188,7 @@ def collect_training(catalog,rows,spec,out,pods=30,workers=0,clock=120,progress=
     learned=active_model(catalog)
     seed=spec.seed if experiment_seed is None else experiment_seed
     budget=budget or experiment_budget(training_pods=pods,cube_size=len(rows))
+    requested_workers=workers
     resources=campaign_resources(workers);workers=resources['workers']
     holdout=budget['holdout_pods']
     seeds,guilds=schedule(pods,seed+1000)
@@ -197,7 +198,8 @@ def collect_training(catalog,rows,spec,out,pods=30,workers=0,clock=120,progress=
         holdout_seeds=schedule(holdout,seed+2000000)[0],holdout_guilds=schedule(holdout,seed+2000000)[1],
         ranking_seeds=schedule(budget['ranking_pods'],seed+1000000)[0],ranking_guilds=schedule(budget['ranking_pods'],seed+1000000)[1],
         structural_holdout_seeds=schedule(budget['structural_pods'],seed+3000000)[0],structural_holdout_guilds=schedule(budget['structural_pods'],seed+3000000)[1],
-        max_swaps=budget['max_swaps'],max_evaluated_alternatives=budget['alternatives'],game_workers=workers,clock_seconds=clock,
+        max_swaps=budget['max_swaps'],max_evaluated_alternatives=budget['alternatives'],game_workers=workers,
+        requested_game_workers=requested_workers,clock_seconds=clock,
         search=dict(version='screen-1',mode='full',batch_size=8,patience=3,stages=sorted({10,30,budget['ranking_pods']})),
         cross_strategy='每个发生牌组变化的独立轮抓席位：旧牌组、新牌组、旧桌下一席位锚牌组；三局轮换座位；种子=对应保留桌种子+50000+席位*100+局序号',
         adoption='结构均值与低分位改善、色组差不扩大、所有硬约束通过；实战用于确认正常终结、行为节奏及回归。少量实战不宣称统计显著牌力提升。',
@@ -208,7 +210,7 @@ def collect_training(catalog,rows,spec,out,pods=30,workers=0,clock=120,progress=
     timing=Timings(out/'timings.json')
     with ThreadPoolExecutor(max_workers=1) as pool:
         pending=pool.submit(timing.call,'development_drafts',draft_evaluation,catalog,rows,spec,protocol['ranking_seeds'],protocol['ranking_guilds'],learned=learned)
-        match=timing.call('training_forge',simulate,catalog,rows,spec,pods,3,clock,progress,pod_seeds=seeds,preferred_guilds=guilds,workers=workers)
+        match=timing.call('training_forge',simulate,catalog,rows,spec,pods,3,clock,progress,pod_seeds=seeds,preferred_guilds=guilds,workers=requested_workers)
         offline=pending.result()
     evidence=timing.call('training_trace_analysis',evidence_from_match,catalog,match)
     save(out/'training_match.json',match);save(out/'training_evidence.json',evidence)
@@ -404,19 +406,27 @@ def cross_cube(catalog,before,after,protocol,out,progress=print):
             fixtures.append(dict(fixture=n,pod=p,seat=seat,old=old,new=new,anchor=anchor,ids=ids))
             for g in range(3):
                 tasks.append((n,g,ids[g:]+ids[:g],protocol['holdout_seeds'][p]+50000+seat*100+g))
-    with ThreadPoolExecutor(max_workers=protocol['game_workers']) as pool:
-        pending={pool.submit(run_battle,config,decks_dir,order,seed,protocol['clock_seconds'],folder,
-            f'fixture{n:03d}_game{g:03d}.log'):(n,g) for n,g,order,seed in tasks}
-        for future in as_completed(pending):
-            n,g=pending[future];records.append(dict(fixture=n,game=g,**future.result()))
-            progress(f'新旧牌组交叉对局 {len(records)}/{len(tasks)}：{records[-1]["outcome"]}')
-            save(folder/'games.json',records)
+    from .game_queue import GameQueue
+    resources=campaign_resources(protocol.get('requested_game_workers',protocol['game_workers']))
+    with GameQueue(resources,config,progress) as pool:
+        def collect(block=False):
+            completed=pool.collect(block)
+            for (n,g),record in completed:
+                records.append(dict(fixture=n,game=g,**record))
+                progress(f'新旧牌组交叉对局 {len(records)}/{len(tasks)}；当前目标同时 {pool.target} 局：{record["outcome"]}')
+            if completed:save(folder/'games.json',sorted(records,key=lambda r:(r['fixture'],r['game'])))
+        for n,g,order,seed in tasks:
+            while len(pool)>=pool.ceiling*2:collect(True)
+            pool.submit((n,g),run_battle,config,decks_dir,order,seed,protocol['clock_seconds'],folder,f'fixture{n:03d}_game{g:03d}.log')
+            collect()
+        while pool:collect(True)
+        scheduling=pool.report()
     counts=Counter()
     for r in records:
         counts[r['outcome']]+=1
         if r['outcome']=='win':counts[r['winner'].rsplit('_',1)[1]+'_wins']+=1
     result=dict(fixtures=fixtures,games=sorted(records,key=lambda r:(r['fixture'],r['game'])),summary=dict(counts),
-        matched_fixtures=len(fixtures),attempted=len(records),
+        matched_fixtures=len(fixtures),attempted=len(records),execution=dict(resources,scheduling=scheduling),
         limitation='每个相同轮抓种子/席位的旧牌组与新牌组、固定旧版第三副牌同桌，三局换座。完全相同牌组不重复测试。同桌相关且每桌共享牌组，小样本结果不是独立胜率证据。')
     result['uncertainty']=cross_uncertainty(result)
     save(out/'cross_match.json',result);return result
@@ -499,7 +509,7 @@ def _finish_revision(catalog,out,progress=print):
         if not file.exists():
             progress(f'独立 Forge 对局：{label}，{holdout_pods} 桌 / {holdout_pods*3} 局')
             value=timing.call('holdout_forge_'+label,simulate,catalog,items,spec,holdout_pods,3,protocol['clock_seconds'],progress,
-                pod_seeds=protocol['holdout_seeds'],preferred_guilds=protocol['holdout_guilds'],workers=protocol['game_workers'])
+                pod_seeds=protocol['holdout_seeds'],preferred_guilds=protocol['holdout_guilds'],workers=protocol.get('requested_game_workers',protocol['game_workers']))
             save(file,value)
         save(out/f'holdout_evidence_{label}.json',timing.call('holdout_trace_'+label,evidence_from_match,catalog,read(f'holdout_match_{label}.json')))
     if not (out/'cross_match.json').exists():timing.call('cross_forge',cross_cube,catalog,read('holdout_match_before.json'),read('holdout_match_after.json'),protocol,out,progress)
@@ -561,12 +571,12 @@ def _finish_revision(catalog,out,progress=print):
 def optimize(catalog,rows,spec,progress=print,workers=0,clock=120,training_pods=None,profile='standard',max_swaps=None,scoring_backend='auto',search_mode='full'):
     if audit(catalog,rows,spec,strict=True)['hard_errors']:raise ValueError('先修复严格审计中的错误')
     budget=experiment_budget(profile,training_pods,max_swaps,len(rows))
-    resources=execution_resources(workers)
+    execution_resources(workers)
     if scoring_backend not in {'auto','cpu','gpu'}:raise ValueError('评分后端需为 auto、cpu 或 gpu')
     if search_mode not in {'adaptive','full'}:raise ValueError('候选搜索方式无效')
     if type(clock)!=int or not 15<=clock<=300:raise ValueError('单局时限需为 15–300 秒')
     with forge_session():
-        return _optimize(catalog,rows,spec,progress,resources['workers'],clock,budget,scoring_backend,search_mode)
+        return _optimize(catalog,rows,spec,progress,workers,clock,budget,scoring_backend,search_mode)
 
 def _optimize(catalog,rows,spec,progress,workers,clock,budget,scoring_backend='auto',search_mode='full'):
     id_=datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')+'_'+uuid.uuid4().hex[:8]

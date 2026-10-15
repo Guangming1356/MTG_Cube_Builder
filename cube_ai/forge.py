@@ -11,7 +11,6 @@ import time
 import uuid
 from functools import lru_cache
 import zipfile
-from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -21,6 +20,7 @@ from .draft import draft_pod
 from .engine import audit
 from .forge_setup import RUNTIME, sha256, write_profile
 from .experiment import MAX_PODS, execution_resources
+from .game_queue import GameQueue
 
 MATCHES=ROOT/'matches'
 _lock=threading.RLock()
@@ -45,11 +45,13 @@ def forge_session():
 
 def campaign_resources(workers=0):
     reserved=getattr(_campaign,'resources',None) if getattr(_campaign,'depth',0) else None
-    if reserved and type(workers)==int and workers in {0,reserved['workers']}:return dict(reserved)
+    if reserved and type(workers)==int and workers in {0,reserved.get('requested',reserved['workers'])}:return dict(reserved)
     try:resources=execution_resources(workers)
     except ValueError:
         if not getattr(_campaign,'depth',0) or type(workers)!=int or not 1<=workers<=8:raise
-        resources=execution_resources(0);resources.update(requested=workers,reduced_for_current_memory=True)
+        resources=execution_resources(0)
+        resources.update(requested=workers,reduced_for_current_memory=True,
+                         ceiling=min(workers,resources.get('ceiling',workers)))
     if getattr(_campaign,'depth',0):_campaign.resources=resources
     return resources
 
@@ -309,18 +311,18 @@ def simulate(catalog,rows,spec,pods=10,games_per_pod=3,clock_seconds=90,progress
         deck_dir=out/'decks';deck_dir.mkdir();records=[];tables=[];rng=random.Random(spec.seed)
         started=time.monotonic();draft_seconds=0;submitted=0;peak_pending=0
         cube_hash=hashlib.sha256(json.dumps(rows,sort_keys=True).encode()).hexdigest()
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            pending={}
-            def collect(futures):
-                for future in futures:
-                    p,g=pending.pop(future);record=dict(pod=p,game=g,**future.result());records.append(record)
-                    progress(f'Forge 已完成 {len(records)}/{submitted} 局；已组牌 {len(tables)}/{pods} 桌；同时最多 {workers} 局：{record["outcome"]}')
-                from .task_control import atomic_json
-                atomic_json(out/'games.json',sorted(records,key=lambda r:(r['pod'],r['game'])))
+        with GameQueue(resources,config,progress) as pool:
+            def collect(block=False):
+                completed=pool.collect(block)
+                for (p,g),value in completed:
+                    record=dict(pod=p,game=g,**value);records.append(record)
+                    progress(f'Forge 已完成 {len(records)}/{submitted} 局；已组牌 {len(tables)}/{pods} 桌；当前目标同时 {pool.target} 局：{record["outcome"]}')
+                if completed:
+                    from .task_control import atomic_json
+                    atomic_json(out/'games.json',sorted(records,key=lambda r:(r['pod'],r['game'])))
             for p in range(pods):
                 # Backpressure bounds queued JVM jobs and keeps results/progress flowing.
-                while len(pending)>=workers*2:
-                    collect(wait(pending,return_when=FIRST_COMPLETED)[0])
+                while len(pool)>=pool.ceiling*2:collect(True)
                 progress(f'轮抓与对局并行：组牌第 {p+1}/{pods} 桌；已完成 {len(records)} 局')
                 draft_started=time.monotonic()
                 pod_rng=random.Random(pod_seeds[p]) if pod_seeds is not None else rng
@@ -338,14 +340,16 @@ def simulate(catalog,rows,spec,pods=10,games_per_pod=3,clock_seconds=90,progress
                     progress('整桌因无指挥官或包含未实现牌而跳过；保留真实轮抓，不换牌组');continue
                 ids=[d['id'] for d in pod['decks']]
                 for game in range(games_per_pod):
-                    while len(pending)>=workers*2:collect(wait(pending,return_when=FIRST_COMPLETED)[0])
+                    while len(pool)>=pool.ceiling*2:collect(True)
                     rotation=game%3;order=ids[rotation:]+ids[:rotation]
                     seed=(pod_seeds[p] if pod_seeds is not None else spec.seed+p*10000)+game
-                    pending[pool.submit(run_battle,config,deck_dir,order,seed,clock_seconds,out,f'pod{p:03d}_game{game:03d}.log')]=(p,game)
+                    pool.submit((p,game),run_battle,config,deck_dir,order,seed,clock_seconds,out,f'pod{p:03d}_game{game:03d}.log')
                     submitted+=1
-                    peak_pending=max(peak_pending,len(pending))
-                collect([f for f in pending if f.done()])
-            while pending:collect(wait(pending,return_when=FIRST_COMPLETED)[0])
+                    peak_pending=max(peak_pending,len(pool))
+                collect()
+            while pool:collect(True)
+            scheduling=pool.report()
+        workers=max(1,scheduling['peak_active'])
         records.sort(key=lambda r:(r['pod'],r['game']))
         from .brackets import cube_report
         result=dict(match_id=match_id,path=str(out),engine=dict(version=config['version'],jar_sha256=sha256(config['jar']),
@@ -357,7 +361,7 @@ def simulate(catalog,rows,spec,pods=10,games_per_pod=3,clock_seconds=90,progress
             tables=tables,games=records,summary=summarize(records,tables),workers=workers,bracket=cube_report(catalog,rows,spec),
             execution=dict(resources,wall_seconds=round(time.monotonic()-started,3),draft_seconds=round(draft_seconds,3),
                 game_wall_seconds_sum=round(sum(r['wall_seconds'] for r in records),3),peak_pending=peak_pending,
-                isolated_worker_directories=True),
+                isolated_worker_directories=True,scheduling=scheduling),
             pod_seeds=pod_seeds,preferred_guilds=preferred_guilds,
             skipped_pods=sum('skip_reason' in p for p in tables),
             limitation='真实 Forge 规则引擎对局，使用 Forge 原生 AI。胜率反映这套抓牌、组牌与驾驶策略；原生 AI 对控制、组合技和多人政治有偏差。小样本及同桌重复对局不能证明色组平衡；Wilson 区间仅为描述性参考。超时与引擎错误不计作正常和局或胜负。')

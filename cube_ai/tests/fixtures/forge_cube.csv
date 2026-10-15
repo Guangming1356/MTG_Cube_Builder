@@ -1,0 +1,601 @@
+﻿name,role,mana_value,identity,heuristic_quality,tags
+The Sackville-Bagginses,Commander,2.0,B,3.43,Commander
+"Sephiroth, Fabled SOLDIER // Sephiroth, One-Winged Angel",Commander,3.0,B,3.545,Commander
+"Erebos, Bleak-Hearted",Commander,4.0,B,3.785,Commander
+"Jecht, Reluctant Guardian // Braska's Final Aeon",Commander,4.0,B,3.676,Commander
+"Sheoldred, the Apocalypse",Commander,4.0,B,3.522,Commander
+God-Eternal Bontu,Commander,5.0,B,3.578,Commander
+"Sheoldred, Whispering One",Commander,7.0,B,3.725,Commander
+"Vilis, Broker of Blood",Commander,8.0,B,3.805,Commander
+"Grist, Voracious Larva // Grist, the Plague Swarm",Commander,1.0,BG,3.659,Commander
+Glissa Sunslayer,Commander,3.0,BG,3.706,Commander
+"Glissa, the Traitor",Commander,3.0,BG,3.51,Commander
+"The Gitrog, Ravenous Ride",Commander,5.0,BG,3.647,Commander
+"Eddie Brock // Venom, Lethal Protector",Commander,3.0,BGR,3.876,Commander
+"Indominus Rex, Alpha",Commander,5.0,BGU,3.523,Commander
+"Betor, Kin to All",Commander,5.0,BGW,3.586,Commander
+The Ruinous Wrecking Crew,Commander,2.0,BR,3.698,Commander
+"Carnage, Crimson Chaos",Commander,4.0,BR,3.566,Commander
+"The Beast, Deathless Prince",Commander,4.0,BR,3.586,Commander
+"Greven, Predator Captain",Commander,5.0,BR,3.476,Commander
+"Nicol Bolas, the Ravager // Nicol Bolas, the Arisen",Commander,4.0,BRU,4.007,Commander
+"Caesar, Legion's Emperor",Commander,4.0,BRW,3.458,Commander
+"Golbez, Crystal Collector",Commander,2.0,BU,3.548,Commander
+"Emet-Selch, Unsundered // Hades, Sorcerer of Eld",Commander,3.0,BU,3.211,Commander
+Hidetsugu and Kairi,Commander,5.0,BU,3.396,Commander
+The Scarab God,Commander,5.0,BU,3.703,Commander
+Elenda and Azor,Commander,6.0,BUW,3.406,Commander
+"Niv-Mizzet, Ghost Counsel",Commander,6.0,BW,3.358,Commander
+Rodolf Duskbringer,Commander,6.0,BW,3.428,Commander
+Mister Negative,Commander,7.0,BW,3.318,Commander
+"Vish Kal, Blood Arbiter",Commander,7.0,BW,3.357,Commander
+"Mutagen Man, Living Ooze",Commander,2.0,G,3.588,Commander
+Kodama of the West Tree,Commander,3.0,G,3.481,Commander
+"Freyalise, Llanowar's Fury",Commander,5.0,G,3.572,Commander
+"Lumra, Bellow of the Woods",Commander,6.0,G,3.52,Commander
+Old One Eye,Commander,6.0,G,3.481,Commander
+"Rhino, Terrible Trampler",Commander,6.0,G,3.589,Commander
+"Altanak, the Thrice-Called",Commander,7.0,G,3.718,Commander
+"Ghalta, Stampede Tyrant",Commander,8.0,G,3.609,Commander
+"Minsc & Boo, Timeless Heroes",Commander,4.0,GR,3.764,Commander
+"Roxanne, Starfall Savant",Commander,5.0,GR,3.542,Commander
+Kogla and Yidaro,Commander,6.0,GR,3.84,Commander
+"Etali, Primal Conqueror // Etali, Primal Sickness",Commander,7.0,GR,3.686,Commander
+Bruce Banner // The Incredible Hulk,Commander,1.0,GRU,3.35,Commander
+"Baylen, the Haymaker",Commander,3.0,GRW,3.635,Commander
+"Tamiyo, Inquisitive Student // Tamiyo, Seasoned Scholar",Commander,1.0,GU,3.708,Commander
+The Goose Mother,Commander,2.0,GU,3.712,Commander
+"Uro, Titan of Nature's Wrath",Commander,3.0,GU,3.673,Commander
+"Zegana, Utopian Speaker",Commander,4.0,GU,3.653,Commander
+"Morska, Undersea Sleuth",Commander,3.0,GUW,3.263,Commander
+"Gluntch, the Bestower",Commander,3.0,GW,3.455,Commander
+Sergeant John Benton,Commander,3.0,GW,3.36,Commander
+Kwia Vigorbloom,Commander,6.0,GW,3.329,Commander
+Ghalta and Mavren,Commander,7.0,GW,3.441,Commander
+"Daretti, Scrap Savant",Commander,4.0,R,3.568,Commander
+"Toralf, God of Fury // Toralf's Hammer",Commander,4.0,R,3.647,Commander
+"Jaws, Relentless Predator",Commander,5.0,R,3.519,Commander
+"Clive, Ifrit's Dominant // Ifrit, Warden of Inferno",Commander,6.0,R,3.638,Commander
+"Etali, Primal Storm",Commander,6.0,R,3.538,Commander
+"Umaro, Raging Yeti",Commander,6.0,R,3.705,Commander
+"Drakuseth, Maw of Flames",Commander,7.0,R,3.585,Commander
+"Hulk, Always Angry",Commander,7.0,R,3.715,Commander
+"Keranos, God of Storms",Commander,5.0,RU,3.63,Commander
+"Niv-Mizzet, Dracogenius",Commander,6.0,RU,3.649,Commander
+"Niv-Mizzet, Parun",Commander,6.0,RU,4.055,Commander
+"Niv-Mizzet, the Firemind",Commander,6.0,RU,3.859,Commander
+"Liberty Prime, Recharged",Commander,5.0,RUW,3.789,Commander
+"Joshua, Phoenix's Dominant // Phoenix, Warden of Fire",Commander,3.0,RW,3.773,Commander
+"Mila, Crafty Companion // Lukka, Wayward Bonder",Commander,3.0,RW,3.784,Commander
+"Phlage, Titan of Fire's Fury",Commander,3.0,RW,3.517,Commander
+"Wyleth, Soul of Steel",Commander,3.0,RW,3.384,Commander
+Gran-Gran,Commander,1.0,U,3.46,Commander
+"Wan Shi Tong, Librarian",Commander,2.0,U,3.375,Commander
+Leonardo da Vinci,Commander,3.0,U,3.503,Commander
+"Sai, Master Thopterist",Commander,3.0,U,3.502,Commander
+"The Mechanist, Aerial Artisan",Commander,3.0,U,3.385,Commander
+"Ray Fillet, Man Ray",Commander,4.0,U,3.413,Commander
+"Ormos, Archive Keeper",Commander,6.0,U,3.437,Commander
+Professor Hulk,Commander,6.0,U,3.545,Commander
+Elder Owyn Lyons,Commander,4.0,UW,3.617,Commander
+"Niko, Light of Hope",Commander,4.0,UW,3.546,Commander
+"Ezrim, Agency Chief",Commander,5.0,UW,3.391,Commander
+"Azor, the Lawbringer",Commander,6.0,UW,3.609,Commander
+"Sram, Senior Edificer",Commander,2.0,W,3.463,Commander
+Tataru Taru,Commander,2.0,W,3.586,Commander
+"Haliya, Guided by Light",Commander,3.0,W,3.351,Commander
+"Losheel, Clockwork Scholar",Commander,3.0,W,3.341,Commander
+"Ratchet, Field Medic // Ratchet, Rescue Racer",Commander,3.0,W,3.359,Commander
+"Venat, Heart of Hydaelyn // Hydaelyn, the Mothercrystal",Commander,3.0,W,3.466,Commander
+"Dion, Bahamut's Dominant // Bahamut, Warden of Light",Commander,4.0,W,3.555,Commander
+"Ob Nixilis, the Ascended",Commander,7.0,W,3.562,Commander
+Darkbore Pathway // Slitherbore Pathway,Land,0.0,BG,2.75,
+Llanowar Wastes,Land,0.0,BG,2.955,
+Overgrown Tomb,Land,0.0,BG,3.019,
+Twilight Mire,Land,0.0,BG,2.865,
+Ziatora's Proving Ground,Land,0.0,BGR,3.176,draw
+Zagoth Triome,Land,0.0,BGU,3.204,draw
+Indatha Triome,Land,0.0,BGW,3.186,draw
+Blightstep Pathway // Searstep Pathway,Land,0.0,BR,2.782,
+Blood Crypt,Land,0.0,BR,3.023,
+Graven Cairns,Land,0.0,BR,2.823,
+Sulfurous Springs,Land,0.0,BR,2.951,
+Xander's Lounge,Land,0.0,BRU,3.188,draw
+Savai Triome,Land,0.0,BRW,3.183,draw
+Clearwater Pathway // Murkwater Pathway,Land,0.0,BU,2.786,
+Sunken Ruins,Land,0.0,BU,2.773,
+Underground River,Land,0.0,BU,2.952,
+Watery Grave,Land,0.0,BU,3.052,
+Raffine's Tower,Land,0.0,BUW,3.199,draw
+Brightclimb Pathway // Grimclimb Pathway,Land,0.0,BW,2.785,
+Caves of Koilos,Land,0.0,BW,2.965,
+Fetid Heath,Land,0.0,BW,2.872,
+Godless Shrine,Land,0.0,BW,3.035,
+Arid Mesa,Land,0.0,C,3.04,
+Ash Barrens,Land,0.0,C,2.915,lands
+Bloodstained Mire,Land,0.0,C,3.067,
+City of Brass,Land,0.0,C,2.991,
+Command Tower,Land,0.0,C,3.1,
+Exotic Orchard,Land,0.0,C,3.1,
+Fabled Passage,Land,0.0,C,3.064,lands
+Flooded Strand,Land,0.0,C,3.078,lands
+Mana Confluence,Land,0.0,C,2.972,
+Marsh Flats,Land,0.0,C,3.05,
+Polluted Delta,Land,0.0,C,3.084,lands
+Prismatic Vista,Land,0.0,C,2.924,lands
+Reflecting Pool,Land,0.0,C,2.938,
+Scalding Tarn,Land,0.0,C,3.054,lands
+Verdant Catacombs,Land,0.0,C,3.056,
+Wooded Foothills,Land,0.0,C,3.058,
+"Boseiju, Who Endures",Land,0.0,G,3.361,"artifacts,control"
+Cragcrown Pathway // Timbercrown Pathway,Land,0.0,GR,2.755,
+Fire-Lit Thicket,Land,0.0,GR,2.75,
+Karplusan Forest,Land,0.0,GR,2.911,
+Stomping Ground,Land,0.0,GR,3.02,
+Ketria Triome,Land,0.0,GRU,3.214,draw
+Jetmir's Garden,Land,0.0,GRW,3.212,draw
+Barkchannel Pathway // Tidechannel Pathway,Land,0.0,GU,2.755,
+Breeding Pool,Land,0.0,GU,3.036,
+Flooded Grove,Land,0.0,GU,2.88,
+Simic Growth Chamber,Land,0.0,GU,3.126,
+Yavimaya Coast,Land,0.0,GU,2.957,
+Spara's Headquarters,Land,0.0,GUW,3.204,draw
+Branchloft Pathway // Boulderloft Pathway,Land,0.0,GW,2.751,
+Brushland,Land,0.0,GW,2.906,
+Scattered Groves,Land,0.0,GW,3.113,draw
+Temple Garden,Land,0.0,GW,3.006,
+Wooded Bastion,Land,0.0,GW,2.699,
+Cascade Bluffs,Land,0.0,RU,2.884,
+Riverglide Pathway // Lavaglide Pathway,Land,0.0,RU,2.78,
+Shivan Reef,Land,0.0,RU,2.973,
+Steam Vents,Land,0.0,RU,3.03,
+Raugrin Triome,Land,0.0,RUW,3.186,draw
+Battlefield Forge,Land,0.0,RW,2.969,
+Needleverge Pathway // Pillarverge Pathway,Land,0.0,RW,2.779,
+Rugged Prairie,Land,0.0,RW,2.887,
+Sacred Foundry,Land,0.0,RW,3.016,
+"Otawara, Soaring City",Land,0.0,U,3.348,"artifacts,control"
+Adarkar Wastes,Land,0.0,UW,2.952,
+Hallowed Fountain,Land,0.0,UW,3.033,
+Hengegate Pathway // Mistgate Pathway,Land,0.0,UW,2.752,
+Mystic Gate,Land,0.0,UW,2.784,
+Dockside Chef,Main,1.0,B,3.351,"artifacts,draw,sacrifice"
+Faerie Dreamthief,Main,1.0,B,3.636,"draw,graveyard"
+Ghost Lantern // Bind Spirit,Main,1.0,B,3.424,"artifacts,control,counters,equipment,graveyard,sacrifice"
+Accursed Marauder,Main,2.0,B,3.412,
+Blood Artist,Main,2.0,B,3.75,"graveyard,lifegain"
+Chthonian Nightmare,Main,2.0,B,3.454,"control,graveyard,sacrifice,spells"
+Deadly Dispute,Main,2.0,B,3.56,"artifacts,draw,sacrifice,spells,tokens"
+Feed the Swarm,Main,2.0,B,3.344,"control,spells"
+Foot Chopper,Main,2.0,B,3.647,"artifacts,draw,equipment,sacrifice,tokens"
+Graf Reaver,Main,2.0,B,3.588,"control,graveyard,sacrifice"
+Heirloom Mirror // Inherited Fiend,Main,2.0,B,3.536,"artifacts,control,counters,draw,graveyard,spells"
+Hunted Horror,Main,2.0,B,3.4,"combat,sacrifice,tokens"
+Marionette Apprentice,Main,2.0,B,3.215,"artifacts,counters,sacrifice,tokens"
+Nullpriest of Oblivion,Main,2.0,B,3.371,"combat,control,lifegain,sacrifice"
+Reassembling Skeleton,Main,2.0,B,3.3,sacrifice
+Slaughter Specialist,Main,2.0,B,3.388,"counters,graveyard,sacrifice,tokens"
+The Meathook Massacre,Main,2.0,B,3.429,"graveyard,lifegain"
+The Soul Stone,Main,2.0,B,3.547,"artifacts,control,sacrifice"
+Thieves' Tools,Main,2.0,B,3.446,"artifacts,combat,equipment,spells,tokens"
+Tribute to Horobi // Echo of Death's Wail,Main,2.0,B,3.845,"blink,combat,draw,sacrifice,tokens"
+Undead Butler,Main,2.0,B,3.372,"control,graveyard,sacrifice"
+Vampire Gourmand,Main,2.0,B,3.54,"combat,draw,sacrifice"
+Visage of Dread // Dread Osseosaur,Main,2.0,B,3.253,"artifacts,combat,graveyard,spells"
+Zulaport Cutthroat,Main,2.0,B,3.8,"graveyard,lifegain"
+Altar of the Wretched // Wretched Bonemass,Main,3.0,B,3.523,"artifacts,combat,draw,graveyard,lifegain,sacrifice"
+Bastion of Remembrance,Main,3.0,B,3.291,"graveyard,lifegain,sacrifice,tokens"
+"Braids, Arisen Nightmare",Main,3.0,B,3.331,"artifacts,draw,sacrifice"
+Gravelighter,Main,3.0,B,3.669,draw
+Gurgling Anointer,Main,3.0,B,3.484,"counters,draw,graveyard,sacrifice"
+Lord Skitter's Butcher,Main,3.0,B,3.401,"combat,draw,sacrifice,tokens"
+Morbid Opportunist,Main,3.0,B,3.9,draw
+Plaguecrafter,Main,3.0,B,3.425,
+Shakedown Heavy,Main,3.0,B,3.633,"combat,draw"
+Toxic Deluge,Main,3.0,B,3.376,spells
+Victimize,Main,3.0,B,3.9,"graveyard,sacrifice,spells"
+Way of the Deathbringer,Main,3.0,B,3.421,"combat,draw,graveyard,sacrifice,tokens"
+Bloodcrazed Socialite,Main,4.0,B,3.43,"artifacts,combat,draw,graveyard,tokens"
+Bloodvial Purveyor,Main,4.0,B,3.509,"artifacts,combat,draw,graveyard,tokens"
+Damnation,Main,4.0,B,4.05,spells
+Deadly Rollick,Main,4.0,B,3.33,"control,spells"
+Eumidian Wastewaker,Main,4.0,B,3.527,"combat,draw,graveyard,sacrifice,spells,tokens"
+Inverter of Truth,Main,4.0,B,3.3,
+Lethal Scheme,Main,4.0,B,3.443,"control,counters,draw,graveyard,spells"
+"Rankle, Master of Pranks",Main,4.0,B,3.408,"combat,draw"
+Rewrite Regrets,Main,4.0,B,3.521,"control,draw,graveyard,sacrifice,spells,tokens"
+Starving Revenant,Main,4.0,B,3.444,"draw,graveyard,lifegain"
+Clackbridge Troll,Main,5.0,B,3.735,"combat,draw,graveyard,lifegain,sacrifice,tokens"
+"Liliana, Death's Majesty",Main,5.0,B,3.766,"control,graveyard,sacrifice,tokens"
+Living Death,Main,5.0,B,4.3,spells
+"Lolth, Spider Queen",Main,5.0,B,3.697,"combat,draw,graveyard,sacrifice,tokens"
+Doomsday Excruciator,Main,6.0,B,3.685,draw
+Goremand,Main,6.0,B,3.68,"combat,graveyard,sacrifice"
+Grave Titan,Main,6.0,B,4.15,"sacrifice,tokens"
+"Invasion of Fiora // Marchesa, Resolute Monarch",Main,6.0,B,3.885,"combat,draw"
+"Liliana, Dreadhorde General",Main,6.0,B,3.859,"draw,graveyard,sacrifice,tokens"
+Noxious Gearhulk,Main,6.0,B,3.721,"artifacts,combat"
+Deathbringer Regent,Main,7.0,B,3.546,
+Overseer of the Damned,Main,7.0,B,3.921,"control,graveyard,sacrifice,tokens"
+Archon of Cruelty,Main,8.0,B,4.4,"draw,lifegain"
+Deathrite Shaman,Main,1.0,BG,3.763,"control,lifegain,spells"
+Ravenous Squirrel,Main,1.0,BG,3.448,"artifacts,counters,draw,lifegain,sacrifice"
+Mosswood Dreadknight // Dread Whispers,Main,2.0,BG,3.493,"combat,draw,graveyard"
+Seedship Broodtender,Main,2.0,BG,3.56,"control,graveyard,sacrifice,spells"
+Cauldron of Essence,Main,3.0,BG,3.554,"artifacts,control,graveyard,lifegain,sacrifice,spells"
+Professor Dellian Fel,Main,4.0,BG,3.622,"control,draw,lifegain"
+Dai Li Agents,Main,5.0,BG,3.424,"blink,combat,counters,graveyard,lifegain"
+Alpha Deathclaw,Main,6.0,BG,3.682,"combat,control,counters"
+The Last Ronin,Main,6.0,BG,3.714,"combat,control,counters,draw,graveyard,lifegain,sacrifice"
+Bloodtithe Harvester,Main,2.0,BR,3.913,"artifacts,draw,graveyard,spells,tokens"
+Cranial Ram,Main,2.0,BR,3.165,"artifacts,equipment,sacrifice,tokens"
+"Garland, Knight of Cornelia // Chaos, the Endless",Main,2.0,BR,3.276,"graveyard,sacrifice,spells"
+Goblin Plate Mail,Main,2.0,BR,3.101,"artifacts,combat,counters,equipment,sacrifice,tokens"
+"Kroxa, Titan of Death's Hunger",Main,2.0,BR,3.383,graveyard
+Rakdos Charm,Main,2.0,BR,3.573,"artifacts,control,spells"
+The Bloodsky Massacre,Main,3.0,BR,3.413,"combat,draw,sacrifice,tokens"
+"Valgavoth, Harrower of Souls",Main,4.0,BR,3.487,"counters,draw"
+Rakdos Joins Up,Main,5.0,BR,3.954,"control,graveyard,sacrifice"
+Baleful Strix,Main,2.0,BU,3.9,"artifacts,draw"
+Basim Ibn Ishaq,Main,2.0,BU,3.455,"artifacts,combat,counters,draw"
+Evangel of Synthesis,Main,2.0,BU,3.458,"combat,draw,graveyard"
+Mask of Riddles,Main,2.0,BU,3.443,"artifacts,combat,draw,equipment"
+Psychic Frog,Main,2.0,BU,3.371,"counters,draw,graveyard"
+"Satoru, the Infiltrator",Main,2.0,BU,3.407,"combat,draw"
+"Mirko, Obsessive Theorist",Main,3.0,BU,3.199,"control,counters,graveyard,sacrifice"
+"Etrata, the Silencer",Main,4.0,BU,3.378,"combat,control"
+Soulquake,Main,7.0,BU,3.7,"sacrifice,spells"
+Invasion of New Capenna // Holy Frazzle-Cannon,Main,2.0,BW,3.316,"artifacts,control,counters,equipment,sacrifice"
+Lunar Convocation,Main,2.0,BW,3.186,"draw,sacrifice,tokens"
+Phyrexian Missionary,Main,2.0,BW,3.313,"control,lifegain,sacrifice"
+"Ketramose, the New Dawn",Main,3.0,BW,3.371,"combat,draw,lifegain"
+"Kaya, Spirits' Justice",Main,4.0,BW,3.382,"control,graveyard,sacrifice,tokens"
+Invasion of Tolvada // The Broken Sky,Main,5.0,BW,3.496,"control,lifegain,sacrifice,tokens"
+Kaya the Inexorable,Main,5.0,BW,3.665,"control,graveyard,sacrifice,tokens"
+Magister of Worth,Main,6.0,BW,3.46,sacrifice
+Angel of Despair,Main,7.0,BW,3.9,control
+Stonecoil Serpent,Main,0.0,C,3.7,"artifacts,combat,counters"
+Fountainport Bell,Main,1.0,C,3.456,"artifacts,draw,lands"
+Phyrexian Dreadnought,Main,1.0,C,3.33,"artifacts,combat,sacrifice"
+Shadowspear,Main,1.0,C,3.229,"artifacts,combat,equipment,lifegain"
+Skeleton Key,Main,1.0,C,3.43,"artifacts,combat,draw,equipment,graveyard"
+Skullclamp,Main,1.0,C,3.594,"artifacts,draw,equipment,graveyard"
+Soul-Guide Lantern,Main,1.0,C,3.337,"artifacts,control,draw"
+Wayfarer's Bauble,Main,1.0,C,3.6,"artifacts,lands"
+Zephyr Boots,Main,1.0,C,3.322,"artifacts,draw,equipment,graveyard,spells"
+Arcane Signet,Main,2.0,C,3.9,artifacts
+Decoction Module,Main,2.0,C,3.148,"artifacts,blink,control"
+Dowsing Dagger // Lost Vale,Main,2.0,C,3.352,"artifacts,equipment,sacrifice,tokens"
+Fellwar Stone,Main,2.0,C,3.35,artifacts
+Gilded Pinions,Main,2.0,C,3.406,"artifacts,equipment,spells,tokens"
+Golden Egg,Main,2.0,C,3.417,"artifacts,draw,lifegain"
+Ichor Wellspring,Main,2.0,C,3.369,"artifacts,draw"
+Idol of False Gods,Main,2.0,C,3.37,"artifacts,counters,graveyard,sacrifice,tokens"
+Idol of Oblivion,Main,2.0,C,3.274,"artifacts,draw,sacrifice,tokens"
+Key to the City,Main,2.0,C,3.439,"artifacts,combat,draw,graveyard"
+Lightning Greaves,Main,2.0,C,3.27,"artifacts,combat,equipment"
+Liquimetal Torque,Main,2.0,C,3.65,artifacts
+Mask of Memory,Main,2.0,C,3.288,"artifacts,draw,equipment,graveyard,spells"
+Mind Stone,Main,2.0,C,3.7,"artifacts,draw"
+Mortarpod,Main,2.0,C,3.266,"artifacts,equipment,sacrifice,tokens"
+Paleontologist's Pick-Axe // Dinosaur Headdress,Main,2.0,C,3.429,"artifacts,draw,equipment,graveyard,spells"
+Prophetic Prism,Main,2.0,C,3.462,"artifacts,draw"
+Silver Shroud Costume,Main,2.0,C,3.309,"artifacts,combat,equipment"
+Swiftfoot Boots,Main,2.0,C,3.27,"artifacts,combat,equipment,spells"
+Sword of the Animist,Main,2.0,C,3.325,"artifacts,equipment,lands"
+T-45 Power Armor,Main,2.0,C,3.159,"artifacts,combat,equipment,lifegain"
+Technodrome,Main,2.0,C,3.423,"artifacts,combat,counters,draw,sacrifice"
+The Echoverse Fulcrum,Main,2.0,C,3.426,"artifacts,draw,graveyard,spells"
+The Irencrag,Main,2.0,C,3.225,"artifacts,equipment"
+Thought Vessel,Main,2.0,C,3.35,artifacts
+Trailblazer's Boots,Main,2.0,C,3.156,"artifacts,combat,equipment"
+"Bitterthorn, Nissa's Animus",Main,3.0,C,3.373,"artifacts,equipment,lands,sacrifice,tokens"
+Chromatic Lantern,Main,3.0,C,3.252,artifacts
+Circuit Mender,Main,3.0,C,3.305,"artifacts,draw,lifegain"
+Commander's Sphere,Main,3.0,C,3.647,"artifacts,draw"
+Mithril Coat,Main,3.0,C,3.323,"artifacts,equipment"
+Nettlecyst,Main,3.0,C,3.183,"artifacts,equipment,sacrifice,tokens"
+Scrap Trawler,Main,3.0,C,3.306,"artifacts,graveyard,sacrifice"
+Staff of Compleation,Main,3.0,C,3.687,"artifacts,control,counters,draw"
+Sword of Fire and Ice,Main,3.0,C,3.608,"artifacts,draw,equipment"
+Weathered Sentinels,Main,3.0,C,3.2,"artifacts,combat"
+Whispersilk Cloak,Main,3.0,C,3.221,"artifacts,combat,equipment"
+Solemn Simulacrum,Main,4.0,C,3.8,"artifacts,draw,graveyard,lands"
+The Vision,Main,4.0,C,3.312,"artifacts,combat,draw,spells"
+Trading Post,Main,4.0,C,3.563,"artifacts,control,draw,graveyard,lifegain,sacrifice,tokens"
+Trailblazer's Torch,Main,4.0,C,3.305,"artifacts,equipment,spells"
+Vibranium Strike Gauntlets,Main,4.0,C,3.655,"artifacts,combat,draw,equipment"
+The Mightstone and Weakstone,Main,5.0,C,3.779,"artifacts,draw"
+Wurmcoil Engine,Main,6.0,C,4.3,"artifacts,graveyard,lifegain,sacrifice,tokens"
+Myr Battlesphere,Main,7.0,C,3.95,"artifacts,sacrifice,tokens"
+Extinguisher Battleship,Main,8.0,C,3.631,"artifacts,combat,control,spells"
+Birds of Paradise,Main,1.0,G,3.95,
+Chainweb Aracnir,Main,1.0,G,3.33,
+Delighted Halfling,Main,1.0,G,3.548,
+Gilded Goose,Main,1.0,G,3.566,"artifacts,lifegain,tokens"
+Insidious Fungus,Main,1.0,G,3.754,"artifacts,control,draw"
+Party Dude,Main,1.0,G,3.481,"artifacts,draw,spells,tokens"
+Pawpatch Recruit,Main,1.0,G,3.339,"combat,counters,tokens"
+Scattershot Archer,Main,1.0,G,3.364,
+Aberrant,Main,2.0,G,3.687,"artifacts,combat,control,counters,draw"
+Aftermath Analyst,Main,2.0,G,3.33,"graveyard,lands,sacrifice"
+Badgermole Cub,Main,2.0,G,3.272,"blink,combat,counters,graveyard"
+Bamboo Grove Archer,Main,2.0,G,3.371,control
+Broken Bond,Main,2.0,G,3.45,"artifacts,control,spells"
+Cankerbloom,Main,2.0,G,3.36,"artifacts,control,counters"
+Channeler Initiate,Main,2.0,G,3.448,
+Duskshell Crawler,Main,2.0,G,3.478,"combat,counters"
+Explore,Main,2.0,G,3.504,"draw,lands,spells"
+Farseek,Main,2.0,G,3.65,"lands,spells"
+Frenzied Baloth,Main,2.0,G,3.261,combat
+Herd Heirloom,Main,2.0,G,3.707,"artifacts,combat,draw"
+Hunter's Talent,Main,2.0,G,3.423,"combat,draw,spells"
+Life from the Loam,Main,2.0,G,3.318,"draw,graveyard,lands,sacrifice,spells"
+Masked Vandal,Main,2.0,G,3.393,"artifacts,control"
+Nylea's Intervention,Main,2.0,G,3.379,"lands,spells"
+Pawpatch Formation,Main,2.0,G,3.503,"artifacts,control,draw,lifegain,spells,tokens"
+Rampant Growth,Main,2.0,G,3.6,"lands,spells"
+Setessan Training,Main,2.0,G,3.489,"combat,draw"
+Sphere Grid,Main,2.0,G,3.264,"combat,counters"
+Springleaf Parade,Main,2.0,G,3.379,"sacrifice,tokens"
+Sylvan Library,Main,2.0,G,3.415,draw
+Wall of Blossoms,Main,2.0,G,3.39,draw
+Beast Within,Main,3.0,G,3.9,"control,sacrifice,spells,tokens"
+Bloated Contaminator,Main,3.0,G,3.291,"combat,counters"
+Communal Brewing,Main,3.0,G,3.413,"counters,draw"
+Cultivate,Main,3.0,G,3.7,"lands,spells"
+Dryad of the Ilysian Grove,Main,3.0,G,3.398,lands
+Earthbender Ascension,Main,3.0,G,3.712,"combat,counters,lands"
+Eternal Witness,Main,3.0,G,4.0,"control,sacrifice"
+Garruk's Uprising,Main,3.0,G,3.946,"combat,draw"
+Managorger Hydra,Main,3.0,G,3.95,"combat,counters"
+Outcaster Trailblazer,Main,3.0,G,3.615,"draw,spells"
+Reclamation Sage,Main,3.0,G,3.7,"artifacts,control"
+Scrapshooter,Main,3.0,G,3.8,"artifacts,control,draw"
+Spelunking,Main,3.0,G,3.394,"draw,lifegain"
+Topiary Stomper,Main,3.0,G,3.511,lands
+Bristlebud Farmer,Main,4.0,G,3.385,"artifacts,combat,graveyard,lifegain,tokens"
+Gnarled Professor,Main,4.0,G,3.404,"combat,draw,graveyard"
+Hunted Troll,Main,4.0,G,3.318,"sacrifice,tokens"
+Elder Gargaroth,Main,5.0,G,3.59,"combat,draw,lifegain,sacrifice,tokens"
+Overwhelming Stampede,Main,5.0,G,4.0,"combat,spells"
+Summon: Titan,Main,5.0,G,3.721,"combat,draw,graveyard,lands,sacrifice"
+Cloudthresher,Main,6.0,G,3.658,
+Whiptongue Hydra,Main,6.0,G,3.492,counters
+Coliseum Behemoth,Main,7.0,G,3.949,"artifacts,combat,control,draw"
+Cultivator Colossus,Main,7.0,G,3.676,"combat,draw"
+Pelakka Wurm,Main,7.0,G,3.806,"combat,draw,graveyard,lifegain"
+Titan of Industry,Main,7.0,G,4.25,"artifacts,combat,control,lifegain,sacrifice,tokens"
+Tornado Elemental,Main,7.0,G,3.495,
+Craterhoof Behemoth,Main,8.0,G,4.65,combat
+Biotech Specialist,Main,2.0,GR,3.501,"artifacts,lands,sacrifice,tokens"
+Invasion of Ergamon // Truga Cliffcharger,Main,2.0,GR,3.554,"artifacts,combat,draw,graveyard,lands,tokens"
+Sprouting Goblin,Main,2.0,GR,3.535,"draw,lands"
+Voltaic Brawler,Main,2.0,GR,3.272,combat
+Firespout,Main,3.0,GR,3.8,spells
+"Anzrag, the Quake-Mole",Main,4.0,GR,3.221,
+Sunder Shaman,Main,4.0,GR,3.617,"artifacts,combat,control"
+"Bumi, Unleashed",Main,5.0,GR,3.493,combat
+Craftwork Crusher,Main,7.0,GR,3.812,"artifacts,combat,draw,sacrifice,tokens"
+Avatar of Burgeoning Echoes,Main,2.0,GU,3.389,"counters,draw,graveyard,tokens"
+Agent's Toolkit,Main,3.0,GU,3.432,"artifacts,counters,draw"
+Unruly Krasis,Main,3.0,GU,3.256,"combat,counters"
+Frilled Mystic,Main,4.0,GU,3.85,control
+Mystic Snake,Main,4.0,GU,3.8,control
+Tempest Hart // Scan the Clouds,Main,4.0,GU,3.264,"combat,counters,draw,graveyard"
+Oversimplify,Main,5.0,GU,3.9,"counters,sacrifice,spells,tokens"
+"Bonny Pall, Clearcutter",Main,6.0,GU,3.504,"draw,sacrifice,tokens"
+Progenitor Mimic,Main,6.0,GU,3.95,tokens
+"Shuri, the Black Panther",Main,2.0,GW,3.244,"artifacts,draw,lifegain"
+Sundering Growth,Main,2.0,GW,3.198,"artifacts,control,sacrifice,spells,tokens"
+"Cadira, Caller of the Small",Main,3.0,GW,3.255,"combat,sacrifice,tokens"
+Chronicler of Heroes,Main,3.0,GW,3.16,draw
+"Kutzil, Malamet Exemplar",Main,3.0,GW,3.305,draw
+"Aerith, Last Ancient",Main,4.0,GW,3.226,"control,lifegain,sacrifice"
+Bloombrute,Main,4.0,GW,3.282,"combat,draw,lifegain"
+"Wakka, Devoted Guardian",Main,4.0,GW,3.232,"artifacts,combat,counters"
+Fracturing Gust,Main,5.0,GW,3.75,"artifacts,lifegain,spells"
+Beamtown Beatstick,Main,1.0,R,3.445,"artifacts,combat,equipment,spells,tokens"
+Crash Through,Main,1.0,R,3.397,"combat,draw,spells"
+Dreadmaw's Ire,Main,1.0,R,3.469,"artifacts,combat,control,spells"
+Faithless Looting,Main,1.0,R,3.508,"draw,graveyard,spells"
+Lightning Bolt,Main,1.0,R,3.75,spells
+"Ragavan, Nimble Pilferer",Main,1.0,R,3.657,"artifacts,combat,tokens"
+Reckless Lackey,Main,1.0,R,3.543,"artifacts,combat,draw,tokens"
+Sticky Fingers,Main,1.0,R,3.657,"artifacts,combat,draw,graveyard,tokens"
+Vandalblast,Main,1.0,R,3.335,"artifacts,control,spells"
+Vindictive Flamestoker,Main,1.0,R,3.404,"draw,graveyard,spells"
+Abrade,Main,2.0,R,3.65,"artifacts,control,spells"
+Assaultron Dominator,Main,2.0,R,3.449,"artifacts,combat"
+Coruscation Mage,Main,2.0,R,3.307,"spells,tokens"
+Daredevil's Billy Club,Main,2.0,R,3.426,"artifacts,combat,equipment,spells"
+Fear of Missing Out,Main,2.0,R,3.504,"draw,graveyard"
+Fists of Flame,Main,2.0,R,3.406,"combat,draw,spells"
+Generous Plunderer,Main,2.0,R,3.567,"artifacts,combat,tokens"
+"Ivora, Insatiable Heir",Main,2.0,R,3.398,"artifacts,combat,counters,draw,graveyard,tokens"
+Nahiri's Lithoforming,Main,2.0,R,3.399,"draw,lands,spells"
+Smoldering Egg // Ashmouth Dragon,Main,2.0,R,3.34,spells
+Spiteful Banditry,Main,2.0,R,3.537,"artifacts,tokens"
+Starstorm,Main,2.0,R,3.358,"draw,spells"
+Stingscourger,Main,2.0,R,3.371,control
+Sunset Strikemaster,Main,2.0,R,3.495,
+Way of the Pyromancer,Main,2.0,R,3.531,"draw,graveyard,tokens"
+Weapons Manufacturing,Main,2.0,R,3.343,"artifacts,tokens"
+Arterial Alchemy,Main,3.0,R,3.481,"artifacts,draw,equipment,graveyard,tokens"
+Chaos Warp,Main,3.0,R,3.8,spells
+Fiery Inscription,Main,3.0,R,3.173,spells
+"Gadrak, the Crown-Scourge",Main,3.0,R,3.416,"artifacts,tokens"
+"Killmonger, Ruthless Usurper",Main,3.0,R,3.381,"artifacts,combat,tokens"
+Professional Face-Breaker,Main,3.0,R,3.533,"artifacts,combat,tokens"
+Rubble Rouser,Main,3.0,R,3.555,"draw,graveyard"
+Savage Alliance,Main,3.0,R,3.368,"combat,spells"
+Shake the Foundations,Main,3.0,R,3.403,"draw,spells"
+Tersa Lightshatter,Main,3.0,R,3.462,"combat,draw"
+The Reaver Cleaver,Main,3.0,R,3.596,"artifacts,combat,equipment,tokens"
+Wildfire Howl,Main,3.0,R,3.545,"draw,spells"
+Boldwyr Heavyweights,Main,4.0,R,3.305,combat
+Caves of Chaos Adventurer,Main,4.0,R,3.27,combat
+Fiery Confluence,Main,4.0,R,3.421,"artifacts,control,spells"
+Hammerheim Deadeye,Main,4.0,R,3.364,control
+Invasion of Kaldheim // Pyre of the World Tree,Main,4.0,R,3.512,"draw,graveyard"
+Kinetic Augur,Main,4.0,R,3.408,"combat,draw,spells"
+"Neheb, Dreadhorde Champion",Main,4.0,R,3.497,"combat,draw,graveyard"
+"Purphoros, God of the Forge",Main,4.0,R,3.288,
+The Elder Dragon War,Main,4.0,R,3.431,"draw,graveyard,sacrifice,tokens"
+Ajani Unrelenting,Main,6.0,R,3.599,"combat,draw,graveyard,sacrifice,tokens"
+"Chandra, Flamecaller",Main,6.0,R,3.628,"combat,draw,graveyard,sacrifice,tokens"
+Combustible Gearhulk,Main,6.0,R,3.663,"artifacts,combat,draw,graveyard"
+Hellkite Tyrant,Main,6.0,R,3.573,"artifacts,combat"
+Incinerator of the Guilty,Main,6.0,R,3.572,combat
+Inferno Titan,Main,6.0,R,4.05,
+Olivia's Attendants,Main,6.0,R,3.739,"artifacts,combat,draw,graveyard,tokens"
+Trumpeting Carnosaur,Main,6.0,R,3.84,combat
+Balefire Dragon,Main,7.0,R,3.501,
+Depthshaker Titan,Main,7.0,R,3.555,"artifacts,combat,spells"
+Knollspine Dragon,Main,7.0,R,3.631,"draw,graveyard"
+Blasphemous Act,Main,9.0,R,4.2,spells
+Enthusiastic Mechanaut,Main,2.0,RU,3.186,artifacts
+Gleaming Geardrake,Main,2.0,RU,3.516,"artifacts,counters,draw,sacrifice,tokens"
+Inspired Skypainter // Maestro's Gift,Main,2.0,RU,3.408,"combat,sacrifice,tokens"
+Izzet Charm,Main,2.0,RU,3.425,"control,draw,graveyard,spells"
+Sorcerer Class,Main,2.0,RU,3.657,"draw,graveyard,spells"
+The Emperor of Palamecia // The Lord Master of Hell,Main,2.0,RU,3.315,"counters,spells"
+Zoanthrope,Main,2.0,RU,3.581,"counters,draw"
+Prismari Command,Main,3.0,RU,3.356,"artifacts,control,draw,spells,tokens"
+Serum-Core Chimera,Main,4.0,RU,3.489,"draw,graveyard,spells"
+"Jor Kadeen, First Goldwarden",Main,2.0,RW,3.35,"combat,draw"
+"Pia Nalaar, Consul of Revival",Main,2.0,RW,3.169,"artifacts,combat,sacrifice,tokens"
+"Black Widow, Agile Avenger",Main,3.0,RW,3.37,"combat,counters,draw"
+Venerable Warsinger,Main,3.0,RW,3.359,"combat,control,sacrifice"
+"Iroas, God of Victory",Main,4.0,RW,3.198,combat
+"Nahiri, the Unforgiving",Main,4.0,RW,3.366,"combat,control,draw,equipment,graveyard,tokens"
+Outlaws' Merriment,Main,4.0,RW,3.35,"combat,lifegain,sacrifice,tokens"
+"Sophina, Spearsage Deserter",Main,4.0,RW,3.307,"artifacts,combat,draw,tokens"
+"Éowyn, Fearless Knight",Main,4.0,RW,3.291,"combat,control"
+An Offer You Can't Refuse,Main,1.0,U,3.339,"artifacts,control,spells,tokens"
+Blitzball Stadium,Main,1.0,U,3.535,"artifacts,combat,counters,draw"
+Brainstorm,Main,1.0,U,3.367,"draw,spells"
+Faerie Impostor,Main,1.0,U,3.288,
+Flitterwing Nuisance,Main,1.0,U,3.442,draw
+Harrier Strix,Main,1.0,U,3.456,"draw,graveyard"
+Ponder,Main,1.0,U,3.3,"draw,spells"
+Pongify,Main,1.0,U,3.8,"control,sacrifice,spells,tokens"
+Rapid Hybridization,Main,1.0,U,3.8,"control,sacrifice,spells,tokens"
+Sidisi's Faithful,Main,1.0,U,3.438,"control,graveyard,sacrifice"
+Siren Stormtamer,Main,1.0,U,3.379,control
+Three Steps Ahead,Main,1.0,U,3.459,"artifacts,control,draw,graveyard,spells,tokens"
+Arcane Denial,Main,2.0,U,3.8,"control,draw,spells"
+Azure Beastbinder,Main,2.0,U,3.25,"artifacts,combat"
+Benevolent River Spirit,Main,2.0,U,3.263,artifacts
+Cartouche of Knowledge,Main,2.0,U,3.328,draw
+Cloud of Faeries,Main,2.0,U,3.365,draw
+Counterspell,Main,2.0,U,4.0,"control,spells"
+Dour Port-Mage,Main,2.0,U,3.525,draw
+Evie Frye,Main,2.0,U,3.336,"combat,draw,graveyard"
+Faerie Mastermind,Main,2.0,U,3.56,draw
+Gilded Drake,Main,2.0,U,3.45,
+Inverted Iceberg // Iceberg Titan,Main,2.0,U,3.452,"artifacts,draw,graveyard,spells"
+"Kitsa, Otterball Elite",Main,2.0,U,3.312,"draw,graveyard,spells"
+Ledger Shredder,Main,2.0,U,3.413,"counters,draw,graveyard"
+Long River's Pull,Main,2.0,U,3.429,"control,draw,spells"
+Mana Drain,Main,2.0,U,3.32,"control,spells"
+Silent Hallcreeper,Main,2.0,U,3.451,"combat,counters,draw"
+Triskaidekaphile,Main,2.0,U,3.349,draw
+Volatile Stormdrake,Main,2.0,U,3.352,
+Waterbender Ascension,Main,2.0,U,3.34,"artifacts,combat,draw"
+Aether Channeler,Main,3.0,U,3.704,"draw,sacrifice,tokens"
+Assassin Gauntlet,Main,3.0,U,3.372,"artifacts,draw,equipment,graveyard"
+Bazaar Trademage,Main,3.0,U,3.427,draw
+Blur,Main,3.0,U,3.386,"blink,control,draw,spells"
+Chakra Meditation,Main,3.0,U,3.494,"draw,graveyard,sacrifice,spells"
+Chasm Skulker,Main,3.0,U,3.436,"combat,counters,draw,graveyard,sacrifice,tokens"
+Frantic Search,Main,3.0,U,3.337,"draw,graveyard,spells"
+Hunted Phantasm,Main,3.0,U,3.305,"combat,sacrifice,tokens"
+Kefnet the Mindful,Main,3.0,U,3.455,draw
+Martha Jones,Main,3.0,U,3.35,"artifacts,combat,draw,tokens"
+Overwhelmed Archivist // Archive Haunt,Main,3.0,U,3.428,"draw,graveyard"
+Sink into Stupor // Soporific Springs,Main,3.0,U,3.538,"control,spells"
+Teferi's Tutelage,Main,3.0,U,3.378,"draw,graveyard"
+Uthros Research Craft,Main,3.0,U,3.414,"artifacts,draw,spells"
+Ethereal Investigator,Main,4.0,U,3.492,"artifacts,draw,sacrifice,tokens"
+Overcharged Amalgam,Main,4.0,U,3.369,"control,graveyard,sacrifice"
+Plan for All Outcomes,Main,4.0,U,3.439,"draw,graveyard,spells,tokens"
+The Indomitable,Main,4.0,U,3.383,"artifacts,combat,draw"
+Thopter Spy Network,Main,4.0,U,3.472,"artifacts,draw,sacrifice,tokens"
+Mulldrifter,Main,5.0,U,3.7,draw
+"Jace, Arcane Strategist",Main,6.0,U,3.602,"combat,counters,draw"
+Marang River Regent // Coil and Catch,Main,6.0,U,3.777,"draw,graveyard"
+Shark Typhoon,Main,6.0,U,4.2,"draw,sacrifice,spells,tokens"
+Shimmer Dragon,Main,6.0,U,3.628,"artifacts,draw"
+Torrential Gearhulk,Main,6.0,U,4.1,"artifacts,spells"
+Day of the Dragons,Main,7.0,U,3.475,"sacrifice,tokens"
+Lord of Change,Main,7.0,U,3.602,draw
+Thought Monitor,Main,7.0,U,3.687,"artifacts,draw"
+Air Nomad Legacy,Main,2.0,UW,3.3,"artifacts,draw,tokens"
+"Niambi, Esteemed Speaker",Main,2.0,UW,3.436,"draw,graveyard"
+Riddle Gate Gargoyle,Main,2.0,UW,3.062,"artifacts,lifegain"
+"Sygg, Wanderwine Wisdom // Sygg, Wanderbrine Shield",Main,2.0,UW,3.332,"combat,draw"
+Talisman of Progress,Main,2.0,UW,3.206,artifacts
+"Aang, Swift Savior // Aang and La, Ocean's Fury",Main,3.0,UW,3.26,"combat,counters"
+"Alquist Proft, Master Sleuth",Main,3.0,UW,3.222,"artifacts,draw,lifegain,tokens"
+Biorganic Carapace,Main,4.0,UW,3.336,"artifacts,draw,equipment"
+"Teferi, Hero of Dominaria",Main,5.0,UW,3.874,"control,draw"
+Ephemerate,Main,1.0,W,3.197,"blink,control,spells"
+Esper Sentinel,Main,1.0,W,3.459,"artifacts,draw,spells"
+Glint Hawk,Main,1.0,W,3.251,artifacts
+Hopeful Initiate,Main,1.0,W,3.474,"artifacts,control,counters"
+Novice Inspector,Main,1.0,W,3.504,"artifacts,draw,tokens"
+Path to Exile,Main,1.0,W,4.15,"control,spells"
+Prehistoric Pet,Main,1.0,W,3.404,combat
+Progenitor Exarch,Main,1.0,W,3.33,"artifacts,tokens"
+Swords to Plowshares,Main,1.0,W,4.3,"control,spells"
+Thraben Inspector,Main,1.0,W,3.531,"artifacts,draw,tokens"
+Angelic Gift,Main,2.0,W,3.422,draw
+Charming Prince,Main,2.0,W,3.411,lifegain
+Citizen's Crowbar,Main,2.0,W,3.312,"artifacts,control,equipment,sacrifice,spells,tokens"
+Cloud's Limit Break,Main,2.0,W,3.309,"control,spells"
+Fabrication Foundry,Main,2.0,W,3.314,"artifacts,blink,control,sacrifice,spells"
+Feather of Flight,Main,2.0,W,3.411,draw
+Gleaming Splendor,Main,2.0,W,3.462,"artifacts,draw,tokens"
+Glimmer Lens,Main,2.0,W,3.373,"artifacts,draw,equipment,sacrifice,tokens"
+Quantum Entanglement,Main,2.0,W,3.252,"blink,control"
+Sheltered by Ghosts,Main,2.0,W,3.344,"control,lifegain"
+Staff of the Storyteller,Main,2.0,W,3.615,"artifacts,draw,sacrifice,tokens"
+Sunstar Expansionist,Main,2.0,W,3.389,"artifacts,lands,tokens"
+Wall of Omens,Main,2.0,W,3.456,draw
+Caretaker's Talent,Main,3.0,W,3.33,"draw,sacrifice,spells,tokens"
+Celestial Armor,Main,3.0,W,3.253,"artifacts,equipment,spells"
+Chains of Custody,Main,3.0,W,3.379,control
+Emeritus of Truce // Swords to Plowshares,Main,3.0,W,3.461,"control,sacrifice,tokens"
+Fall of the First Civilization,Main,3.0,W,3.625,"artifacts,control,draw"
+Flickerwisp,Main,3.0,W,3.403,
+Generous Gift,Main,3.0,W,3.8,"control,sacrifice,spells,tokens"
+"Heliod, Sun-Crowned",Main,3.0,W,3.284,"counters,lifegain"
+Inspiring Overseer,Main,3.0,W,3.348,"draw,lifegain"
+Jackdaw Savior,Main,3.0,W,3.427,"graveyard,sacrifice"
+Maul of the Skyclaves,Main,3.0,W,3.4,"artifacts,combat,equipment"
+Pre-War Formalwear,Main,3.0,W,3.366,"artifacts,control,equipment,sacrifice"
+Resplendent Marshal,Main,3.0,W,3.226,"counters,graveyard"
+"Teyo, Geometric Tactician",Main,3.0,W,3.389,"draw,sacrifice,tokens"
+Trapped in the Screen,Main,3.0,W,3.327,"artifacts,control"
+Welcoming Vampire,Main,3.0,W,3.394,draw
+Cast Out,Main,4.0,W,3.555,"control,draw"
+Court of Ardenvale,Main,4.0,W,3.409,"control,sacrifice"
+Court of Grace,Main,4.0,W,3.148,"sacrifice,tokens"
+Dust Elemental,Main,4.0,W,3.255,"artifacts,combat,spells"
+Felidar Guardian,Main,4.0,W,3.399,blink
+Ox Drover,Main,4.0,W,3.328,"combat,draw,sacrifice,tokens"
+Trouble in Pairs,Main,4.0,W,3.331,draw
+Warren Warleader,Main,4.0,W,3.165,"sacrifice,tokens"
+Wedding Ring,Main,4.0,W,3.477,"artifacts,draw,lifegain,tokens"
+Wrath of God,Main,4.0,W,4.05,spells
+"Elspeth, Storm Slayer",Main,5.0,W,3.703,"control,counters,sacrifice,tokens"
+Karmic Guide,Main,5.0,W,3.518,"control,sacrifice"
+Primary Research,Main,5.0,W,3.686,"control,draw,lands,sacrifice"
+Angel of Indemnity,Main,6.0,W,3.651,"combat,control,lifegain,sacrifice,spells,tokens"
+Austere Command,Main,6.0,W,4.1,"artifacts,spells"
+"Elspeth, Sun's Champion",Main,6.0,W,3.517,"sacrifice,tokens"
+Sun Titan,Main,6.0,W,4.05,"control,sacrifice"
+Sunblast Angel,Main,6.0,W,3.591,
+Wispweaver Angel,Main,6.0,W,3.594,blink
+Angel of the Dire Hour,Main,7.0,W,3.458,

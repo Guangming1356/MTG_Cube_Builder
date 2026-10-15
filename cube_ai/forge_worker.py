@@ -43,6 +43,8 @@ class Worker:
                 if line.startswith(('CUBE_READY ','CUBE_RESULT ')):self.messages.put(line.rstrip())
             self.messages.put(None)
         self.reader=threading.Thread(target=read,daemon=True);self.reader.start()
+        # Count a JVM's already-consumed RAM during its initialization too.
+        with _guard:_workers.append(self)
         try:
             ready=self.messages.get(timeout=90)
             if ready!='CUBE_READY 1':raise WorkerUnavailable('常驻 Forge 未能完成初始化')
@@ -78,13 +80,15 @@ class Worker:
         except queue.Empty:timeout=True;retire=True
         except (OSError,ValueError,RuntimeError) as e:error=str(e);retire=True
         self.games+=1
+        from .resources import process_memory
+        memory=process_memory(self.process.pid)
         if retire:self.close()
         log=(out/log_name).read_text(encoding='utf-8',errors='replace') if (out/log_name).exists() else ''
         if error:log+='\nCubeWorkerError: '+error+'\n';(out/log_name).write_text(log,encoding='utf-8')
         if not (out/log_name).exists():(out/log_name).write_text(log,encoding='utf-8')
         return dict(log_text=log,returncode=-1 if error or timeout else 0,process_timeout=timeout,
             command=self.command,wall_seconds=time.monotonic()-started,worker_game=self.games,
-            worker_directory=str(self.home),backend=BRIDGE_VERSION)
+            worker_directory=str(self.home),backend=BRIDGE_VERSION,engine_memory=memory)
 
 def worker_key(config):return (config['java'],config['jar'],config.get('heap_mib',2048),tuple(config.get('jvm_options',[])))
 
@@ -98,7 +102,6 @@ def run(config,make_home,deck_dir,order,seed,clock,out,log_name):
         if worker:worker.busy=True
     if worker is None:
         worker=Worker(config,make_home,out)
-        with _guard:_workers.append(worker)
     try:
         value=worker.run(deck_dir,order,seed,clock,out,log_name)
         value['wall_seconds']=round(time.monotonic()-started,3)
@@ -109,5 +112,24 @@ def run(config,make_home,deck_dir,order,seed,clock,out,log_name):
 def close_all():
     with _guard:workers=list(_workers);_workers.clear()
     for worker in workers:worker.close()
+
+
+def memory_snapshot():
+    from .resources import process_memory
+    with _guard:workers=[w for w in _workers if not w.closed]
+    return [value for worker in workers if worker.process.poll() is None
+            and (value:=process_memory(worker.process.pid)) is not None]
+
+
+def trim_idle(limit):
+    """Release only idle, owned engines; never interrupt an active game."""
+    with _guard:
+        _workers[:]=[w for w in _workers if not w.closed]
+        idle=[w for w in _workers if not w.busy]
+        retiring=idle[:max(0,len(_workers)-limit)]
+        for worker in retiring:
+            worker.busy=True
+            _workers.remove(worker)
+    for worker in retiring:worker.close()
 
 atexit.register(close_all)

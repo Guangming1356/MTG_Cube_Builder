@@ -56,9 +56,9 @@ refreshOptimizations().catch(e=>notice(e.message,true));
 function configureExperiments(){
   const r=statusInfo.experiments.resources;
   for(const id of ['forge-workers','optimization-workers']){
-    $(id).innerHTML=`<option value="0">自动（当前最多 ${r.automatic} 局）</option>`+[1,2,3,4,6,8].filter(n=>n<=r.maximum).map(n=>`<option value="${n}">同时 ${n} 局</option>`).join('');
+    $(id).innerHTML=`<option value="0">自动（${r.dynamic?'起始':'当前最多'} ${r.automatic} 局${r.dynamic?'，随剩余内存调整':''}）</option>`+[1,2,3,4,6,8].filter(n=>n<=r.maximum).map(n=>`<option value="${n}">最多同时 ${n} 局</option>`).join('');
   }
-  $('execution-hint').textContent='会按空闲资源限制同时对局数。增加不同轮抓桌通常比对同一桌反复打更有帮助；每桌至少3局换座。';
+  $('execution-hint').textContent=r.dynamic?`自动模式会检查剩余内存，逐步增加同时对局数（本机上限 ${r.ceiling} 局）；内存紧张时减少新开局，正在进行的对局正常完成。增加不同轮抓桌通常比同桌反复打更有帮助；每桌至少3局换座。`:'当前后台仍使用固定并行数；本轮任务结束后关闭并重新打开助手，可启用动态安排。';
   function updateBudget(){
     const b=statusInfo.experiments.profiles[$('optimization-profile').value];
     const cap=$('optimization-swaps').value||b.max_swaps;

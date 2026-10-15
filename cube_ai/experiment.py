@@ -14,19 +14,8 @@ MAX_PODS = 120
 
 
 def memory_available():
-    try:
-        if os.name == 'nt':
-            import ctypes
-            class Memory(ctypes.Structure):
-                _fields_ = [('length', ctypes.c_ulong), ('load', ctypes.c_ulong)] + [
-                    (name, ctypes.c_ulonglong) for name in
-                    ('total', 'available', 'page_total', 'page_available', 'virtual_total', 'virtual_available', 'extended')]
-            value = Memory(); value.length = ctypes.sizeof(value)
-            if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(value)):
-                return value.available
-        return os.sysconf('SC_AVPHYS_PAGES') * os.sysconf('SC_PAGE_SIZE')
-    except (AttributeError, OSError, ValueError):
-        return None
+    from .resources import system_memory
+    return system_memory().get('available')
 
 
 def execution_resources(workers=0):
@@ -34,18 +23,21 @@ def execution_resources(workers=0):
         raise ValueError('同时对局数需为 0（自动）至 8')
     cpu = os.cpu_count() or 1
     available = memory_available()
-    # Each JVM has a 2 GiB heap, plus native memory. Reserve room for the UI/OS.
-    memory_cap = max(1, int((available / 2**30 - 3) // 2.75)) if available else 2
-    maximum = min(MAX_WORKERS, max(1, cpu // 2), memory_cap)
+    from .resources import capacity
+    memory_cap = capacity(dict(available=available))['capacity']
+    ceiling = min(MAX_WORKERS, max(1, cpu // 2))
+    maximum = min(ceiling, memory_cap)
     automatic = min(4, max(1, cpu // 4), maximum)
     from .tuning import recommendation
-    calibrated=recommendation(maximum) if not workers else None
-    if calibrated:automatic=calibrated
+    calibrated=recommendation(ceiling) if not workers else None
+    if calibrated:automatic=min(maximum,calibrated)
     if workers > maximum:
         raise ValueError(f'当前空闲资源建议最多同时 {maximum} 局；请选择自动或减少同时对局数')
     return dict(requested=workers, workers=workers or automatic, automatic=automatic,
                 maximum=maximum, cpu_count=cpu, available_memory_bytes=available,
-                heap_mib_per_game=2048, pipeline=True,calibrated=bool(calibrated))
+                heap_mib_per_game=2048, pipeline=True,calibrated=bool(calibrated),
+                dynamic=True, ceiling=workers or (calibrated if calibrated else ceiling),
+                resource_policy='full-heap-live-memory-1')
 
 
 def experiment_budget(profile='standard', training_pods=None, max_swaps=None, cube_size=600):
