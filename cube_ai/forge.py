@@ -202,6 +202,14 @@ def wilson(wins,n):
     return [round(max(0,center-delta),3),round(min(1,center+delta),3)]
 
 def run_battle(config,deck_dir,order,seed,clock_seconds,out,log_name):
+    from .task_control import native_activity,record_game
+    with native_activity():
+        record=_cached_battle(config,deck_dir,order,seed,clock_seconds,out,log_name)
+        record_game(record,out)
+        return record
+
+
+def _cached_battle(config,deck_dir,order,seed,clock_seconds,out,log_name):
     from .sim_cache import key,get,put
     cache_key=None
     if config.get('cache',True) and config.get('version')!='external':
@@ -307,7 +315,8 @@ def simulate(catalog,rows,spec,pods=10,games_per_pod=3,clock_seconds=90,progress
                 for future in futures:
                     p,g=pending.pop(future);record=dict(pod=p,game=g,**future.result());records.append(record)
                     progress(f'Forge 已完成 {len(records)}/{submitted} 局；已组牌 {len(tables)}/{pods} 桌；同时最多 {workers} 局：{record["outcome"]}')
-                (out/'games.json').write_text(json.dumps(sorted(records,key=lambda r:(r['pod'],r['game'])),ensure_ascii=False,indent=2),encoding='utf-8')
+                from .task_control import atomic_json
+                atomic_json(out/'games.json',sorted(records,key=lambda r:(r['pod'],r['game'])))
             for p in range(pods):
                 # Backpressure bounds queued JVM jobs and keeps results/progress flowing.
                 while len(pending)>=workers*2:

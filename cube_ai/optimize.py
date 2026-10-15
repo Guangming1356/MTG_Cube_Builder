@@ -76,6 +76,8 @@ def draft_evaluation(catalog,rows,spec,seeds,guilds,include_tables=False,learned
     if len(seeds)!=len(guilds) or not seeds:raise ValueError('轮抓种子与色组安排需非空且长度相同')
     started=time.perf_counter();observations=[];tables=[];card_counts=defaultdict(Counter);cache_hits=0
     for p,(seed,prefs) in enumerate(zip(seeds,guilds)):
+        from .task_control import checkpoint
+        checkpoint()
         if workspace:
             (original,(metrics,counts)),hit=workspace.table(catalog,rows,spec,seed,prefs,lambda pod:_pod_metrics(catalog,pod))
             pod=dict(original)
@@ -324,6 +326,9 @@ def propose_revision(catalog,rows,spec,protocol,evidence,drafts,progress=print):
         while len(changes)<protocol['max_swaps'] and tested<protocol.get('max_evaluated_alternatives',80):
             batch=[];present={r['name'] for r in candidate}
             while cursor<len(ranked) and len(batch)<batch_size and tested+len(batch)<protocol.get('max_evaluated_alternatives',80):
+                if cursor%64==0:
+                    from .task_control import checkpoint
+                    checkpoint()
                 _,i,c,gain=ranked[cursor];cursor+=1
                 if i in taken or c['name'] in present or attempts[i]>=3:continue
                 trial=[dict(r) for r in candidate];trial[i]['name']=c['name']

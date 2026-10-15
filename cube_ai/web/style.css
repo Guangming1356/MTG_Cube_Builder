@@ -6,3 +6,5 @@
 
 [hidden]{display:none!important}#ai-settings input,#ai-settings select{width:100%}#ai-settings h3{margin-top:24px}#ai-settings details{margin:18px 0}#ai-settings .ai-save-actions{margin-top:24px}#gpt-status{cursor:pointer}#ai-auth-result,#ai-test-result{white-space:pre-wrap}
 @media(max-width:650px){header{flex-direction:column;align-items:flex-start;gap:12px}#gpt-status{max-width:100%;white-space:normal;overflow-wrap:anywhere}}
+
+#task-monitor{margin-bottom:24px;border-color:#a4baa7}#task-monitor h2{font-size:18px}.task-row{display:flex;align-items:center;justify-content:space-between;gap:16px;border-top:1px solid var(--line);padding-top:14px;margin-top:14px}.task-row p{font-size:12px;margin:7px 0}.task-row>.actions{flex-shrink:0}.danger-button{color:#9b3c2b;border-color:#d5a99b;background:#fff8f3}@media(max-width:760px){.task-row{align-items:flex-start;flex-direction:column}}

@@ -31,10 +31,13 @@ def port_free(port):
 
 def find_server():
     # Reuse only the server belonging to this project, never an unrelated web app.
+    older=None
     for port in PORTS:
         if port_free(port):continue
-        if data:=health(port):return port,data
-    return None
+        if data:=health(port):
+            if data.get('task_controls'):return port,data
+            if older is None:older=(port,data)
+    return older
 
 def load_env():
     allowed={'OPENAI_API_KEY','OPENAI_MODEL','OPENAI_BASE_URL','CUBE_API_STYLE','CUBE_CARD_POOL','CUBE_FORGE_HOME','CUBE_FORGE_JAVA'}
@@ -59,6 +62,9 @@ def start_server(port):
 def launch(open_browser=True,timeout=45):
     load_env()
     found=find_server()
+    # Upgrade alongside a busy older server. Its tasks remain visible and can be
+    # explicitly stopped from the new task panel; never kill them on launch.
+    if found and not found[1].get('task_controls'):found=None
     reused=bool(found)
     if not found:
         port=next((p for p in PORTS if port_free(p)),None)

@@ -27,6 +27,7 @@ from .brackets import public_profiles
 from .launcher import APP_ID, WORKSPACE_ID
 from .experiment import PROFILES, execution_resources, experiment_budget
 from . import acceleration,sim_cache,surrogate,tuning
+from .task_process import TaskProcess,ACTIVE
 
 def example_label(name):
     if name=='reference_commandercube':return 'CubeCobra 指挥官参考牌表（仅供学习）'
@@ -55,15 +56,84 @@ def library(app):
         if len(saved)>=60:break
     return dict(saved=saved,examples=[dict(id=n,label=example_label(n)) for n in sorted(app.examples)])
 
+def execute_operation(app,operation,spec,rows,data,progress):
+    client=LLMClient(app.ai_store,app.auth) if operation in {"chat","plan"} else None
+    if operation in {"build","repair"}:
+        value=export_run(app.catalog,build(app.catalog,spec,rows if operation=="repair" else None,progress,app.feedback));value=app.present(value)
+    elif operation=="stress":
+        value=stress_test(app.catalog,rows,spec,int(data.get("trials",100)),progress)
+        run_id=data.get("run_id")
+        if run_id and re.fullmatch(r"[A-Za-z0-9_]+",run_id) and (RUNS/run_id).is_dir():
+            (RUNS/run_id/"stress.json").write_text(json.dumps(value,ensure_ascii=False,indent=2),encoding="utf-8")
+    elif operation=='calibrate':
+        value=tuning.calibrate(app.catalog,rows,spec,progress,mode=data.get('mode','quick'))
+    elif operation=="forge":
+        value=forge_simulate(app.catalog,rows,spec,data.get('pods',10),data.get('games_per_pod',3),data.get('clock_seconds',90),progress,workers=data.get('workers',0))
+    elif operation=="optimize":
+        value=optimize(app.catalog,rows,spec,progress,workers=data.get('workers',0),clock=data.get('clock_seconds',120),
+            profile=data.get('profile','standard'),max_swaps=data.get('max_swaps'),training_pods=data.get('training_pods'),
+            scoring_backend=data.get('scoring_backend','auto'),search_mode=data.get('search_mode','full'))
+        value['revision']=app.present(value['revision'])
+    elif operation=='learn-games':value=surrogate.train(app.catalog,progress)
+    elif operation=="chat":
+        progress("AI 正在检索牌库、技能与构筑审计")
+        value=advise(app.catalog,app.knowledge,spec,rows,data.get("message",""),client)
+    else:
+        progress("AI 将需求转换为构筑参数")
+        value=plan(data.get("message",""),spec,app.knowledge,client)
+    return value
+
+DEFAULT_ISOLATED_JOBS=True
+
 class Application:
-    def __init__(self,catalog=None,ai_store=None):
+    def __init__(self,catalog=None,ai_store=None,isolated_jobs=None):
         self.catalog=catalog or Catalog();self.knowledge=Knowledge();self.feedback=FeedbackStore()
         self.ai_store=ai_store or SettingsStore();self.auth=ChatGPTAuth(self.ai_store)
         self.jobs={};self.lock=threading.Lock();self.executor=ThreadPoolExecutor(max_workers=2)
+        self.isolated_jobs=DEFAULT_ISOLATED_JOBS if isolated_jobs is None else isolated_jobs;self.controls={}
         example_root = LIBRARY if LIBRARY.is_dir() else WORKSPACE
         self.examples={p.parent.name:p for p in example_root.glob("commander_cube_600*/cube_600.csv")}
         ref=WORKSPACE/"ref_thecommandercube.csv"
         if ref.exists():self.examples["reference_commandercube"]=ref
+
+    def update_job(self,id_,state):
+        with self.lock:
+            job=self.jobs[id_]
+            if job['state'] not in ACTIVE:return
+            if job['state']=='cancelling':return
+            if job['state']=='pausing' and state.get('state')=='running':
+                job['progress']=state['progress'];return
+            if state.get('state')=='paused' and self.controls[id_].action!='pause':return
+            job.update(state)
+
+    def public_jobs(self):
+        with self.lock:
+            jobs=[dict({k:v for k,v in job.items() if k!='result'},controllable=id_ in self.controls) for id_,job in self.jobs.items()]
+        from .legacy_tasks import discover
+        return jobs+discover()
+
+    def control(self,id_,action):
+        if action not in {'pause','resume','cancel'}:raise ValueError('任务操作需为暂停、继续或结束')
+        if isinstance(id_,str) and id_.startswith('legacy_'):
+            from .legacy_tasks import stop
+            if action!='cancel':raise ValueError('旧后台无法加入暂停功能；可结束后使用新版')
+            return stop(id_)
+        with self.lock:
+            job=self.jobs.get(id_)
+            if not job:raise ValueError('任务不存在或已过期')
+            if job['state'] not in ACTIVE:return dict(job)
+            runner=self.controls.get(id_)
+            if not runner:raise ValueError('此任务由旧方式启动，暂不能控制')
+            runner.command({'pause':'pause','resume':'run','cancel':'cancel'}[action])
+            if action=='pause':job.update(state='pausing',progress='等待当前对局或计算步骤结束后暂停')
+            elif action=='resume':job.update(state='running' if runner.process else 'queued',progress='正在继续')
+            else:job.update(state='cancelling' if runner.process else 'cancelled',progress='正在结束任务并回收子进程' if runner.process else '已结束排队任务')
+            return dict(job)
+
+    def shutdown(self):
+        for id_,runner in list(self.controls.items()):
+            if self.jobs[id_]['state'] in ACTIVE:runner.command('cancel')
+        self.executor.shutdown(wait=False,cancel_futures=True)
 
     def ai_status(self):
         try:return LLMClient(self.ai_store,self.auth).status()
@@ -110,40 +180,35 @@ class Application:
             if len(message)>12000:raise ValueError('单次 AI 需求请控制在 12000 字以内')
         client=LLMClient(self.ai_store,self.auth) if operation in {'chat','plan'} else None
         if client and not client.status()['configured']:raise ValueError('AI 尚未就绪，请在“AI 设置”中连接服务并选择模型。离线功能可直接使用。')
+        native_operations={'forge','optimize','calibrate'}
+        if operation in native_operations:
+            from .legacy_tasks import discover
+            if discover():raise ValueError('旧后台仍有任务，请先在任务控制区结束旧任务，再开始实战')
         job_id=uuid.uuid4().hex[:16]
         with self.lock:
-            if sum(j["state"] in {"queued","running"} for j in self.jobs.values())>=4:raise ValueError("已有 4 个任务，请等待其中一个完成")
+            if operation in native_operations and any(j['operation'] in native_operations and j['state'] in ACTIVE for j in self.jobs.values()):
+                raise ValueError('已有实战或改进任务，请先继续或结束它')
+            if sum(j["state"] in ACTIVE for j in self.jobs.values())>=4:raise ValueError("已有 4 个任务，请等待其中一个完成")
             self.jobs[job_id]=dict(id=job_id,operation=operation,state="queued",progress="等待运行")
-            completed=[k for k,j in self.jobs.items() if j["state"] in {"done","failed"}]
+            completed=[k for k,j in self.jobs.items() if j["state"] in {"done","failed","cancelled"}]
             for k in completed[:-30]:del self.jobs[k]
+        if self.isolated_jobs:
+            allowed={'operation','message','trials','run_id','pods','games_per_pod','clock_seconds','workers','profile','max_swaps','training_pods','scoring_backend','search_mode','mode'}
+            request={k:v for k,v in data.items() if k in allowed};request.update(spec=spec.to_dict(),cards=rows)
+            self.controls[job_id]=TaskProcess(job_id,request,getattr(self.ai_store,'path',None))
         def progress(message):
             with self.lock:self.jobs[job_id]["progress"]=message
         def execute():
-            with self.lock:self.jobs[job_id]["state"]="running"
+            with self.lock:
+                if self.jobs[job_id]["state"]=="queued":self.jobs[job_id]["state"]="running"
             try:
-                if operation in {"build","repair"}:
-                    value=export_run(self.catalog,build(self.catalog,spec,rows if operation=="repair" else None,progress,self.feedback));value=self.present(value)
-                elif operation=="stress":
-                    value=stress_test(self.catalog,rows,spec,int(data.get("trials",100)),progress)
-                    run_id=data.get("run_id")
-                    if run_id and re.fullmatch(r"[A-Za-z0-9_]+",run_id) and (RUNS/run_id).is_dir():
-                        (RUNS/run_id/"stress.json").write_text(json.dumps(value,ensure_ascii=False,indent=2),encoding="utf-8")
-                elif operation=='calibrate':
-                    value=tuning.calibrate(self.catalog,rows,spec,progress,mode=data.get('mode','quick'))
-                elif operation=="forge":
-                    value=forge_simulate(self.catalog,rows,spec,data.get('pods',10),data.get('games_per_pod',3),data.get('clock_seconds',90),progress,workers=data.get('workers',0))
-                elif operation=="optimize":
-                    value=optimize(self.catalog,rows,spec,progress,workers=data.get('workers',0),clock=data.get('clock_seconds',120),
-                        profile=data.get('profile','standard'),max_swaps=data.get('max_swaps'),training_pods=data.get('training_pods'),
-                        scoring_backend=data.get('scoring_backend','auto'),search_mode=data.get('search_mode','full'))
-                    value['revision']=self.present(value['revision'])
-                elif operation=='learn-games':value=surrogate.train(self.catalog,progress)
-                elif operation=="chat":
-                    progress("AI 正在检索牌库、技能与构筑审计")
-                    value=advise(self.catalog,self.knowledge,spec,rows,data.get("message",""),client)
-                else:
-                    progress("AI 将需求转换为构筑参数")
-                    value=plan(data.get("message",""),spec,self.knowledge,client)
+                if self.isolated_jobs:
+                    value=self.controls[job_id].run(lambda state:self.update_job(job_id,state))
+                    with self.lock:
+                        self.jobs[job_id].update(value)
+                        self.jobs[job_id]['checkpoint']=self.controls[job_id].checkpoint_summary()
+                    return
+                value=execute_operation(self,operation,spec,rows,data,progress)
                 with self.lock:self.jobs[job_id].update(state="done",progress="完成",result=value)
             except Exception as e:
                 with self.lock:self.jobs[job_id].update(state="failed",progress="任务未完成",error=str(e))
@@ -171,22 +236,21 @@ def handler_for(app):
             try:
                 if path.path=='/api/ai/settings':return self.json(200,self.ai_public())
                 if path.path=='/api/jobs':
-                    with app.lock:jobs=[{k:v for k,v in j.items() if k!='result'} for j in app.jobs.values()]
-                    return self.json(200,jobs)
+                    return self.json(200,app.public_jobs())
                 if path.path=='/auth/callback':
                     try:app.auth.callback(params);message='授权处理完成。请返回 Cube 助手的“AI 设置”，读取模型列表并选择模型。'
                     except ValueError:message='此次登录没有完成。请返回 Cube 助手的“AI 设置”查看提示并重试。'
                     raw=('<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="referrer" content="no-referrer"><title>Cube 助手 · 登录</title><body><h1>'+message+'</h1><p>可以关闭此窗口。</p></body></html>').encode('utf8')
                     self.send_response(200);self.send_header('Content-Type','text/html; charset=utf-8');self.send_header('Content-Length',str(len(raw)));self.send_header('Cache-Control','no-store');self.send_header('Referrer-Policy','no-referrer');self.end_headers();self.wfile.write(raw);return
-                if path.path=='/api/health':return self.json(200,dict(app=APP_ID,workspace=WORKSPACE_ID,pid=os.getpid(),version=__version__))
+                if path.path=='/api/health':return self.json(200,dict(app=APP_ID,workspace=WORKSPACE_ID,pid=os.getpid(),version=__version__,task_controls=True))
                 if path.path=='/api/library':return self.json(200,library(app))
                 if path.path=='/api/design-guide':return self.json(200,public_guide())
                 if path.path=='/api/brackets':return self.json(200,public_profiles())
                 if path.path=='/api/performance':return self.json(200,dict(gpu=acceleration.status(),cache=sim_cache.status(),learning=surrogate.status(app.catalog),forge=forge_status(),tuning=tuning.status()))
                 if path.path=="/api/status":
-                    with app.lock:active_jobs=sum(j['state'] in {'queued','running'} for j in app.jobs.values())
+                    with app.lock:active_jobs=sum(j['state'] in ACTIVE for j in app.jobs.values())
                     return self.json(200,dict(version=__version__,cards=len(app.catalog.cards),snapshot=app.catalog.snapshot,
-                        active_jobs=active_jobs,speed_version=2,
+                        active_jobs=active_jobs,speed_version=2,task_controls=True,
                         experiments=dict(profiles={k:experiment_budget(k) for k in PROFILES},resources=execution_resources()),
                         knowledge_chunks=len(app.knowledge.chunks),gpt=app.ai_status(),themes=THEME_NAMES,
                         presets={"commander":BuildSpec.from_dict({'bracket':3}).to_dict(),"classic":BuildSpec.from_dict({"mode":"classic"}).to_dict()},brackets=public_profiles(),
@@ -225,6 +289,10 @@ def handler_for(app):
                     with app.lock:job=app.jobs.get(q("id"));job=dict(job) if job else None
                     if not job:raise FileNotFoundError("任务已过期或不存在")
                     return self.json(200,job)
+                if path.path=='/api/job/checkpoint':
+                    with app.lock:runner=app.controls.get(q('id'))
+                    if not runner:raise FileNotFoundError('任务不存在')
+                    return self.json(200,runner.checkpoint_records())
                 if path.path=="/api/runs":
                     return self.json(200,[p.name for p in sorted(RUNS.glob("*"),reverse=True) if p.is_dir()][:30])
                 if path.path.startswith("/exports/"):
@@ -272,6 +340,7 @@ def handler_for(app):
                 if path=='/api/ai/chatgpt/select':
                     app.ai_store.select_account(data.get('account_id',''));return self.json(200,self.ai_public())
                 if path=='/api/ai/chatgpt/logout':return self.json(200,app.auth.logout(data.get('account_id','')))
+                if path=='/api/task/control':return self.json(200,app.control(data.get('id'),data.get('action')))
                 if path=="/api/tasks":return self.json(202,app.submit(data))
                 spec=BuildSpec.from_dict(data.get("spec"))
                 if path=='/api/save':
@@ -317,4 +386,4 @@ def serve(port=8765):
     print(f"Cube Atelier http://127.0.0.1:{server.server_port} · {len(app.catalog.cards)} 张牌 · 快照 {app.catalog.snapshot}",flush=True)
     try:server.serve_forever()
     except KeyboardInterrupt:pass
-    finally:server.server_close();app.executor.shutdown(wait=False,cancel_futures=True)
+    finally:server.server_close();app.shutdown()
