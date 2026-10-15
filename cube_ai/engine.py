@@ -5,6 +5,7 @@ import json
 import math
 import random
 import time
+import tempfile
 from collections import Counter
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,10 +35,18 @@ def quotas(spec):
     groups = {c:59 for c in "WUBRG"}
     groups.update({g:9 for g in GUILDS});groups["C"] = 55
     cmds = {c:8 for c in "WUBRG"};cmds.update({g:4 for g in GUILDS});cmds.update({g:1 for g in TRIPLES})
-    curve = spec.curve or apportion(main, {"1":54,"2":156,"3":94,"4":61,"5+":75})
+    profiles={'balanced':{'1':54,'2':156,'3':94,'4':61,'5+':75},
+              'low':{'1':70,'2':170,'3':94,'4':53,'5+':53},
+              'late':{'1':44,'2':130,'3':94,'4':72,'5+':100}}
+    curve = spec.curve if spec.curve is not None else apportion(main,profiles[spec.curve_profile])
     if set(curve) != {"1","2","3","4","5+"} or sum(curve.values()) != main:
         raise ValueError("curve 必须包含 1、2、3、4、5+，且合计等于主牌张数")
     return apportion(main,groups), apportion(spec.commanders,cmds), curve
+
+def density_minima(spec,nmain):
+    return {'creature':math.ceil(nmain*.42),'interaction':math.ceil(nmain*spec.interaction_min_ratio),
+            'wipe':max(2,math.ceil(nmain*spec.wipe_min_ratio)),'ramp':math.ceil(nmain*.065),
+            'draw':math.ceil(nmain*.12),'finisher':math.ceil(nmain*spec.finisher_min_ratio)}
 
 def completes_combo(names):
     s = set(names)
@@ -110,7 +119,7 @@ def build(catalog, spec, previous=None, progress=lambda x:None, store=None):
         chosen=[]
         for c in pool:
             if not gc_room(c,chosen):continue
-            if not spec.allow_infinite_combos and completes_combo(seen|{c["name"]}): continue
+            if not spec.allow_infinite_combos and completes_combo(seen|{x['name'] for x in chosen}|{c["name"]}): continue
             chosen.append(c)
             if len(chosen)==amount: break
         if len(chosen)<amount:raise ValueError(f"{group} 缺少合规且独立可用的指挥官，需 {amount} 位")
@@ -165,8 +174,7 @@ def build(catalog, spec, previous=None, progress=lambda x:None, store=None):
         cons.add(f"{bucket} 费曲线",[c["bucket"]==bucket for c in candidates],amount,amount)
     for name in remaining_pins:
         cons.add("锁定 "+name,[c["name"]==name for c in candidates],1,1)
-    minima={"creature":math.ceil(nmain*.42),"interaction":math.ceil(nmain*.18),"wipe":max(2,math.ceil(nmain*.035)),
-            "ramp":math.ceil(nmain*.065),"draw":math.ceil(nmain*.12),"finisher":math.ceil(nmain*.085)}
+    minima=density_minima(spec,nmain)
     for feature,count in minima.items():cons.add(feature+" 最低密度",[c[feature] for c in candidates],count)
     cons.add("加速上限",[c["ramp"] for c in candidates],hi=math.ceil(nmain*.15))
     cons.add("互动上限",[c["interaction"] for c in candidates],hi=math.ceil(nmain*.30))
@@ -260,8 +268,8 @@ def audit(catalog,rows,spec,unresolved=None,strict=False):
             if colors[g]!=count:issue("error","color_quota",f"{g} 主牌 {colors[g]}，配额 {count}")
         for bucket,count in curve_targets.items():
             if curve[bucket]!=count:issue("error","curve_quota",f"{bucket} 费 {curve[bucket]}，目标 {count}")
-        for key,ratio in {"creature":.42,"interaction":.18,"wipe":.035,"ramp":.065,"draw":.12,"finisher":.085}.items():
-            if role_counts[key]<math.ceil(len(main)*ratio):issue("error","density",key+" 未达到最低密度")
+        for key,count in density_minima(spec,len(main)).items():
+            if role_counts[key]<count:issue("error","density",f'{key} {role_counts[key]} 张，未达到最低 {count} 张')
         if role_counts["ramp"]>math.ceil(len(main)*.15):issue("error","ramp_cap","加速超过上限")
         if role_counts["interaction"]>math.ceil(len(main)*.30):issue("error","interaction_cap","互动超过上限")
         if role_counts["draw"]>math.ceil(len(main)*.45):issue("error","draw_cap","抓牌超过上限")
@@ -295,9 +303,9 @@ def audit(catalog,rows,spec,unresolved=None,strict=False):
                 if counts['enablers']<max(2,round(len(main)*.015)):issue('error','theme_supply',g+' '+theme+' 支持不足')
                 if theme not in {'control','draw'} and counts['payoffs']<max(1,round(len(main)*.005)):issue('error','theme_payoffs',g+' '+theme+' 回报不足')
     if main:
-        if role_counts["interaction"]<len(main)*.18:issue("warning","interaction","互动密度低于 18%")
-        if role_counts["wipe"]<len(main)*.035:issue("warning","wipes","扫场密度偏低")
-        if role_counts["finisher"]<len(main)*.085:issue("warning","finishers","终结手段密度偏低")
+        if role_counts['interaction']<math.ceil(len(main)*spec.interaction_min_ratio):issue('warning','interaction',f'互动密度低于设置的 {spec.interaction_min_ratio:.1%}')
+        if role_counts['wipe']<max(2,math.ceil(len(main)*spec.wipe_min_ratio)):issue('warning','wipes','扫场密度低于设置的下限')
+        if role_counts['finisher']<math.ceil(len(main)*spec.finisher_min_ratio):issue('warning','finishers','终结手段密度低于设置的下限')
         if role_counts["ramp"]>math.ceil(len(main)*.15):issue("warning","ramp","加速密度过高，可能挤压互动和威胁")
         active=[mean[g] for g in "WUBRG" if colors[g]]
         if active and max(active)-min(active)>.321:issue('error' if strict else 'warning',"color_quality","单色平均启发式评价差超过 0.32")
@@ -312,7 +320,7 @@ def audit(catalog,rows,spec,unresolved=None,strict=False):
         values=[fixing[c] for c in "WUBRG"]
         if max(values)-min(values)>4:issue("warning","fixing","各色修色地来源差超过 4")
     return dict(total=len(rows),roles=dict(roles),main_colors=dict(colors),curve=dict(curve),
-        role_counts=role_counts,quality_by_group=mean,pairs=pairs,fixing=dict(fixing),
+        role_counts=role_counts,density_targets=density_minima(spec,spec.size-spec.commanders-spec.lands),quality_by_group=mean,pairs=pairs,fixing=dict(fixing),
         eligible_commanders=sum(c["commander"] for c in cards),issues=issues,
         hard_errors=sum(i["severity"]=="error" for i in issues),snapshot=catalog.snapshot,
         design=cube_design_report(catalog,rows,spec),bracket=bracket,
@@ -323,7 +331,7 @@ def export_run(catalog,result):
     payload=json.dumps(result,ensure_ascii=False,sort_keys=True)
     digest=hashlib.sha256(payload.encode()).hexdigest()[:8]
     run_id=datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")+"_"+digest
-    folder=RUNS/run_id;folder.mkdir()
+    folder=Path(tempfile.mkdtemp(prefix=run_id+'_',dir=RUNS));run_id=folder.name
     (folder/"cube.json").write_text(json.dumps(result,ensure_ascii=False,indent=2),encoding="utf-8")
     (folder/"cubecobra.txt").write_text("\n".join("1 "+r["name"] for r in result["cards"])+"\n",encoding="utf-8")
     with (folder/"cube.csv").open("w",encoding="utf-8-sig",newline="") as f:

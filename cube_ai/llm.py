@@ -1,5 +1,6 @@
 """Responses / OpenAI-compatible Chat adapters with verified tool results."""
 import json
+import math
 import requests
 from .ai_settings import SettingsStore, validate_base
 from .chatgpt_auth import ChatGPTAuth, PLAN_SCOPE
@@ -20,7 +21,7 @@ EDHREC、启发式评价和轮抓起手测试不能称为真实胜率。没有�
 建议卡牌先使用工具确认。最终只在 swaps 数组提供可审核的单卡替换，其余解释写 answer。
 """
 ANSWER_SCHEMA = {"type":"object","properties":{
-    "answer":{"type":"string"}, "swaps":{"type":"array","items":{"type":"object","properties":{
+    "answer":{"type":"string"}, "swaps":{"type":"array","maxItems":12,"items":{"type":"object","properties":{
         "remove":{"type":"string"},"add":{"type":"string"},"reason":{"type":"string"}},
         "required":["remove","add","reason"],"additionalProperties":False}},
     "cautions":{"type":"array","items":{"type":"string"}}},
@@ -43,6 +44,9 @@ def validate_output(value,schema):
         'integer':type(value) is int,'boolean':type(value) is bool,'null':value is None,'number':type(value) in {int,float}}
     if kind and not any(matches.get(k,False) for k in kinds):raise ValueError('AI 返回的 JSON 字段类型不符合要求，请重试或更换模型')
     if 'enum' in schema and value not in schema['enum']:raise ValueError('AI 返回了不支持的参数值')
+    if type(value) in {int,float}:
+        if not math.isfinite(value):raise ValueError('AI 返回了无效的数值')
+        if 'minimum' in schema and value<schema['minimum'] or 'maximum' in schema and value>schema['maximum']:raise ValueError('AI 返回的数值超出允许范围')
     if isinstance(value,dict):
         props=schema.get('properties',{})
         if any(k not in value for k in schema.get('required',[])):raise ValueError('AI 返回的 JSON 缺少必填字段')
@@ -50,6 +54,7 @@ def validate_output(value,schema):
         for k,v in value.items():
             if k in props:validate_output(v,props[k])
     if isinstance(value,list) and 'items' in schema:
+        if len(value)>schema.get('maxItems',len(value)) or len(value)<schema.get('minItems',0):raise ValueError('AI 返回的列表长度超出允许范围')
         for item in value:validate_output(item,schema['items'])
     return value
 
@@ -78,9 +83,14 @@ class LLMClient:
             response=requests.get(base+'/models',headers=self.headers(),timeout=(15,45),allow_redirects=False)
             if not 200<=response.status_code<300:raise ValueError(f'读取模型列表失败（HTTP {response.status_code}）；可手动填写模型名称')
             body=response.json()
+            if not isinstance(body,dict):raise ValueError('模型列表响应格式无效；可手动填写模型名称')
             if self.provider=='chatgpt':
-                return [dict(id=x['slug'],label=x.get('display_name') or x['slug']) for x in body.get('models',[]) if x.get('visibility')=='list' and x.get('slug')]
-            return [dict(id=x['id'],label=x['id']) for x in body.get('data',[]) if isinstance(x.get('id'),str)][:300]
+                models=body.get('models',[])
+                if not isinstance(models,list):raise ValueError('账户没有返回有效模型列表')
+                return [dict(id=x['slug'],label=x.get('display_name') or x['slug']) for x in models if isinstance(x,dict) and x.get('visibility')=='list' and isinstance(x.get('slug'),str)]
+            models=body.get('data',[])
+            if not isinstance(models,list):raise ValueError('服务没有返回有效模型列表')
+            return [dict(id=x['id'],label=x['id']) for x in models if isinstance(x,dict) and isinstance(x.get('id'),str)][:300]
         except requests.RequestException:raise ValueError('读取模型列表失败，请检查网络与接口地址') from None
     def test(self):
         schema={'type':'object','properties':{'ok':{'type':'boolean'}},'required':['ok'],'additionalProperties':False}
@@ -131,7 +141,10 @@ class LLMClient:
         if is_plan:
             try:return self._completed_stream(response)
             finally:response.close()
-        try:return response.json()
+        try:
+            data=response.json()
+            if not isinstance(data,dict):raise ValueError('模型接口的顶层 JSON 必须是对象')
+            return data
         except ValueError:raise ValueError("模型接口没有返回 JSON") from None
         finally:response.close()
 
@@ -182,18 +195,29 @@ class LLMClient:
 
 def response_text(response,style):
     """Reject unfinished/refused/empty replies before JSON parsing obscures the cause."""
+    if not isinstance(response,dict):raise ValueError('模型响应格式无效')
     if style=='responses':
         if response.get('status') in {'incomplete','failed','cancelled'}:raise ValueError('模型输出未完成，请缩小需求或稍后重试')
-        parts=[c for x in response.get('output',[]) if x.get('type')=='message' for c in x.get('content',[])]
+        output=response.get('output') or []
+        if not isinstance(output,list) or any(not isinstance(x,dict) for x in output):raise ValueError('模型输出项格式无效')
+        messages=[x for x in output if x.get('type')=='message']
+        if any(not isinstance(x.get('content',[]),list) or any(not isinstance(c,dict) for c in x.get('content',[])) for x in messages):raise ValueError('模型正文格式无效')
+        final=[x for x in messages if x.get('phase')=='final_answer']
+        parts=final[-1].get('content',[]) if final else [c for x in messages for c in x.get('content',[])]
         if any(c.get('type')=='refusal' for c in parts):raise ValueError('模型拒绝了本次请求，请调整需求后重试')
+        if any(not isinstance(c.get('text',''),str) for c in parts if c.get('type')=='output_text'):raise ValueError('模型正文必须是文本')
         text=''.join(c.get('text','') for c in parts if c.get('type')=='output_text')
     else:
-        choices=response.get('choices') or [{}];choice=choices[0];message=choice.get('message') or {}
+        choices=response.get('choices') or [{}]
+        if not isinstance(choices,list) or not isinstance(choices[0],dict):raise ValueError('模型候选响应格式无效')
+        choice=choices[0];message=choice.get('message') or {}
+        if not isinstance(message,dict):raise ValueError('模型消息格式无效')
         if choice.get('finish_reason')=='length':raise ValueError('模型输出被长度上限截断，请缩小需求或更换模型')
         if message.get('refusal') or choice.get('finish_reason')=='content_filter':raise ValueError('模型拒绝了本次请求，请调整需求后重试')
         text=message.get('content') or ''
     if not isinstance(text,str) or not text.strip():raise ValueError('模型没有返回规划正文；请重试或检查所选模型的输出能力')
     return text
+
 
 def replacements(catalog,spec,rows,name,limit=8):
     from .brackets import score_adjustment, cube_report
@@ -211,10 +235,13 @@ def replacements(catalog,spec,rows,name,limit=8):
         candidates.append((value,c))
     candidates.sort(key=lambda p:(-p[0],p[1]["name"]))
     accepted=[]
+    before=audit(catalog,rows,spec,strict=True)
     for value,c in candidates:
         if spec.bracket is not None:
             check=cube_report(catalog,[dict(r,name=c['name']) if r['name']==n else r for r in rows],spec)
             if check['violations']:continue
+        proposed=[dict(r,name=c['name']) if r['name']==n else r for r in rows]
+        if before['hard_errors']==0 and audit(catalog,proposed,spec,strict=True)['hard_errors']:continue
         accepted.append(dict(name=c['name'],identity=c['identity'],mv=c['mv'],quality=c['quality'],text=c['text'],reason='同色身份；合规；费用和角色相近；保留当前强度预算',fit=round(value,3)))
         if len(accepted)>=limit:break
     return accepted
@@ -237,18 +264,27 @@ def advise(catalog,knowledge,spec,rows,message,client=None):
         if name=="suggest_replacements":return replacements(catalog,spec,rows,args["name"])
         return {"error":"未知工具"}
     for step in range(6):
-        response=client.request(messages,TOOLS,ANSWER_SCHEMA);usage.append(response.get("usage",{}))
+        response=client.request(messages,TOOLS,ANSWER_SCHEMA)
+        if not isinstance(response,dict):raise ValueError('模型响应格式无效')
+        usage.append(response.get('usage',{}))
         if client.style=="responses":
-            if response.get("status") in {"incomplete","failed"}:raise ValueError("GPT 输出未完成；请缩小问题或稍后重试")
-            output=response.get("output",[]);calls=[x for x in output if x.get("type")=="function_call"]
+            if response.get("status") in {"incomplete","failed","cancelled"}:raise ValueError("GPT 输出未完成；请缩小问题或稍后重试")
+            output=response.get('output') or []
+            if not isinstance(output,list) or any(not isinstance(x,dict) for x in output):raise ValueError('模型输出项格式无效')
+            calls=[x for x in output if x.get('type')=='function_call']
             messages.extend(output)
-            text="".join(c.get("text","") for x in output if x.get("type")=="message" for c in x.get("content",[]) if c.get("type")=="output_text")
+
         else:
-            choice=response.get("choices",[{}])[0];out=choice.get("message",{})
+            choices=response.get('choices') or [{}]
+            if not isinstance(choices,list) or not isinstance(choices[0],dict):raise ValueError('模型候选响应格式无效')
+            choice=choices[0];out=choice.get('message') or {}
+            if not isinstance(out,dict):raise ValueError('模型消息格式无效')
             if choice.get("finish_reason")=="length":raise ValueError("GPT 输出被长度上限截断")
             if out.get("refusal"):raise ValueError("模型拒绝该请求")
-            messages.append(out);calls=out.get("tool_calls",[]);text=out.get("content") or ""
+            messages.append(out);calls=out.get('tool_calls') or []
+        if not isinstance(calls,list) or any(not isinstance(c,dict) for c in calls):raise ValueError('模型工具调用列表格式无效')
         if not calls:
+            text=response_text(response,client.style)
             try:answer=validate_output(json.loads(text),ANSWER_SCHEMA)
             except (ValueError,TypeError):raise ValueError("GPT 没有返回有效的构筑建议结构") from None
             valid=[];rejected=[];existing={r["name"] for r in rows}
@@ -269,7 +305,11 @@ def advise(catalog,knowledge,spec,rows,message,client=None):
                 else:valid.append(dict(remove=a,add=b,reason=swap.get("reason","")))
             return dict(answer=answer.get("answer",""),swaps=valid,rejected=rejected,cautions=answer.get("cautions",[]),tools=trace,usage=usage,model=client.model)
         for call in calls:
-            fn=call if client.style=="responses" else call["function"]
+            if len(trace)>=18:raise ValueError('已达到本次工具调用上限')
+            fn=call if client.style=='responses' else call.get('function')
+            required=['name','arguments','call_id'] if client.style=='responses' else ['name','arguments']
+            if not isinstance(fn,dict) or any(not isinstance(fn.get(k),str) for k in required):raise ValueError('模型工具调用缺少完整名称、参数或编号')
+            if client.style!='responses' and not isinstance(call.get('id'),str):raise ValueError('模型工具调用缺少编号')
             args={}
             try:
                 name=fn['name']
@@ -279,41 +319,54 @@ def advise(catalog,knowledge,spec,rows,message,client=None):
                 args=validate_output(json.loads(fn['arguments']),definition['parameters']);data=execute(name,args)
             except (ValueError,KeyError,TypeError) as e:data={"error":str(e)}
             trace.append({"name":fn["name"],"arguments":args})
-            if len(trace)>18:raise ValueError("已达到本次工具调用上限")
             content=json.dumps(data,ensure_ascii=False)
             if client.style=="responses":messages.append({"type":"function_call_output","call_id":call["call_id"],"output":content})
             else:messages.append({"role":"tool","tool_call_id":call["id"],"content":content})
     raise ValueError("达到 GPT 规划轮数上限，请把请求拆成更具体的问题")
 
-def plan(message,base_spec,knowledge,client=None):
-    client=client or LLMClient()
-    properties={
+def plan_schema():
+    from .config import GUILDS,THEME_NAMES
+    fields={
         "name":{"type":"string"},"mode":{"type":"string","enum":["commander","classic"]},
-        "size":{"type":"integer"},"commanders":{"type":"integer"},"lands":{"type":"integer"},
+        "size":{"type":"integer"},"commanders":{"type":"integer"},"lands":{"type":"integer"},"seed":{"type":"integer"},
         "legality_format":{"type":"string","enum":["commander","legacy","modern","pauper","vintage"]},
-        "avoid_tribal":{"type":"boolean"},"exclude_game_changers":{"type":"boolean"},
-        "allow_fast_mana":{"type":"boolean"},"allow_infinite_combos":{"type":"boolean"},
-        "allow_mass_land_destruction":{"type":"boolean"},"exclude":{"type":"array","items":{"type":"string"}},
         "bracket":{"type":["integer","null"],"enum":[None,1,2,3,4,5]},
         "power_tuning":{"type":"string","enum":["gentle","balanced","strong"]},
         "commander_tuning":{"type":"string","enum":["gentle","matched","strong"]},
+        "curve_profile":{"type":"string","enum":["balanced","low","late"]},
+        "interaction_min_ratio":{"type":"number","minimum":.10,"maximum":.30},
+        "wipe_min_ratio":{"type":"number","minimum":.01,"maximum":.08},
+        "finisher_min_ratio":{"type":"number","minimum":.06,"maximum":.20},
         "cube_gc_limit":{"type":["integer","null"]},"allow_extra_turns":{"type":["boolean","null"]},
-        "pins":{"type":"array","items":{"type":"string"}},"explanation":{"type":"string"}}
-    schema={"type":"object","properties":properties,"required":list(properties),"additionalProperties":False}
-    messages=[{"role":"system","content":"把用户 Cube 需求转换成构筑参数。只修改需求明确涉及的字段。其他参数沿用当前配置。不要生成整份牌表；程序将从真实牌库构筑。普通 Cube 专用指挥官设 0。不要把牌力改进承诺当作实战结论。"},
-              {"role":"user","content":json.dumps({"current":base_spec.to_dict(),"knowledge":knowledge.search(message,3),"request":message},ensure_ascii=False)}]
+        "max_card_price":{"type":["number","null"]},"min_year":{"type":["integer","null"]},"max_year":{"type":["integer","null"]},
+        "curve":{"type":["object","null"],"properties":{k:{"type":"integer","minimum":0} for k in ['1','2','3','4','5+']},"required":['1','2','3','4','5+'],"additionalProperties":False},
+        "pair_themes":{"type":"object","properties":{g:{"type":"array","items":{"type":"string","enum":list(THEME_NAMES)}} for g in GUILDS},"required":GUILDS,"additionalProperties":False},
+        "explanation":{"type":"string"},"unapplied_requests":{"type":"array","items":{"type":"string"}}}
+    for k in ['avoid_tribal','exclude_game_changers','allow_fast_mana','allow_infinite_combos','allow_mass_land_destruction','discard_after_pass']:fields[k]={"type":"boolean"}
+    for k in ['exclude','pins','sets']:fields[k]={"type":"array","items":{"type":"string"}}
+    for k in ['players','rounds','pack_size','pick_count']:fields[k]={"type":"integer"}
+    return {"type":"object","properties":fields,"required":list(fields),"additionalProperties":False}
+
+
+def plan(message,base_spec,knowledge,client=None):
+    client=client or LLMClient();schema=plan_schema()
+    prompt="""把用户 Cube 需求转换成完整的构筑参数，所有字段均须返回。只输出符合 Schema 的 JSON。
+同一玩法只修改需求涉及的字段，其余沿用 current。切换玩法时只重置玩法相关默认值：size、commanders、lands、legality_format、bracket、cube_gc_limit 和轮抓字段；预算、年份、系列、排除牌、锁定牌、互动/扫场/终结及曲线偏好仍沿用 current，除非用户另有要求。不要把 Commander 的槽位、赛制或轮抓规则带入传统 Cube。
+新增可执行偏好：interaction_min_ratio 是主牌最低互动比例，通常为 .18，要求多一些互动可设 .24、很多可设 .28，范围 .10–.30；wipe_min_ratio 是最低扫场比例，默认 .035，更多可设 .05；finisher_min_ratio 是最低终结比例，默认 .085，更多可设 .11。
+curve_profile 为 balanced（默认）、low（低费行动更多，仍保留大咒语）、late（更多后期咒语）。更改曲线风格时 curve 设 null；明确要求精确曲线时才填写 curve，五档之和必须等于 size-commanders-lands。张数或槽位变化时，原有精确曲线须同比调整至新主牌数，并在解释中说明；互相冲突的精确要求写入 unapplied_requests。不要把比例填成百分整数。
+max_card_price 是单卡美元价格过滤，min_year/max_year 是发行年份过滤，sets 为系列代码；不受支持的筛选或偏好写入 unapplied_requests，不能在 explanation 中声称已经落实。
+不要生成整份牌表。保持各项安全偏好；Bracket 1–3 不允许已知无限组合、大规模毁地、额外回合。普通 Cube 的 commanders 为 0、bracket/cube_gc_limit 为 null。
+解释仅说明实际参数变化和未能落实的要求，不承诺未经验证的胜率或娱乐性。"""
+    context={"current":base_spec.to_dict(),"presets":{"commander":BuildSpec.from_dict({'bracket':3}).to_dict(),"classic":BuildSpec.from_dict({'mode':'classic'}).to_dict()},"knowledge":knowledge.search(message,3),"request":message}
+    messages=[{"role":"system","content":prompt},{"role":"user","content":json.dumps(context,ensure_ascii=False)}]
     response=client.request(messages,schema=schema)
     text=response_text(response,client.style)
     try:data=json.loads(text)
     except (ValueError,TypeError):raise ValueError('模型返回的规划不是有效 JSON，请重试或检查 AI 设置中的 JSON 输出方式') from None
     try:validate_output(data,schema)
     except ValueError as error:raise ValueError('构筑规划格式不完整：'+str(error)) from None
-    explanation=data.pop('explanation')
-    merged=base_spec.to_dict();merged.update(data)
-    if merged['mode']=='classic':merged.update(bracket=None,cube_gc_limit=None)
-    # Changing mode also resets draft rules to the matching preset unless the user edits them later.
-    if merged["mode"]!=base_spec.mode:
-        preset=BuildSpec.from_dict({"mode":merged["mode"]}).to_dict()
-        for key in ["players","rounds","pick_count","discard_after_pass"]:merged[key]=preset[key]
-    spec=BuildSpec.from_dict(merged)
-    return dict(spec=spec.to_dict(),explanation=explanation,usage=response.get("usage",{}),model=client.model)
+    explanation=data.pop('explanation');unapplied=data.pop('unapplied_requests')
+    try:spec=BuildSpec.from_dict(data)
+    except (ValueError,TypeError) as error:raise ValueError('AI 规划未通过本地构筑检查：'+str(error)) from None
+    changes=[dict(field=k,before=base_spec.to_dict()[k],after=v) for k,v in spec.to_dict().items() if v!=base_spec.to_dict()[k]]
+    return dict(spec=spec.to_dict(),explanation=explanation,unapplied_requests=unapplied,changes=changes,usage=response.get('usage',{}),model=client.model)

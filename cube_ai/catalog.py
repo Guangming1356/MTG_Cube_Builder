@@ -3,6 +3,9 @@ import hashlib
 import io
 import json
 import re
+import os
+import tempfile
+from pathlib import Path
 from .config import DATA, WORKSPACE, card_pool_path
 from .features import VERSION, extract, oracle, tribes_from_cards
 
@@ -12,15 +15,18 @@ FETCHES = dict(zip(
 
 class Catalog:
     def __init__(self, source=None, use_cache=True):
-        self.source = source or card_pool_path()
+        self.source = Path(source or card_pool_path())
         DATA.mkdir(exist_ok=True)
         stat = self.source.stat()
         signature = f"{self.source.resolve()}:{stat.st_size}:{stat.st_mtime_ns}:{VERSION}"
         cache = DATA / "catalog.json"
         j = None
         if use_cache and cache.exists():
-            cached = json.loads(cache.read_text(encoding="utf-8"))
-            if cached.get("signature") == signature: j = cached
+            try:
+                cached = json.loads(cache.read_text(encoding="utf-8"))
+                if isinstance(cached,dict) and cached.get('signature')==signature and isinstance(cached.get('cards'),list) and cached['cards'] and 'snapshot' in cached:
+                    if all(isinstance(c,dict) and all(k in c for k in ['name','text','identity','quality','kind']) for c in cached['cards']):j=cached
+            except (OSError,ValueError):pass
         if j is None:
             raw = json.loads(self.source.read_text(encoding="utf-8"))
             cards = list(raw["cards"].values())
@@ -40,9 +46,12 @@ class Catalog:
                     fixing=list(FETCHES.get(c["name"], c.get("produced_mana", []))),
                     image=image, url=c.get("scryfall_uri", ""), **f))
             j = dict(signature=signature, snapshot=raw.get("date"), version=VERSION, cards=records)
-            tmp = cache.with_suffix(".tmp")
-            tmp.write_text(json.dumps(j, ensure_ascii=False), encoding="utf-8")
-            tmp.replace(cache)
+            fd,tmp=tempfile.mkstemp(prefix='catalog-',suffix='.tmp',dir=DATA)
+            try:
+                with os.fdopen(fd,'w',encoding='utf8') as file:json.dump(j,file,ensure_ascii=False)
+                os.replace(tmp,cache)
+            finally:
+                if os.path.exists(tmp):os.unlink(tmp)
         self.snapshot = j["snapshot"]
         self.signature = hashlib.sha256(signature.encode()).hexdigest()[:16]
         self.cards = {c["name"]: c for c in j["cards"]}
@@ -58,6 +67,7 @@ class Catalog:
                 if n: self.reference.add(n)
 
     def resolve(self, name):
+        if not isinstance(name,str):return None
         return self.aliases.get(name.strip().casefold())
 
     def search(self, query="", identity=None, limit=30):
@@ -68,6 +78,7 @@ class Catalog:
         return cards[:min(100, max(1, limit))]
 
     def parse(self, text):
+        if not isinstance(text,str):raise ValueError('牌表内容必须是文本')
         text = text.lstrip("\ufeff").strip()
         rows = []
         errors = []
@@ -76,12 +87,17 @@ class Catalog:
         if "," in first and re.search(r"(?:name|card|名称)", first, re.I):
             reader = csv.DictReader(io.StringIO(text))
             for row in reader:
-                lower = {k.casefold(): v for k, v in row.items() if k is not None}
+                lower = {k.strip().casefold(): v or '' for k, v in row.items() if k is not None}
                 if lower.get('board','').strip().lower() not in {'','main','mainboard'}:continue
                 if lower.get('maybeboard','').strip().lower() in {'true','1'}:continue
                 name = lower.get("name") or lower.get("card") or lower.get("名称") or ""
                 role = lower.get("role") or ("Commander" if "commander" in lower.get("tags", "").lower() else None)
-                rows.append((name, role))
+                count=lower.get('count') or lower.get('quantity') or '1'
+                try:amount=int(count)
+                except ValueError:raise ValueError('CSV 数量必须是 1–100 的整数') from None
+                if not 1<=amount<=100:raise ValueError('CSV 单行数量必须为 1–100')
+                if len(rows)+amount>900:raise ValueError('本项目单套牌表最多支持 900 张')
+                rows.extend([(name,role)]*amount)
         else:
             for line in text.splitlines():
                 line = line.strip()
@@ -89,9 +105,10 @@ class Catalog:
                 count = re.match(r"^(\d+)\s*[xX]?\s+(.+)$", line)
                 if count:
                     amount, name = int(count[1]), count[2]
-                    if amount > 100: raise ValueError("单行数量超过 100")
+                    if not 1<=amount<=100: raise ValueError("单行数量必须为 1–100")
                 else: amount, name = 1, line
                 name = re.sub(r"\s+\([A-Za-z0-9]+\)\s+\S+.*$", "", name)
+                if len(rows)+amount>900:raise ValueError('本项目单套牌表最多支持 900 张')
                 rows.extend([(name, None)] * amount)
         result = []
         for name, role in rows:
@@ -101,7 +118,8 @@ class Catalog:
                 continue
             c = self.cards[canonical]
             role = role or ("Land" if c["kind"] == "land" else "Commander" if c["commander"] else "Main")
-            if role not in {"Land", "Commander", "Main"}: role = "Main"
+            role={'land':'Land','commander':'Commander','main':'Main'}.get(str(role).strip().casefold())
+            if not role:raise ValueError('CSV role 必须为 Main、Land 或 Commander')
             result.append({"name": canonical, "role": role})
         return result, errors
 

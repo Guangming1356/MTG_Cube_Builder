@@ -1,10 +1,12 @@
 """Provider profiles and per-installation private storage. Public views never contain keys."""
 import ctypes
+import hashlib
 import json
 import os
 from pathlib import Path
 import tempfile
 import threading
+import time
 from urllib.parse import urlsplit
 
 from .config import ROOT
@@ -29,6 +31,48 @@ PROVIDERS = {
 }
 _locks = {}
 _locks_guard = threading.Lock()
+
+
+class ProcessLock:
+    """Serialize settings updates and rotating-token refresh across processes."""
+    def __init__(self,path):
+        self.thread=threading.RLock();self.local=threading.local()
+        self.name=hashlib.sha256(str(path.resolve()).casefold().encode()).hexdigest()
+    def __enter__(self):
+        if not self.thread.acquire(timeout=45):raise ValueError('AI 设置正在处理其他请求，请稍后重试')
+        depth=getattr(self.local,'depth',0)
+        try:
+            if not depth:
+                if os.name=='nt':
+                    from ctypes import wintypes
+                    api=ctypes.WinDLL('kernel32',use_last_error=True)
+                    api.CreateMutexW.argtypes=[ctypes.c_void_p,wintypes.BOOL,wintypes.LPCWSTR];api.CreateMutexW.restype=wintypes.HANDLE
+                    api.WaitForSingleObject.argtypes=[wintypes.HANDLE,wintypes.DWORD]
+                    api.ReleaseMutex.argtypes=[wintypes.HANDLE];api.CloseHandle.argtypes=[wintypes.HANDLE]
+                    handle=api.CreateMutexW(None,False,'Local\\MTGCubeAI_'+self.name)
+                    if not handle:raise ValueError('无法建立本地 AI 设置锁')
+                    if api.WaitForSingleObject(handle,45000) not in {0,128}:
+                        api.CloseHandle(handle);raise ValueError('AI 设置正由另一个进程使用，请稍后重试')
+                    self.local.resource=(api,handle)
+                else:
+                    import fcntl
+                    folder=Path(tempfile.gettempdir())/('cube-ai-locks-'+str(os.getuid()));folder.mkdir(mode=0o700,exist_ok=True)
+                    fd=os.open(folder/(self.name+'.lock'),os.O_CREAT|os.O_RDWR|getattr(os,'O_NOFOLLOW',0),0o600)
+                    fcntl.flock(fd,fcntl.LOCK_EX);self.local.resource=fd
+            self.local.depth=depth+1
+            return self
+        except BaseException:self.thread.release();raise
+    def __exit__(self,*args):
+        try:
+            self.local.depth-=1
+            if not self.local.depth:
+                if os.name=='nt':
+                    api,handle=self.local.resource;api.ReleaseMutex(handle);api.CloseHandle(handle)
+                else:
+                    import fcntl
+                    fd=self.local.resource;fcntl.flock(fd,fcntl.LOCK_UN);os.close(fd)
+                del self.local.resource
+        finally:self.thread.release()
 
 
 def validate_base(value):
@@ -66,7 +110,7 @@ def _dpapi(raw, decrypt=False):
 class SettingsStore:
     def __init__(self, path=None):
         self.path = Path(path) if path else ROOT/'private'/'ai-settings.bin'
-        with _locks_guard: self.lock = _locks.setdefault(str(self.path.resolve()), threading.RLock())
+        with _locks_guard: self.lock = _locks.setdefault(str(self.path.resolve()), ProcessLock(self.path))
 
     def read(self):
         with self.lock:
@@ -76,7 +120,17 @@ class SettingsStore:
                 if raw.startswith(b'DPAPI1\n'): raw = _dpapi(raw[7:], True)
                 elif raw.startswith(b'UNIX1\n') and os.name != 'nt': raw = raw[6:]
                 else: raise ValueError('无法识别本地 AI 设置')
-                return json.loads(raw)
+                data=json.loads(raw)
+                if not isinstance(data,dict) or not isinstance(data.get('profiles'),dict) or not isinstance(data.get('accounts'),dict) or data.get('provider','openai') not in PROVIDERS:
+                    raise ValueError('本地 AI 设置格式损坏，可备份并重置连接设置')
+                for name,profile in data['profiles'].items():
+                    if name not in PROVIDERS or not isinstance(profile,dict) or any(not isinstance(v,str) for v in profile.values()):
+                        raise ValueError('本地 AI 服务配置格式损坏，可备份并重置连接设置')
+                for account in data['accounts'].values():
+                    if not isinstance(account,dict) or any(not isinstance(account.get(k),str) for k in ['client_id','subject','issuer']):
+                        raise ValueError('本地账户配置格式损坏，可备份并重置连接设置')
+                    if 'email' in account and not isinstance(account['email'],str):raise ValueError('本地账户标签格式损坏')
+                return data
             except (OSError, UnicodeError, json.JSONDecodeError):
                 raise ValueError('本地 AI 设置无法读取；请检查文件权限') from None
 
@@ -164,3 +218,10 @@ class SettingsStore:
             data['profiles'].setdefault('chatgpt', {})['model'] = ''
             self.write(data)
         return self.public()
+
+    def reset(self):
+        with self.lock:
+            if self.path.exists():
+                backup=self.path.with_name(self.path.name+'.backup-'+str(time.time_ns()))
+                os.replace(self.path,backup)
+            self.write(dict(profiles={},accounts={},provider='offline'))

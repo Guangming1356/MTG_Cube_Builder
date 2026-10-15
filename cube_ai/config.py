@@ -37,6 +37,10 @@ class BuildSpec:
     commander_tuning: str = "matched"
     cube_gc_limit: int | None = None
     allow_extra_turns: bool | None = None
+    interaction_min_ratio: float = .18
+    wipe_min_ratio: float = .035
+    finisher_min_ratio: float = .085
+    curve_profile: str = 'balanced'
     max_card_price: float | None = None
     exclude: list[str] = field(default_factory=list)
     pins: list[str] = field(default_factory=list)
@@ -53,6 +57,7 @@ class BuildSpec:
 
     @classmethod
     def from_dict(cls, data=None):
+        if data is not None and not isinstance(data,dict):raise ValueError('构筑参数必须是对象')
         data = dict(data or {})
         unknown = set(data) - set(cls.__dataclass_fields__)
         if unknown:
@@ -94,9 +99,15 @@ class BuildSpec:
             raise ValueError("普通 Cube 的专用指挥官槽位应为 0")
         if self.mode == "commander" and self.commanders < 10:
             raise ValueError("Commander Cube 至少预留 10 个指挥官槽位")
+        main=self.size-self.commanders-self.lands
+        if main<40:raise ValueError('至少需要 40 个主牌槽位')
+        if self.curve_profile not in {'balanced','low','late'}:raise ValueError('curve_profile 必须为 balanced/low/late')
+        for key,low,high in [('interaction_min_ratio',.10,.30),('wipe_min_ratio',.01,.08),('finisher_min_ratio',.06,.20)]:
+            value=getattr(self,key)
+            if type(value) not in {int,float} or not low<=value<=high:raise ValueError(f'{key} 必须在 {low}–{high} 之间')
         if self.players < 2 or self.players > 12 or self.rounds < 1 or self.rounds > 30:
             raise ValueError("轮抽人数或轮数无效")
-        if self.pick_count < 1 or self.pack_size < 5:
+        if not 1 <= self.pick_count <= self.pack_size or not 5<=self.pack_size<=60:
             raise ValueError("每次抓牌数/包大小无效")
         if self.discard_after_pass and self.pack_size <= self.players * self.pick_count:
             raise ValueError("该规则下每包需要能留下弃牌")
@@ -107,6 +118,8 @@ class BuildSpec:
             if value is not None and (type(value) is not int or not 1993<=value<=2100):raise ValueError(key+" 必须是有效年份")
         if self.curve is not None and (not isinstance(self.curve,dict) or any(type(v) is not int or v<0 for v in self.curve.values())):
             raise ValueError("curve 必须是非负整数的字典")
+        if self.curve is not None and (set(self.curve)!={'1','2','3','4','5+'} or sum(self.curve.values())!=main):
+            raise ValueError('自定义曲线必须包含 1、2、3、4、5+，且合计等于主牌张数')
         if self.min_year and self.max_year and self.min_year > self.max_year:
             raise ValueError("起始年份不能晚于结束年份")
         if not isinstance(self.pair_themes,dict):raise ValueError("pair_themes 必须为字典")

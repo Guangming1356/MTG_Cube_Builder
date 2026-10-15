@@ -4,8 +4,8 @@ let aiAuthPoll = null;
 function updateAIStatus(s) {
   if(statusInfo) statusInfo.gpt=s;
   $('gpt-status').textContent=s.configured?`${s.label} · ${s.model}`:'AI 未连接 · 离线可用';
-  $('api-help').textContent=s.configured?'顾问会向所选服务发送需求、当前牌表与检索内容。建议经过本地检查，确认后才应用。':'请打开“AI 设置”，选择 ChatGPT 登录、其他 API 或本地模型。离线构筑与模拟可直接使用。';
-  if(!working) { $('plan').disabled=!s.configured; $('chat').disabled=!s.configured; }
+  $('api-help').textContent=s.configured?'顾问会向所选服务发送需求、当前牌表与检索内容。分析当前 Cube 需先生成或打开牌表；建议经本地检查后确认应用。':'请打开“AI 设置”，选择 ChatGPT 登录、其他 API 或本地模型。离线构筑与模拟可直接使用。';
+  if(!working) refreshActions();
 }
 function renderAIProfile() {
   const id=$('ai-provider').value,p=aiSettings.profiles[id],plus=id==='chatgpt',offline=id==='offline';
@@ -28,6 +28,8 @@ function renderAIProfile() {
 async function refreshAI(render=true) {
   aiSettings=await api('/api/ai/settings');
   updateAIStatus(aiSettings.status);
+  $('ai-configuration-error').hidden=!aiSettings.status.configuration_error;
+  $('ai-configuration-error-text').textContent=aiSettings.status.configuration_error||'';
   if(render){
     $('ai-provider').innerHTML=Object.entries(aiSettings.profiles).map(([k,p])=>`<option value="${esc(k)}">${esc(p.label)}</option>`).join('');
     $('ai-provider').value=aiSettings.provider;renderAIProfile();
@@ -91,6 +93,8 @@ $('advisor-settings').onclick=()=>view('ai-settings');
 $('gpt-status').onclick=()=>view('ai-settings');
 $('gpt-status').setAttribute('role','button');$('gpt-status').tabIndex=0;
 $('gpt-status').onkeydown=e=>{if(e.key==='Enter'||e.key===' ')view('ai-settings');};
-document.addEventListener('cube-ready',()=>refreshAI().then(s=>{
+onCubeReady(()=>refreshAI().then(s=>{
   if(['pending','exchanging'].includes(s.auth.phase))startAuthPoll();
 }).catch(e=>notice(e.message,true)));
+
+$('ai-reset').onclick=()=>guard(async()=>{const r=await api('/api/ai/reset',{});await refreshAI();notice(r.message);});

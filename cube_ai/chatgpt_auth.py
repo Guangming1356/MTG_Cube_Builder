@@ -165,7 +165,7 @@ class ChatGPTAuth:
             raise ValueError('登录验证失败，请重试') from None
 
     def access_token(self, account_id):
-        with self.refresh_lock:
+        with self.refresh_lock,self.store.lock:
             data = self.store.read(); account = data['accounts'].get(account_id)
             if not account or PLAN_SCOPE not in account.get('scopes', []): raise ValueError('请先登录并授权 ChatGPT 套餐使用权限')
             if account.get('access_token') and account.get('expires_at',0)>time.time()+90: return account['access_token']
@@ -186,7 +186,7 @@ class ChatGPTAuth:
             return fields['access_token']
 
     def logout(self, account_id):
-        with self.lock, self.refresh_lock:
+        with self.lock, self.refresh_lock,self.store.lock:
             self.pending = None; self.phase = 'idle'; self.message = ''; self.generation += 1
             data = self.store.read(); account = data['accounts'].get(account_id)
             if not account: raise ValueError('请选择要退出的账户')

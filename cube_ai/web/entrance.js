@@ -13,7 +13,7 @@ window.updateHome=()=>{
   const has=!!current;$('home-current-title').textContent=has?(current.spec?.name||'当前 Cube'):'还没有打开牌表';
   $('home-current-info').textContent=has?`${current.cards.length} 张 · ${current.audit.hard_errors===0?'已通过当前构筑检查':`有 ${current.audit.hard_errors} 项需要处理，请查看检查报告`}`:'先生成一套，或打开已有牌表。';
   $('home-assessment').textContent=current?.provenance?.validation_status==='experimental'?'实验候选：尚未通过全部独立测试，不代表已证实更强。':'';
-  ['home-cards','home-check','home-save','home-optimize'].forEach(id=>$(id).disabled=working||!has||(id==='home-optimize'&&current.spec?.mode!=='commander'));
+  ['home-cards','home-check','home-save','home-optimize'].forEach(id=>$(id).disabled=working||!has||(id==='home-optimize'&&(current.spec?.mode!=='commander'||current.spec?.players!==3)));
   $('home-open').disabled=working||!$('home-library').value;
   $('home-downloads').innerHTML=has&&current.run_id?`<a class="download-button" href="/exports/${encodeURIComponent(current.run_id)}/cube.csv">下载牌表</a><a href="/exports/${encodeURIComponent(current.run_id)}/cube.json">保存完整备份</a><a href="/exports/${encodeURIComponent(current.run_id)}/cubecobra.txt">用于 CubeCobra</a>`:'';
 };
@@ -57,13 +57,12 @@ $('home-upload').onchange=()=>guard(async()=>{
 $('home-cards').onclick=()=>view('cards');$('home-check').onclick=()=>view('report');
 $('home-save').onclick=()=>guard(async()=>{
   if(!current)throw Error('请先打开一套牌表');
-  if(current.audit.hard_errors){view('report');throw Error('请先处理检查报告中的错误，再保存用于轮抓的牌表。');}
-  if(!current.run_id){setCube(await api('/api/save',{spec:spec(),cards:current.cards}));await refreshRuns();}
+  setCube(await api('/api/save',{spec:spec(),cards:current.cards,require_valid:true}));await refreshRuns();
   view('home');focusCurrent();notice('牌表已保存。点击下面的“下载牌表”即可下载文件。');
 });
 $('home-optimize').onclick=()=>{view('report');$('optimize-run').click();};
 $('home-guide').onclick=()=>view('guide');
-document.addEventListener('cube-ready',()=>{$('quick-build').disabled=false;window.updateHome();});
+onCubeReady(()=>{$('quick-build').disabled=false;window.updateHome();});
 (async()=>{
   try{const guide=await api('/api/design-guide');
     $('design-principles').innerHTML=guide.principles.map((p,i)=>`<article class="panel"><span class="step-label">${String(i+1).padStart(2,'0')}</span><h3>${esc(p.title)}</h3><p>${esc(p.description)}</p><details><summary>项目如何执行这一条</summary><p class="sub">${esc(p.path)}</p></details></article>`).join('');
@@ -79,4 +78,4 @@ window.updateBracketControls=()=>{const b=Number($('bracket').value),low=b>0&&b<
 $('bracket').onchange=()=>{const b=Number($('bracket').value);$('exclude_game_changers').checked=b===1||b===2;$('cube_gc_limit').value='';if(b>0&&b<=3)['allow_extra_turns','allow_infinite_combos','allow_mass_land_destruction'].forEach(id=>$(id).checked=false);window.updateBracketControls();};
 const lockWithBracket=lock;lock=value=>{lockWithBracket(value);if(statusInfo)window.updateBracketControls();};
 function updateQuickBracket(){$('quick-bracket-note').textContent=bracketNote($('quick-bracket').value);}
-$('quick-bracket').onchange=updateQuickBracket;document.addEventListener('cube-ready',()=>{updateQuickBracket();window.updateBracketControls();});
+$('quick-bracket').onchange=updateQuickBracket;onCubeReady(()=>{updateQuickBracket();window.updateBracketControls();});

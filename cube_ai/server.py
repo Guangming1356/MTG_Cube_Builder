@@ -20,7 +20,7 @@ from .feedback import FeedbackStore
 from .features import VERSION
 from .knowledge import Knowledge
 from .llm import LLMClient, advise, plan, replacements
-from .ai_settings import SettingsStore
+from .ai_settings import SettingsStore,PROVIDERS
 from .chatgpt_auth import ChatGPTAuth
 from .design import public_guide
 from .brackets import public_profiles
@@ -63,15 +63,23 @@ class Application:
         ref=WORKSPACE/"ref_thecommandercube.csv"
         if ref.exists():self.examples["reference_commandercube"]=ref
 
+    def ai_status(self):
+        try:return LLMClient(self.ai_store,self.auth).status()
+        except (ValueError,TypeError,KeyError,OSError):return dict(configured=False,connected=False,provider='offline',label='AI 设置需要恢复',model='',style='chat',configuration_error='已有 AI 设置无法读取；离线功能仍可使用。可先备份并重置连接设置。')
+
     def rows(self,data):
         if "text" in data:
+            if not isinstance(data['text'],str):raise ValueError('导入牌表必须是文本')
             rows,unknown=self.catalog.parse(data["text"])
-            if data.get("spec",{}).get("mode")=="classic":
+            if (data.get("spec") or {}).get("mode")=="classic":
                 for row in rows:
                     if row['role']=='Commander':row['role']='Main'
             return rows,unknown
         rows=[];unknown=[]
-        for row in data.get("cards",[]):
+        entries=data.get('cards',[])
+        if not isinstance(entries,list) or len(entries)>900:raise ValueError('cards 必须是最多 900 张牌的列表')
+        for row in entries:
+            if not isinstance(row,dict) or not isinstance(row.get('name'),str):raise ValueError('每张牌需要 name 名称和有效 role 槽位')
             n=self.catalog.resolve(row.get("name",""))
             if not n:unknown.append(row.get("name",""));continue
             role=row.get("role","Main")
@@ -94,12 +102,16 @@ class Application:
         if unknown:raise ValueError("这些牌名未被确认: "+", ".join(unknown[:10]))
         if operation not in {"build","repair","stress","forge","optimize","chat","plan"}:raise ValueError("未知操作")
         if operation in {"repair","stress","forge","optimize"} and not rows:raise ValueError("请先载入牌表")
+        if operation in {'chat','plan'}:
+            message=data.get('message','')
+            if not isinstance(message,str) or not message.strip():raise ValueError('请先输入具体需求或问题')
+            if len(message)>12000:raise ValueError('单次 AI 需求请控制在 12000 字以内')
         client=LLMClient(self.ai_store,self.auth) if operation in {'chat','plan'} else None
         if client and not client.status()['configured']:raise ValueError('AI 尚未就绪，请在“AI 设置”中连接服务并选择模型。离线功能可直接使用。')
         job_id=uuid.uuid4().hex[:16]
         with self.lock:
             if sum(j["state"] in {"queued","running"} for j in self.jobs.values())>=4:raise ValueError("已有 4 个任务，请等待其中一个完成")
-            self.jobs[job_id]=dict(id=job_id,state="queued",progress="等待运行")
+            self.jobs[job_id]=dict(id=job_id,operation=operation,state="queued",progress="等待运行")
             completed=[k for k,j in self.jobs.items() if j["state"] in {"done","failed"}]
             for k in completed[:-30]:del self.jobs[k]
         def progress(message):
@@ -137,7 +149,10 @@ def handler_for(app):
         def local_host(self):
             return self.headers.get('Host') in {f'127.0.0.1:{self.server.server_port}',f'localhost:{self.server.server_port}'}
         def ai_public(self):
-            return dict(app.ai_store.public(),status=LLMClient(app.ai_store,app.auth).status(),auth=app.auth.status())
+            status=app.ai_status()
+            if status.get('configuration_error'):
+                return dict(provider='offline',profiles={k:dict(v,key_present=False) for k,v in PROVIDERS.items()},accounts=[],active_account='',status=status,auth=app.auth.status())
+            return dict(app.ai_store.public(),status=status,auth=app.auth.status())
         def json(self,status,data):
             raw=json.dumps(data,ensure_ascii=False).encode("utf-8")
             self.send_response(status);self.send_header("Content-Type","application/json; charset=utf-8")
@@ -148,6 +163,9 @@ def handler_for(app):
             path=urlparse(self.path);params=parse_qs(path.query);q=lambda key,default="":params.get(key,[default])[0]
             try:
                 if path.path=='/api/ai/settings':return self.json(200,self.ai_public())
+                if path.path=='/api/jobs':
+                    with app.lock:jobs=[{k:v for k,v in j.items() if k!='result'} for j in app.jobs.values()]
+                    return self.json(200,jobs)
                 if path.path=='/auth/callback':
                     try:app.auth.callback(params);message='授权处理完成。请返回 Cube 助手的“AI 设置”，读取模型列表并选择模型。'
                     except ValueError:message='此次登录没有完成。请返回 Cube 助手的“AI 设置”查看提示并重试。'
@@ -158,8 +176,10 @@ def handler_for(app):
                 if path.path=='/api/design-guide':return self.json(200,public_guide())
                 if path.path=='/api/brackets':return self.json(200,public_profiles())
                 if path.path=="/api/status":
+                    with app.lock:active_jobs=sum(j['state'] in {'queued','running'} for j in app.jobs.values())
                     return self.json(200,dict(version=__version__,cards=len(app.catalog.cards),snapshot=app.catalog.snapshot,
-                        knowledge_chunks=len(app.knowledge.chunks),gpt=LLMClient(app.ai_store,app.auth).status(),themes=THEME_NAMES,
+                        active_jobs=active_jobs,
+                        knowledge_chunks=len(app.knowledge.chunks),gpt=app.ai_status(),themes=THEME_NAMES,
                         presets={"commander":BuildSpec.from_dict({'bracket':3}).to_dict(),"classic":BuildSpec.from_dict({"mode":"classic"}).to_dict()},brackets=public_profiles(),
                         feedback=app.feedback.status("commander:commander"),forge=forge_status()))
                 if path.path=="/api/forge/status":return self.json(200,forge_status())
@@ -215,6 +235,7 @@ def handler_for(app):
             raw=target.read_bytes();self.send_response(200)
             self.send_header("Content-Type",(mimetypes.guess_type(str(target))[0] or "application/octet-stream")+"; charset=utf-8")
             self.send_header("Content-Length",str(len(raw)))
+            self.send_header('Cache-Control','no-cache')
             if download:self.send_header("Content-Disposition",f'attachment; filename="{target.name}"')
             self.end_headers();self.wfile.write(raw)
         def do_POST(self):
@@ -231,6 +252,11 @@ def handler_for(app):
                 if not isinstance(data,dict):raise ValueError('请求内容必须是对象')
                 if path=='/api/ai/settings':
                     app.ai_store.save(data);return self.json(200,self.ai_public())
+                if path=='/api/ai/reset':
+                    with app.auth.lock:
+                        app.auth.pending=None;app.auth.generation+=1;app.auth.phase='idle';app.auth.message=''
+                        app.ai_store.reset()
+                    return self.json(200,dict(self.ai_public(),message='原连接文件已在本机备份，现可重新配置。需要撤销旧授权时，请到 ChatGPT 设置中断开应用。'))
                 if path=='/api/ai/models':return self.json(200,{'models':LLMClient(app.ai_store,app.auth).models()})
                 if path=='/api/ai/test':return self.json(200,LLMClient(app.ai_store,app.auth).test())
                 if path=='/api/ai/chatgpt/login':return self.json(200,app.auth.begin(self.server.server_port,data.get('account_id','')))
@@ -244,6 +270,8 @@ def handler_for(app):
                     if unknown or not rows:raise ValueError('请先确认并载入牌表')
                     result=dict(cards=rows,spec=spec.to_dict(),audit=audit(app.catalog,rows,spec,strict=True),
                         solver=None,changes=None,provenance=dict(snapshot=app.catalog.snapshot,catalog=app.catalog.signature,features=VERSION,source='manual-save'))
+                    if data.get('require_valid') and result['audit']['hard_errors']:
+                        raise ValueError('当前参数下牌表未通过检查，请先重新构筑或处理报告中的错误')
                     return self.json(200,app.present(export_run(app.catalog,result)))
                 if path=="/api/analyze":
                     rows,unknown=app.rows(data)
@@ -252,6 +280,18 @@ def handler_for(app):
                     rows,unknown=app.rows(data)
                     if unknown:raise ValueError("请先确认所有牌名")
                     return self.json(200,replacements(app.catalog,spec,rows,data.get("name","")))
+                if path=='/api/apply-swap':
+                    rows,unknown=app.rows(data)
+                    if unknown or not rows:raise ValueError('请先载入并确认当前牌表')
+                    remove=app.catalog.resolve(data.get('remove',''));add=app.catalog.resolve(data.get('add',''))
+                    if not remove or not add:raise ValueError('替换牌名未被真实牌库确认')
+                    if not any(r['name']==remove for r in rows) or any(r['name']==add for r in rows):raise ValueError('当前牌表已变化，请重新获取替换建议')
+                    if app.catalog.cards[remove]['identity']!=app.catalog.cards[add]['identity']:raise ValueError('替换不能改变颜色身份配额')
+                    updated=[dict(r,name=add) if r['name']==remove else r for r in rows]
+                    assessment=audit(app.catalog,updated,spec,strict=True)
+                    errors=[i['message'] for i in assessment['issues'] if i['severity']=='error']
+                    if errors:raise ValueError('未应用替换：'+'；'.join(errors[:4]))
+                    return self.json(200,app.present(dict(cards=updated,spec=spec.to_dict(),audit=assessment)))
                 if path=="/api/feedback":
                     a=app.catalog.resolve(data.get("winner",""));b=app.catalog.resolve(data.get("loser",""))
                     if not a or not b:raise ValueError("比较中的卡名未确认")
