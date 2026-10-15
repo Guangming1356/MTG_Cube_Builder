@@ -1,0 +1,101 @@
+{
+  "version": "multi-source-design-1.0",
+  "reviewed_on": "2026-10-11",
+  "scope": "用户提供的四个网站；在原有九套 CubeCobra 案例之外补充作者说明与社区经验。",
+  "websites": [
+    {"name": "CubeCobra", "url": "https://cubecobra.com/", "purpose": "牌池、作者简介和轮抓结构；已有九套导出案例。"},
+    {"name": "TappedOut", "url": "https://tappedout.net/", "purpose": "Cube 牌池和分包规则；核验是否为完整 Cube。"},
+    {"name": "Moxfield", "url": "https://moxfield.com/", "purpose": "公开牌表；优先核验作者和官方出处。"},
+    {"name": "Reddit r/mtgcube", "url": "https://www.reddit.com/r/mtgcube/", "purpose": "构筑讨论和玩家反馈；记录上下文，作为待验证经验。"}
+  ],
+  "sources": [
+    {
+      "id": "tappedout-timproctor-commander",
+      "platform": "TappedOut",
+      "title": "Commander EDH Cube · TimProctor",
+      "url": "https://tappedout.net/mtg-cube-drafts/commander-edh-cube/",
+      "type": "作者牌池与规则说明",
+      "evidence_status": "description_verified",
+      "status_label": "已读取作者说明",
+      "context": "作者使用六包十五张、99 张主牌及单独发指挥官的规则。",
+      "lesson": "比较指挥官供给方式时，必须一起考虑轮抓规则；这套仅作规则对照。",
+      "transfer": "保持本项目三人轮抓、每包三位指挥官与自由补基本地；不迁入单独发指挥官、99 张主牌和旧牌表中的违规牌。",
+      "membership_eligible": false
+    },
+    {
+      "id": "tappedout-whales-peasant",
+      "platform": "TappedOut",
+      "title": "600 card archetype-driven Peasant Cube · Whalesarefine",
+      "url": "https://tappedout.net/mtg-cube-drafts/600-card-archetype-driven-peasant-cube/",
+      "type": "作者构筑说明",
+      "evidence_status": "description_verified",
+      "status_label": "已读取作者说明",
+      "context": "作者描述十个色组的主题，并希望主题交叉、支持三色组牌；这是 Peasant 环境。",
+      "lesson": "参考思路之间如何共享牌，而不是把十个色组做成互不相通的孤岛。",
+      "transfer": "用于桥梁牌和组件链检查；不把普通 Cube 的强度、曲线或地牌比例照搬到 EDH。",
+      "membership_eligible": false
+    },
+    {
+      "id": "mtgo-commander-moxfield",
+      "platform": "Moxfield / MTGO",
+      "title": "Magic Online Commander Cube · 官方链接",
+      "url": "https://moxfield.com/decks/CA745JQeskSDjyXaZR8gFA",
+      "evidence_url": "https://www.mtgo.com/news/introducing-commander-cube",
+      "type": "官方设计文章及其牌表链接",
+      "published_on": "2025-05-15",
+      "evidence_status": "official_description_verified_export_pending",
+      "status_label": "官方说明已核验 · 完整导出待解析",
+      "context": "官方文章介绍 810 张、四人轮抓、60 张组牌及额外拍档规则；官方设定偏慢。Moxfield 页面仅返回壳页面，未解析完整导出。",
+      "lesson": "前期功能性生物和后期威胁可以并存；当每桌只见牌池的一部分时，宽泛的效用与协同更稳健。",
+      "transfer": "核对低费行动、可用支持与终结；保持用户的三人规则和强度，不迁入额外拍档或固定配地建议。",
+      "membership_eligible": false,
+      "canonical_work": "mtgo-commander-2025"
+    },
+    {
+      "id": "reddit-commander-first-learnings",
+      "platform": "Reddit r/mtgcube",
+      "title": "Commander cube first time learnings (WIP)",
+      "url": "https://www.reddit.com/r/mtgcube/comments/1tdhijb/commander_cube_first_time_learnings_wip/",
+      "type": "初建阶段的作者与评论讨论",
+      "evidence_status": "post_and_comments_verified",
+      "status_label": "已读讨论 · 尚非实战结论",
+      "context": "作者在 720 张框架下反复修改十主题方案，发现单一主题专用牌与颜色供给的困难；评论提供不同方向，未形成统一方案。",
+      "lesson": "先以独立可用的基础牌连接宽泛思路，再检查实际抓到的资源与回报。",
+      "transfer": "不直接缩减为五个色组；用当前十双色组件链与组牌检查验证交叉支持。",
+      "membership_eligible": false
+    },
+    {
+      "id": "reddit-commander-lessons",
+      "platform": "Reddit r/mtgcube",
+      "title": "What lessons have you learned from your commander cubes?",
+      "url": "https://www.reddit.com/r/mtgcube/comments/1l59j0d/",
+      "type": "玩家自述经验",
+      "published_on": "2025-06-07",
+      "evidence_status": "indexed_excerpt_verified_full_page_unavailable",
+      "status_label": "已读检索片段 · 全文未获取",
+      "context": "检索片段提到传奇奖励可能诱使一人拿走多个指挥官，以及促进战斗来缓解拖长对局；原页面读取超时。",
+      "lesson": "指挥官总数之外要检查每人的可组牌选择；对局拖长时检查推进胜利的行为。",
+      "transfer": "作为指挥官竞争与对局节奏的实验假设；不自动加入君主、地城或五色指挥官，也不把个别玩家的时长当成目标指标。",
+      "membership_eligible": false
+    },
+    {
+      "id": "reddit-commander-wipes",
+      "platform": "Reddit r/mtgcube",
+      "title": "Commander Cube - Feedback",
+      "url": "https://www.reddit.com/r/mtgcube/comments/1j2p6l5/",
+      "type": "玩家游玩反馈",
+      "evidence_status": "indexed_excerpt_verified_full_page_unavailable",
+      "status_label": "已读检索片段 · 全文未获取",
+      "context": "作者自述周末游玩后认为白色扫场偏多；原页面读取超时，未取得完整牌表或统计。",
+      "lesson": "增加扫场后，应同时检查生物策略能否恢复、后期是否能结束。",
+      "transfer": "作为扫场与终结共同测试的假设，不据此直接减少本项目白色牌或设置通用扫场上限。",
+      "membership_eligible": false
+    }
+  ],
+  "integration": [
+    {"topic": "规则与指挥官供给", "sources": ["tappedout-timproctor-commander", "reddit-commander-lessons"], "path": "config.BuildSpec → draft.deal / draft_pod → buildable 与每人实际抓到的指挥官", "status": "已有规则与可组牌检查；指挥官抢占为后续压力场景"},
+    {"topic": "共享组件与宽泛思路", "sources": ["tappedout-whales-peasant", "reddit-commander-first-learnings", "mtgo-commander-moxfield"], "path": "design.design_bonus / package_report → draft 实际入组检查 → optimize.draft_evaluation", "status": "接入知识检索与指南；沿用已有组件诊断与有界参考规则"},
+    {"topic": "前期行动、扫场与后期终结", "sources": ["mtgo-commander-moxfield", "reddit-commander-wipes", "reddit-commander-lessons"], "path": "engine 角色/曲线约束 → opening_test → Forge 施放、死亡与终结行为 → 独立候选验证", "status": "使用既有指标验证；恢复速度及扫场专属消融尚待实现"}
+  ],
+  "evidence_policy": "作者说明、社区经验和已解析牌表分别记录；未核验完整导出的来源不加入 membership 或牌名参考加分。同一牌表跨站发布只算一个作品。网页中的额外规则不覆盖用户设定。"
+}

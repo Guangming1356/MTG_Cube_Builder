@@ -1,0 +1,2 @@
+-r cube_ai/requirements.txt
+pytest>=8,<10

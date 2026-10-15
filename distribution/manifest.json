@@ -1,0 +1,54 @@
+{
+  "version": "2026.10.11-portable-1",
+  "platform": "Windows 10/11 x64",
+  "python": "3.13.16",
+  "python_sha256": "97dae5274cc54867065e8d5a3226e48c35017ed332a0fdb0e27d5b5821961297",
+  "wheels": [
+    {
+      "file": "certifi-2026.7.22-py3-none-any.whl",
+      "sha256": "62f22742b58a1a33014a2b6b706588a8d7e2a88ae7bd1a6ebe8c992928483775"
+    },
+    {
+      "file": "charset_normalizer-3.5.2-cp313-cp313-win_amd64.whl",
+      "sha256": "78456a747de8dc58360ffa581f30a002baf5aa28cb262536545e91f113ed7639"
+    },
+    {
+      "file": "idna-3.20-py3-none-any.whl",
+      "sha256": "ab7ae7122974553370f0bdb919e1a960b2cd1bc1ef0276416d896db81c14582c"
+    },
+    {
+      "file": "numpy-2.4.6-cp313-cp313-win_amd64.whl",
+      "sha256": "c4fc99836233ea196540b17ab0983aff60ed07941751930f5f4d05bc3b3b7359"
+    },
+    {
+      "file": "requests-2.34.2-py3-none-any.whl",
+      "sha256": "2a0d60c172f83ac6ab31e4554906c0f3b3588d37b5cb939b1c061f4907e278e0"
+    },
+    {
+      "file": "scipy-1.18.0-cp313-cp313-win_amd64.whl",
+      "sha256": "1afac4a847207c7ff8efd321734a50b06d0280b3b2a2c0fc2f413101747ad7c7"
+    },
+    {
+      "file": "urllib3-2.8.0-py3-none-any.whl",
+      "sha256": "0cf3cae568d36aa9576b28dfb35f11328f1cb974ca7647d9475ebb86c75ac6e3"
+    }
+  ],
+  "sources": [
+    {
+      "file": "forge-2.0.15-sources.tar.gz",
+      "sha256": "0556708b6f9a4439ecb536a1e36647087dc02650e412cbe806338264f8f5486b"
+    },
+    {
+      "file": "OpenJDK21U-jdk-sources_21.0.12.1_1.tar.gz",
+      "sha256": "573057d03584ae793fb7ec9a14c76d826d9187a53efeefd99da47403a5308234"
+    }
+  ],
+  "privacy": {
+    "user_config_included": false,
+    "credentials_included": false,
+    "history_included": false,
+    "user_cubes_included": false,
+    "preferences_included": false
+  },
+  "card_snapshot": "2026-10-08"
+}

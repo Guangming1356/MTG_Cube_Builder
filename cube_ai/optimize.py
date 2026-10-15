@@ -1,0 +1,453 @@
+"""Evidence-led Cube revisions using drafted decks and native Forge game traces."""
+import csv
+import hashlib
+import json
+import math
+import random
+import re
+import statistics
+import uuid
+import zipfile
+from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
+from pathlib import Path
+
+import numpy as np
+
+from .catalog import exclusion_reasons
+from .config import ROOT, GUILDS, BuildSpec
+from .draft import draft_pod
+from .engine import audit, completes_combo, export_run
+from .features import VERSION
+from .forge import card_index, configuration, engine_name, run_battle, simulate, write_deck
+from .design import design_bonus, deck_design_report, package_roles
+
+OPTIMIZATIONS=ROOT/'optimizations'
+POLICY_VERSION='forge-feedback-1.1'
+# Sparse self-play cannot justify cutting these efficient, broadly useful spells.
+# This expert guard is versioned policy, not invented training labels.
+CORE_GUARD={'Brainstorm','Ponder','Frantic Search','Deadly Rollick','Marionette Apprentice',
+    "Caretaker's Talent",'Trouble in Pairs'}
+
+def save(path,value):
+    path.parent.mkdir(parents=True,exist_ok=True)
+    path.write_text(json.dumps(value,ensure_ascii=False,indent=2),encoding='utf-8')
+
+def schedule(pods,seed):
+    return [seed+i*100 for i in range(pods)],[[GUILDS[(p*3+j)%10] for j in range(3)] for p in range(pods)]
+
+def deck_metrics(catalog,deck):
+    if not deck['buildable']:return dict(strength=0,buildable=False)
+    cards=[catalog.cards[n] for n in deck['spells']]
+    counts={f:sum(c[f] for c in cards) for f in ['creature','interaction','wipe','ramp','draw','finisher']}
+    counts.update(low=sum(c['mv']<=2 for c in cards),expensive=sum(c['mv']>=6 for c in cards),
+        spells=len(cards),lands=deck['land_count'],mean_mv=round(statistics.mean(c['mv'] for c in cards),3) if cards else 0,
+        mean_quality=round(statistics.mean(c['quality'] for c in cards),3) if cards else 0)
+    # A transparent structural utility, not a predicted game-win probability.
+    parts=dict(low=min(1,counts['low']/14),interaction=min(1,counts['interaction']/7),
+        draw=min(1,counts['draw']/6),finisher=min(1,counts['finisher']/3),
+        creature=min(1,counts['creature']/16),quality=min(1,max(0,(counts['mean_quality']-2)/1.65)))
+    weights=dict(low=.24,interaction=.22,draw=.13,finisher=.18,creature=.10,quality=.13)
+    value=sum(parts[k]*v for k,v in weights.items())
+    value-=min(.3,max(0,counts['lands']-28)*.025)
+    return dict(buildable=True,identity=deck['identity'],preferred=deck['guild'],commander=deck['commander'],
+        strength=round(value,6),components=parts,design=deck_design_report(catalog,deck),bracket=deck.get('bracket'),**counts)
+
+def draft_evaluation(catalog,rows,spec,seeds,guilds,include_tables=False):
+    observations=[];tables=[];card_counts=defaultdict(Counter)
+    for p,(seed,prefs) in enumerate(zip(seeds,guilds)):
+        pod=draft_pod(catalog,rows,spec,random.Random(seed),prefs);pod['pod']=p;pod['draft_seed']=seed
+        tables.append(pod)
+        for d in pod['decks']:
+            m=deck_metrics(catalog,d);observations.append(dict(pod=p,seat=d['seat'],**m))
+            used=set(d.get('spells',[])+d.get('lands',[])+([d['commander']] if d.get('commander') else []))
+            for n in d['drafted']:
+                c=catalog.cards[n];stat=card_counts[n];stat['drafted']+=1
+                if d['buildable'] and (c['identity']=='C' or set(c['identity'])<=set(d['identity'])):
+                    stat['eligible_pool']+=1
+                    if n in used:stat['included']+=1
+    values=[m['strength'] for m in observations]
+    groups={}
+    for g in GUILDS:
+        own=[m for m in observations if m.get('preferred')==g or not m['buildable'] and guilds[m['pod']][m['seat']]==g]
+        groups[g]=dict(decks=len(own),mean_strength=round(statistics.mean(m['strength'] for m in own),6) if own else None,
+            buildable_rate=round(sum(m['buildable'] for m in own)/len(own),3) if own else None)
+    report=dict(pods=len(seeds),seeds=seeds,guild_schedule=guilds,decks=len(observations),
+        bracket_check=dict(target=spec.bracket,decks_checked=sum(bool(m.get('bracket')) for m in observations),
+            violations=sum(bool(m.get('bracket',{}).get('violations')) for m in observations if m.get('bracket')),certified=False),
+        buildable_rate=sum(m['buildable'] for m in observations)/max(1,len(observations)),
+        mean_strength=float(np.mean(values)),p10_strength=float(np.quantile(values,.1)),
+        guild_gap=max(v['mean_strength'] for v in groups.values() if v['mean_strength'] is not None)-min(v['mean_strength'] for v in groups.values() if v['mean_strength'] is not None),
+        guilds=groups,observations=observations,cards={n:dict(c) for n,c in sorted(card_counts.items())},
+        limitation='牌组强度为可解释结构指标：低费、互动、抓牌、终结、生物和原始启发式牌力。不是实战胜率，固定机器人会产生选牌偏差。')
+    if include_tables:report['tables']=tables
+    return report
+
+def log_events(log):
+    """Forge wraps text mid-word; blank lines separate actual game-log entries."""
+    chunks=re.split(r'\n\s*\n',log.replace('\r\n','\n'))
+    return [chunk.replace('\n','') for chunk in chunks if re.match(r'^(?:Turn|Phase|Land|Add To Stack|Resolve Stack|Combat|Damage|Life|Mulligan|Game Outcome):',chunk)]
+
+def game_trace(catalog,log,decks):
+    cards={};players={};active=None
+    for d in decks:
+        players[d['id']]=dict(own_turns=0,turn_spells=[],casts=Counter(),activations=Counter(),
+            spellcasts=0,first_spell_turn=None,damage_taken=0,loss_reason=None)
+        for n in d['spells']+[d['commander']]:
+            c=catalog.cards[n]
+            cards[n.split(' // ')[0]]=n
+            if ' // ' in n:cards[n.split(' // ')[1]]=n
+    def name_of(text):
+        return next((name for prefix,name in sorted(cards.items(),key=lambda x:-len(x[0])) if text==prefix or text.startswith(prefix+' targeting') or text.startswith(prefix+' (')),None)
+    for event in log_events(log):
+        turn=re.match(r'Turn: Turn (\d+) \(Ai\(\d+\)-([^\)]+)\)',event)
+        if turn:
+            active=turn[2]
+            if active in players:
+                players[active]['own_turns']+=1;players[active]['turn_spells'].append(0)
+            continue
+        cast=re.match(r'Add To Stack: Ai\(\d+\)-(\S+) cast (.+)',event)
+        if cast and cast[1] in players:
+            p=players[cast[1]];n=name_of(cast[2]);p['spellcasts']+=1
+            if n:p['casts'][n]+=1
+            if cast[1]==active and p['turn_spells']:p['turn_spells'][-1]+=1
+            if p['first_spell_turn'] is None and cast[1]==active:p['first_spell_turn']=p['own_turns']
+        ability=re.match(r'Add To Stack: Ai\(\d+\)-(\S+) (?:activated|triggered) (.+)',event)
+        if ability and ability[1] in players:
+            n=name_of(ability[2])
+            if n:players[ability[1]]['activations'][n]+=1
+        damage=re.search(r'Damage: .+ deals (\d+) (?:combat )?damage to Ai\(\d+\)-(\S+)\.',event)
+        if damage and damage[2] in players:players[damage[2]]['damage_taken']+=int(damage[1])
+        loss=re.match(r'Game Outcome: Ai\(\d+\)-(\S+) has lost because (.+)',event)
+        if loss and loss[1] in players:players[loss[1]]['loss_reason']=loss[2]
+    for p in players.values():
+        first=p['turn_spells'][:4]
+        p['early_turns']=len(first);p['early_spell_turns']=sum(x>0 for x in first)
+        p['no_spell_first4_rate']=sum(x==0 for x in first)/max(1,len(first))
+        p['finisher_casts']=sum(count for n,count in p['casts'].items() if catalog.cards[n]['finisher'])
+        p['interaction_casts']=sum(count for n,count in p['casts'].items() if catalog.cards[n]['interaction'])
+        p['casts']=dict(p['casts']);p['activations']=dict(p['activations'])
+    return dict(players=players,ai_missing_apis=sorted(set(re.findall(r'No AI assigned for API: (\w+)',log))),
+        limitation='前四个自己的回合只统计实际施放咒语；零施放不等于卡手，保留互动或发动异能也可能是正确策略。未记录手牌，未施放牌不能当作抽到的死牌。')
+
+def evidence_from_match(catalog,result):
+    out=Path(result['path']);tables={p['pod']:p for p in result['tables']};traces=[];card_stats=defaultdict(Counter)
+    for r in result['games']:
+        if r['outcome'] not in {'win','draw'}:continue
+        trace=game_trace(catalog,(out/r['log']).read_text(encoding='utf-8'),tables[r['pod']]['decks'])
+        traces.append(dict(pod=r['pod'],game=r['game'],winner=r['winner'],turns=r['turns'],**trace))
+        for d in tables[r['pod']]['decks']:
+            p=trace['players'][d['id']]
+            for n in d['spells']+[d['commander']]:
+                c=card_stats[n];c['deck_games']+=1;c['cast_games']+=int(p['casts'].get(n,0)>0)
+                c['casts']+=p['casts'].get(n,0);c['ability_events']+=p['activations'].get(n,0)
+    normal=result['summary']['completed'];all_players=[p for t in traces for p in t['players'].values()]
+    summary=dict(completed=normal,attempted=result['summary']['games'],skipped_pods=result['skipped_pods'],
+        failure_rate=1-normal/max(1,result['summary']['games']),
+        mean_early_no_spell_rate=statistics.mean(p['no_spell_first4_rate'] for p in all_players) if all_players else None,
+        no_finisher_cast_rate=statistics.mean(p['finisher_casts']==0 for p in all_players) if all_players else None,
+        deckout_rate=statistics.mean('draw a card' in (p['loss_reason'] or '') or 'library' in (p['loss_reason'] or '').lower() for p in all_players) if all_players else None,
+        median_global_turns=statistics.median(t['turns'] for t in traces) if traces else None)
+    return dict(match_id=result['match_id'],summary=summary,traces=traces,
+        cards={n:dict(v) for n,v in sorted(card_stats.items())},guilds=result['summary']['guilds'])
+
+def collect_training(catalog,rows,spec,out,pods=10,workers=3,clock=120,progress=print,experiment_seed=None):
+    seed=spec.seed if experiment_seed is None else experiment_seed
+    seeds,guilds=schedule(pods,seed+1000)
+    # Independent development and held-out schedules are declared before card selection.
+    protocol=dict(owner='用户的 Cube 构筑任务',policy_version=POLICY_VERSION,
+        experiment_seed=seed,train_seeds=seeds,train_guilds=guilds,holdout_seeds=schedule(4,seed+100000)[0],
+        holdout_guilds=schedule(4,seed+100000)[1],
+        ranking_seeds=schedule(100,seed+2000)[0],ranking_guilds=schedule(100,seed+2000)[1],
+        structural_holdout_seeds=schedule(100,seed+200000)[0],structural_holdout_guilds=schedule(100,seed+200000)[1],
+        max_swaps=24,max_evaluated_alternatives=80,game_workers=workers,clock_seconds=clock,
+        cross_strategy='每个发生牌组变化的独立轮抓席位：旧牌组、新牌组、旧桌下一席位锚牌组；三局轮换座位；种子=对应保留桌种子+50000+席位*100+局序号',
+        adoption='结构均值与低分位改善、色组差不扩大、所有硬约束通过；实战用于确认正常终结、行为节奏及回归。少量实战不宣称统计显著牌力提升。',
+        risks=['原生 AI 驾驶偏差','同桌三局相关','启发式语义标签可能错误','结构强度不是胜率','未施放不等于抽到但不能用'])
+    save(out/'protocol.json',protocol);save(out/'base_cube.json',dict(cards=rows,spec=spec.to_dict()))
+    progress('收集训练桌：覆盖十个双色，三局轮换座位')
+    match=simulate(catalog,rows,spec,pods,3,clock,progress,pod_seeds=seeds,preferred_guilds=guilds,workers=workers)
+    evidence=evidence_from_match(catalog,match)
+    save(out/'training_match.json',match);save(out/'training_evidence.json',evidence)
+    offline=draft_evaluation(catalog,rows,spec,protocol['ranking_seeds'],protocol['ranking_guilds'])
+    save(out/'training_drafts.json',offline)
+    return protocol,match,evidence,offline
+
+def opponent_gift(card):
+    return bool(re.search(r'each opponent may search their library for a creature card and put it onto the battlefield|(?:target|an|each) opponent creates|any player may sacrifice a land',card['text'],re.I))
+
+def unsupported_cost(card):
+    return bool(re.search(r'\b(?:full party|number of creatures in your party)\b|when [^.]* enters, (?:you )?(?:discard a card|sacrifice (?:a|an|another) creature)',card['text'],re.I))
+
+def feedback_model(catalog,evidence,drafts):
+    """Small, bounded feedback weights; no card receives its deck's win as a label."""
+    early=evidence['summary']['mean_early_no_spell_rate'] or 0
+    finisher=evidence['summary']['no_finisher_cast_rate'] or 0
+    needs={}
+    for g in GUILDS:
+        decks=[x for x in drafts['observations'] if x.get('preferred')==g and x['buildable']]
+        observed=evidence['guilds'].get(g,{})
+        games=observed.get('appearances',0);wins=observed.get('wins',0)
+        # Prior: three wins per nine observations; sparse group wins have little influence.
+        posterior=(wins+3)/(games+9)
+        pressure=max(.85,min(1.15,1+(1/3-posterior)*.6))
+        needs[g]={k:statistics.mean(max(0,1-d['components'][k]) for d in decks) if decks else 0 for k in ['low','interaction','draw','finisher','creature']}
+        needs[g]['pressure']=pressure;needs[g]['observed_games']=games;needs[g]['posterior_win']=posterior
+        needs[g]['package_gaps']={}
+        for package in ['sacrifice','reanimator']:
+            for component in (['fodder','outlet','reward'] if package=='sacrifice' else ['entry','return','target']):
+                key=package+':'+component
+                needs[g]['package_gaps'][key]=statistics.mean(component in d.get('design',{}).get('packages',{}).get(package,{}).get('missing',[]) for d in decks) if decks else 0
+    return dict(version=POLICY_VERSION,early_no_spell=early,finisher_uncast=finisher,guilds=needs,
+        low_weight=.15+.35*early,finisher_weight=.12+.25*finisher,
+        note='权重来自整副牌的缺口与真实行为；胜率仅做收缩后的弱压力信号。未施放牌不扣分，未知牌不伪造样本。')
+
+def utility(card,model,game_stats=None,spec=None):
+    available=[g for g in GUILDS if card['identity']=='C' or set(card['identity'])<=set(g)]
+    role=sum(model['guilds'][g]['pressure']*(
+        model['low_weight']*(card['mv']<=2)*(1+model['guilds'][g]['low'])+
+        .18*card['interaction']*(1+model['guilds'][g]['interaction'])+
+        .10*card['draw']*(1+model['guilds'][g]['draw'])+
+        model['finisher_weight']*card['finisher']*(1+model['guilds'][g]['finisher'])+
+        .08*card['creature']*(1+model['guilds'][g]['creature'])) for g in available)/max(1,len(available))
+    observed=game_stats or {}
+    # Positive evidence only: no negative inference about unseen cards or undrawn hands.
+    use=.06*observed.get('cast_games',0)/(observed.get('deck_games',0)+8)
+    components=package_roles(card)
+    support=sum(model['guilds'][g].get('package_gaps',{}).get(p+':'+k,0)*components[p]['return_' if k=='return' else k]
+        for g in available for p,keys in {'sacrifice':['fodder','outlet','reward'],'reanimator':['entry','return','target']}.items() for k in keys)/max(1,len(available))
+    from .brackets import score_adjustment
+    return card['quality']+role+use+min(.06,.03*support)+(design_bonus(card,spec)+score_adjustment(card,spec) if spec else 0)-.9*opponent_gift(card)
+
+def objective(report):
+    return .40*report['mean_strength']+.40*report['p10_strength']-.20*report['guild_gap']
+
+def propose_revision(catalog,rows,spec,protocol,evidence,drafts,progress=print):
+    config=configuration();index=card_index(config)
+    model=feedback_model(catalog,evidence,drafts)
+    present={r['name'] for r in rows};pins={catalog.resolve(n) for n in spec.pins}
+    eligible=[c for c in catalog.cards.values() if not exclusion_reasons(c,spec) and engine_name(c['name'],index)]
+    by_slot=defaultdict(list)
+    for c in eligible:
+        if c['kind']=='land' or c['name'] in present or opponent_gift(c) or unsupported_cost(c):continue
+        by_slot[(c['identity'],c['bucket'],c['mv']>=6)].append(c)
+    for pool in by_slot.values():pool.sort(key=lambda c:(-utility(c,model,spec=spec),c['name']))
+    ranked=[]
+    for i,row in enumerate(rows):
+        old=catalog.cards[row['name']];stat=drafts['cards'].get(old['name'],{})
+        if old['name'] in pins or old['name'] in CORE_GUARD or row['role']=='Land':continue
+        if row['role']=='Commander':
+            if engine_name(old['name'],index):continue
+            options=sorted([c for c in eligible if c['commander'] and c['identity']==old['identity'] and c['name'] not in present],key=lambda c:-utility(c,model,spec=spec))[:5]
+            priority=4
+        else:
+            exposures=stat.get('eligible_pool',0)
+            if exposures<12:continue
+            inclusion=(stat.get('included',0)+3)/(exposures+6)
+            # Preserve political engines and the existing well-calibrated core.
+            if re.search(r'\bmonarch\b|\binitiative\b',old['text'],re.I):continue
+            priority=(1-inclusion)+max(0,3.65-old['quality'])*.45+.8*opponent_gift(old)
+            pool=by_slot[(old['identity'],old['bucket'],old['mv']>=6)]
+            # Role caps can already be saturated. Screen each actual replacement,
+            # rather than letting infeasible high-score cards hide all alternatives.
+            options=[]
+            for c in pool:
+                if c['creature']!=old['creature']:continue
+                trial=[dict(r) for r in rows];trial[i]['name']=c['name']
+                if not audit(catalog,trial,spec,strict=True)['hard_errors']:options.append(c)
+                if len(options)>=8:break
+        for c in options:
+            if row['role']=='Main' and c['creature']!=old['creature']:continue
+            improvement=utility(c,model,spec=spec)-utility(old,model,evidence['cards'].get(old['name']),spec=spec)
+            if row['role']=='Main' and (improvement<-.4 or c['quality']<old['quality']-.45):continue
+            ranked.append((priority+improvement*.75,i,c,improvement))
+    ranked.sort(key=lambda x:(-x[0],x[1],x[2]['name']))
+    # Test a small number of audited alternatives per outgoing card, then promote
+    # only on development seeds. Holdout data is not consulted here.
+    candidate=list(dict(r) for r in rows);changes=[];taken=set();considered=[]
+    current=drafts;best_value=objective(current);attempts=Counter()
+    for _,i,c,gain in ranked:
+        if len(changes)>=protocol['max_swaps']:break
+        if len(considered)>=protocol.get('max_evaluated_alternatives',80):break
+        if i in taken or c['name'] in {r['name'] for r in candidate}:continue
+        if attempts[i]>=3:continue
+        old=catalog.cards[candidate[i]['name']]
+        trial=[dict(r) for r in candidate];trial[i]['name']=c['name']
+        checked=audit(catalog,trial,spec,strict=True)
+        if checked['hard_errors']:continue
+        attempts[i]+=1
+        progress(f'评估替换 {old["name"]} → {c["name"]}；已采用 {len(changes)} 张')
+        evaluated=draft_evaluation(catalog,trial,spec,protocol['ranking_seeds'],protocol['ranking_guilds'])
+        value=objective(evaluated)
+        supported=not engine_name(old['name'],index)
+        group_changes={g:evaluated['guilds'][g]['mean_strength']-drafts['guilds'][g]['mean_strength'] for g in GUILDS}
+        accept=(value>best_value+.000015 and evaluated['mean_strength']>=current['mean_strength']-.00015
+                and evaluated['p10_strength']>=current['p10_strength']-.0008
+                and evaluated['guild_gap']<=drafts['guild_gap']+.002
+                and min(group_changes.values())>=-.006) or (supported and value>=best_value-.0005)
+        record=dict(remove=old['name'],add=c['name'],role=trial[i]['role'],identity=old['identity'],
+            bucket=old['bucket'],draft_usage=drafts['cards'].get(old['name'],{}),
+            forge_usage=evidence['cards'].get(old['name'],{}),utility_gain=round(gain,5),
+            development_objective_before=round(best_value,6),development_objective_after=round(value,6),
+            accepted=accept,reason=('Forge 未实现，换为同色合规指挥官' if supported else
+                '训练轮抓中使用率与牌组缺口触发候选；Forge 行为与收缩色组信号参与排序；同色同费用档替换后，训练桌低分位与均衡目标改善'))
+        considered.append(record)
+        if accept:
+            candidate=trial;current=evaluated;best_value=value;taken.add(i);changes.append(record)
+    if not changes:raise ValueError('训练数据下没有通过约束与开发集门槛的替换；未生成虚假改进')
+    result=dict(cards=candidate,spec=spec.to_dict(),audit=audit(catalog,candidate,spec,strict=True),solver=None,
+        changes=dict(removed=[r['remove'] for r in changes],added=[r['add'] for r in changes]),
+        provenance=dict(snapshot=catalog.snapshot,catalog=catalog.signature,features=VERSION,source=POLICY_VERSION,
+            feedback=model,training_match=evidence['match_id'],training_draft_seeds=protocol['ranking_seeds']))
+    return result,dict(model=model,swaps=changes,considered=considered,training_before=drafts,training_after=current)
+
+def paired_structural(before,after):
+    a={(r['pod'],r['seat']):r['strength'] for r in before['observations']}
+    b={(r['pod'],r['seat']):r['strength'] for r in after['observations']}
+    diffs=np.array([b[k]-a[k] for k in sorted(a)])
+    # Resample entire draft pods; decks from a table are dependent.
+    by_pod=defaultdict(list)
+    for k in a:by_pod[k[0]].append(b[k]-a[k])
+    means=np.array([statistics.mean(v) for v in by_pod.values()]);rng=np.random.default_rng(781)
+    bootstrap=np.array([np.mean(rng.choice(means,len(means),replace=True)) for _ in range(1000)])
+    return dict(mean_difference=float(np.mean(diffs)),pod_bootstrap95=[float(x) for x in np.quantile(bootstrap,[.025,.975])],
+        better=int(sum(diffs>1e-9)),equal=int(sum(abs(diffs)<=1e-9)),worse=int(sum(diffs< -1e-9)),
+        mean_before=before['mean_strength'],mean_after=after['mean_strength'],p10_before=before['p10_strength'],p10_after=after['p10_strength'],
+        gap_before=before['guild_gap'],gap_after=after['guild_gap'],
+        guild_differences={g:after['guilds'][g]['mean_strength']-before['guilds'][g]['mean_strength'] for g in GUILDS})
+
+def cross_cube(catalog,before,after,protocol,out,progress=print):
+    """Matched old/new draft-seat decks face the same untouched third deck."""
+    config=configuration();index=card_index(config);folder=out/'cross';folder.mkdir(exist_ok=True)
+    decks_dir=folder/'decks';decks_dir.mkdir(exist_ok=True);fixtures=[];tasks=[];records=[]
+    fingerprint=lambda d:json.dumps([d['commander'],sorted(d['spells']),sorted(d['lands']),d['basics']],sort_keys=True)
+    for p,(a,b) in enumerate(zip(before['tables'],after['tables'])):
+        for seat in range(3):
+            old=a['decks'][seat];new=b['decks'][seat];anchor=a['decks'][(seat+1)%3]
+            if fingerprint(old)==fingerprint(new):continue
+            if not all(d['buildable'] and d.get('engine_supported') for d in [old,new,anchor]):continue
+            n=len(fixtures);ids=[f'f{n:03d}_old',f'f{n:03d}_new',f'f{n:03d}_anchor']
+            for deck,id_ in zip([old,new,anchor],ids):write_deck(deck,decks_dir/(id_+'.dck'),index,catalog)
+            fixtures.append(dict(fixture=n,pod=p,seat=seat,old=old,new=new,anchor=anchor,ids=ids))
+            for g in range(3):
+                tasks.append((n,g,ids[g:]+ids[:g],protocol['holdout_seeds'][p]+50000+seat*100+g))
+    with ThreadPoolExecutor(max_workers=protocol['game_workers']) as pool:
+        pending={pool.submit(run_battle,config,decks_dir,order,seed,protocol['clock_seconds'],folder,
+            f'fixture{n:03d}_game{g:03d}.log'):(n,g) for n,g,order,seed in tasks}
+        for future in as_completed(pending):
+            n,g=pending[future];records.append(dict(fixture=n,game=g,**future.result()))
+            progress(f'新旧牌组交叉对局 {len(records)}/{len(tasks)}：{records[-1]["outcome"]}')
+            save(folder/'games.json',records)
+    counts=Counter()
+    for r in records:
+        counts[r['outcome']]+=1
+        if r['outcome']=='win':counts[r['winner'].rsplit('_',1)[1]+'_wins']+=1
+    result=dict(fixtures=fixtures,games=sorted(records,key=lambda r:(r['fixture'],r['game'])),summary=dict(counts),
+        matched_fixtures=len(fixtures),attempted=len(records),
+        limitation='每个相同轮抓种子/席位的旧牌组与新牌组、固定旧版第三副牌同桌，三局换座。完全相同牌组不重复测试。同桌相关且每桌共享牌组，小样本结果不是独立胜率证据。')
+    save(out/'cross_match.json',result);return result
+
+def paired_behavior(before,after):
+    """Only compare game/seat observations valid in both versions."""
+    indexed=[]
+    for evidence in [before,after]:
+        own={}
+        for t in evidence['traces']:
+            for id_,p in t['players'].items():
+                seat=int(re.search(r'_s(\d+)_',id_)[1])
+                own[(t['pod'],t['game'],seat)]=p
+        indexed.append(own)
+    a,b=indexed;shared=sorted(set(a)&set(b))
+    metrics={}
+    for field in ['no_spell_first4_rate','finisher_casts','interaction_casts','spellcasts']:
+        metrics[field]=dict(before=statistics.mean(a[k][field] for k in shared) if shared else None,
+            after=statistics.mean(b[k][field] for k in shared) if shared else None)
+    return dict(paired_player_observations=len(shared),paired_games=len({k[:2] for k in shared}),metrics=metrics,
+        limitation='仅比较两版都正常完成的同种子/局序/玩家席位；同桌重复相关。异常导致缺失选择偏差，行为不是独立牌力标签。')
+
+def finish_revision(catalog,out,progress=print):
+    """Resume the frozen candidate; never retune against these holdouts."""
+    read=lambda n:json.loads((out/n).read_text(encoding='utf-8'))
+    base=read('base_cube.json');candidate=read('candidate.json');selection=read('selection.json');protocol=read('protocol.json')
+    spec=BuildSpec.from_dict(base['spec']);rows=candidate['cards']
+    digest=hashlib.sha256(json.dumps(rows,sort_keys=True).encode()).hexdigest()
+    frozen=out/'frozen_candidate.json'
+    if frozen.exists() and read('frozen_candidate.json')['sha256']!=digest:raise ValueError('已冻结的候选发生变化，禁止复用测试集')
+    save(frozen,dict(sha256=digest,policy=POLICY_VERSION,created=datetime.now(timezone.utc).isoformat()))
+    progress('独立测试：100 桌 / 300 副牌组，新旧使用同样轮抓种子与色组')
+    for label,items in [('before',base['cards']),('after',rows)]:
+        file=out/f'holdout_drafts_{label}.json'
+        if not file.exists():save(file,draft_evaluation(catalog,items,spec,protocol['structural_holdout_seeds'],protocol['structural_holdout_guilds']))
+    paired=paired_structural(read('holdout_drafts_before.json'),read('holdout_drafts_after.json'))
+    for label,items in [('before',base['cards']),('after',rows)]:
+        file=out/f'holdout_match_{label}.json'
+        if not file.exists():
+            progress(f'独立 Forge 对局：{label}，4 桌 / 12 局')
+            value=simulate(catalog,items,spec,4,3,protocol['clock_seconds'],progress,
+                pod_seeds=protocol['holdout_seeds'],preferred_guilds=protocol['holdout_guilds'],workers=protocol['game_workers'])
+            save(file,value)
+        save(out/f'holdout_evidence_{label}.json',evidence_from_match(catalog,read(f'holdout_match_{label}.json')))
+    if not (out/'cross_match.json').exists():cross_cube(catalog,read('holdout_match_before.json'),read('holdout_match_after.json'),protocol,out,progress)
+    before=read('holdout_evidence_before.json');after=read('holdout_evidence_after.json');cross=read('cross_match.json')
+    strict=audit(catalog,rows,spec,strict=True)
+    gates=dict(hard_constraints=strict['hard_errors']==0,
+        all_buildable=read('holdout_drafts_after.json')['buildable_rate']==1,
+        structural_mean=paired['mean_difference']>0,structural_lower_tail=paired['p10_after']>=paired['p10_before'],
+        structural_balance=paired['gap_after']<=paired['gap_before']+.002,
+        no_guild_regression=min(paired['guild_differences'].values())>=-.006,
+        native_completion=after['summary']['completed']>=before['summary']['completed'] and after['summary']['skipped_pods']==0,
+        cross_evidence=cross['attempted']>=9 and cross['summary'].get('win',0)+cross['summary'].get('draw',0)>=cross['attempted']*.9,
+        observed_cross_regression=cross['summary'].get('new_wins',0)>=cross['summary'].get('old_wins',0))
+    status='provisional' if all(gates.values()) else 'experimental'
+    if not (out/'exported_candidate.json').exists() or read('exported_candidate.json')['provenance'].get('validation_status')!=status:
+        candidate['spec']['name']+=' · Forge反馈改进候选'
+        candidate['provenance'].update(optimization_id=out.name,validation_status=status,candidate_sha256=digest)
+        save(out/'exported_candidate.json',export_run(catalog,candidate))
+    revision=read('exported_candidate.json')
+    report=dict(optimization_id=out.name,status=status,gates=gates,revision=revision,swaps=selection['swaps'],
+        structural=paired,behavior=paired_behavior(before,after),training=read('training_evidence.json')['summary'],
+        forge_before=before['summary'],forge_after=after['summary'],cross=cross['summary'],cross_games=cross['attempted'],
+        matches=dict(training=read('training_match.json')['match_id'],before=read('holdout_match_before.json')['match_id'],after=read('holdout_match_after.json')['match_id']),
+        limitation='结构指标来自固定轮抓/组牌机器人与启发式特征；实战来自 Forge 原生 AI。颜色均衡、娱乐性及人类驾驶下的强度未获统计证明。若门槛失败保留为实验候选，不自动推荐替换。')
+    save(out/'report.json',report)
+    with (out/'swaps.csv').open('w',encoding='utf-8-sig',newline='') as f:
+        writer=csv.DictWriter(f,fieldnames=['remove','add','role','identity','reason']);writer.writeheader()
+        writer.writerows({k:r[k] for k in writer.fieldnames} for r in selection['swaps'])
+    lines=['# Forge 数据反馈改进报告','',f'状态：{status}；替换 {len(selection["swaps"])} 张；600 张原版保留。','',
+        '## Problem','用实际对局及轮抓后可构筑牌组改进 Cube。','',
+        '## Inputs',f'训练 {report["training"]["completed"]}/{report["training"]["attempted"]} 局；100 桌开发轮抓。独立测试 100 桌、300 副牌组；新旧各 12 局；交叉 {cross["attempted"]} 局。','',
+        '## Checks performed','按整桌保留独立种子；卡表先冻结；每次替换严格审计；同色、同费用档、生物密度保留；引擎异常排除；每三局轮换座位。','',
+        '## Findings',f'结构指标（不是胜率）：均值 {paired["mean_before"]:.6f} → {paired["mean_after"]:.6f}；第10百分位 {paired["p10_before"]:.6f} → {paired["p10_after"]:.6f}；色组差 {paired["gap_before"]:.6f} → {paired["gap_after"]:.6f}。',
+        f'按整桌重采样的结构差95%区间：{paired["pod_bootstrap95"]}。',
+        f'实战前后：{json.dumps(before["summary"],ensure_ascii=False)} → {json.dumps(after["summary"],ensure_ascii=False)}。',
+        f'交叉对局：{json.dumps(cross["summary"],ensure_ascii=False)}。','',
+        f'共同正常对局的行为对比：{json.dumps(report["behavior"],ensure_ascii=False)}。','',
+        '## Decision',f'门槛：{json.dumps(gates,ensure_ascii=False)}。'+('可作为暂定改进版；实战优势仍待更多整桌样本确认。' if status=='provisional' else '仅保留实验版本，未达到全部改进门槛，不能宣称优于原版。'),'',
+        '## Risks',report['limitation']+' 自己的回合没有施放不等于卡手；未施放不等于抽到的死牌。每局必有一名胜者，因此同一Cube自我对局的平均胜率不能衡量整体升级。','',
+        '## Next actions','继续积累新轮抓桌；仅在新的开发数据上调整，再声明新的保留集；不以人工作牌力标签为必要输入。','',
+        '## Artifacts',f'新版 runs/{revision["run_id"]}；protocol.json、training_evidence.json、selection.json、holdout*.json、cross_match.json、cross/*.log、swaps.csv。','',
+        '## 替换明细','']
+    lines.extend(f'- {r["remove"]} → **{r["add"]}**（{r["identity"]}）：{r["reason"]}' for r in selection['swaps'])
+    (out/'report.md').write_text('\n\n'.join(lines)+'\n',encoding='utf-8')
+    with zipfile.ZipFile(out/'evidence.zip','w',zipfile.ZIP_DEFLATED) as z:
+        for p in out.rglob('*'):
+            if p.is_file() and p.name!='evidence.zip':z.write(p,p.relative_to(out))
+        for label,id_ in report['matches'].items():
+            from .forge import MATCHES
+            for p in (MATCHES/id_).rglob('*'):
+                if p.is_file() and p.name!='evidence.zip':z.write(p,Path('native_matches')/label/p.relative_to(MATCHES/id_))
+    return report
+
+def optimize(catalog,rows,spec,progress=print,workers=3,clock=120,training_pods=10):
+    if audit(catalog,rows,spec,strict=True)['hard_errors']:raise ValueError('先修复严格审计中的错误')
+    if type(training_pods)!=int or not 10<=training_pods<=30:raise ValueError('训练需至少10桌覆盖双色，最多30桌')
+    id_=datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')+'_'+uuid.uuid4().hex[:8]
+    out=OPTIMIZATIONS/id_;out.mkdir(parents=True)
+    # Each subsequent optimization receives fresh declared seeds; a new card list
+    # must not repeatedly be selected against a previously inspected holdout.
+    seed=random.SystemRandom().randrange(1,1_000_000_000)
+    protocol,match,evidence,drafts=collect_training(catalog,rows,spec,out,training_pods,workers,clock,progress,experiment_seed=seed)
+    candidate,selection=propose_revision(catalog,rows,spec,protocol,evidence,drafts,progress)
+    save(out/'candidate.json',candidate);save(out/'selection.json',selection)
+    return finish_revision(catalog,out,progress)
