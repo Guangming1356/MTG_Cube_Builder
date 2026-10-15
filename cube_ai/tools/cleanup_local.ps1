@@ -41,9 +41,17 @@ if (Test-Path -LiteralPath $cubeEntrance) {
     try { $cubeStatus = Invoke-RestMethod -Uri ($cubeConnection.url.TrimEnd('/') + '/api/status') -TimeoutSec 5 } catch {}
     if ($cubeStatus -and $cubeStatus.active_jobs -gt 0) { throw '助手还有运行中的任务，请等任务结束后再清理。' }
 }
+$cubeGhCommand = Get-Command gh -ErrorAction SilentlyContinue
+$cubeGhExecutable = if ($cubeGhCommand) { $cubeGhCommand.Source } else { $null }
+if (!$cubeGhExecutable) {
+    foreach ($cubeCandidate in @((Join-Path $env:ProgramFiles 'GitHub CLI\gh.exe'), (Join-Path $env:LOCALAPPDATA 'Microsoft\WinGet\Links\gh.exe'))) {
+        if (Test-Path -LiteralPath $cubeCandidate -PathType Leaf) { $cubeGhExecutable = $cubeCandidate; break }
+    }
+}
+if (!$cubeGhExecutable) { throw '未找到 GitHub CLI，未开始清理。' }
 Write-Host '正在重新核对 GitHub 上的 8 个历史版本……'
 foreach ($cubeRelease in $cubeReceipt.releases) {
-    $cubeRemoteText = & gh api "repos/$cubeRepository/releases/tags/$($cubeRelease.tag)"
+    $cubeRemoteText = & $cubeGhExecutable api "repos/$cubeRepository/releases/tags/$($cubeRelease.tag)"
     if ($LASTEXITCODE -ne 0) { throw '无法验证 GitHub，未开始清理。请确认联网并登录 GitHub。' }
     $cubeRemote = $cubeRemoteText | ConvertFrom-Json
     if ($cubeRemote.draft) { throw '远端版本尚未正式发布。' }
