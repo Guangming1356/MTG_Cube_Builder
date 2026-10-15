@@ -25,6 +25,8 @@ from .chatgpt_auth import ChatGPTAuth
 from .design import public_guide
 from .brackets import public_profiles
 from .launcher import APP_ID, WORKSPACE_ID
+from .experiment import PROFILES, execution_resources, experiment_budget
+from . import acceleration,sim_cache,surrogate
 
 def example_label(name):
     if name=='reference_commandercube':return 'CubeCobra 指挥官参考牌表（仅供学习）'
@@ -100,7 +102,7 @@ class Application:
         operation=data.get("operation","build");spec=BuildSpec.from_dict(data.get("spec"))
         rows,unknown=self.rows(data)
         if unknown:raise ValueError("这些牌名未被确认: "+", ".join(unknown[:10]))
-        if operation not in {"build","repair","stress","forge","optimize","chat","plan"}:raise ValueError("未知操作")
+        if operation not in {"build","repair","stress","forge","optimize","chat","plan","learn-games"}:raise ValueError("未知操作")
         if operation in {"repair","stress","forge","optimize"} and not rows:raise ValueError("请先载入牌表")
         if operation in {'chat','plan'}:
             message=data.get('message','')
@@ -127,10 +129,13 @@ class Application:
                     if run_id and re.fullmatch(r"[A-Za-z0-9_]+",run_id) and (RUNS/run_id).is_dir():
                         (RUNS/run_id/"stress.json").write_text(json.dumps(value,ensure_ascii=False,indent=2),encoding="utf-8")
                 elif operation=="forge":
-                    value=forge_simulate(self.catalog,rows,spec,data.get('pods',2),data.get('games_per_pod',3),data.get('clock_seconds',90),progress)
+                    value=forge_simulate(self.catalog,rows,spec,data.get('pods',10),data.get('games_per_pod',3),data.get('clock_seconds',90),progress,workers=data.get('workers',0))
                 elif operation=="optimize":
-                    value=optimize(self.catalog,rows,spec,progress,workers=3,clock=data.get('clock_seconds',120))
+                    value=optimize(self.catalog,rows,spec,progress,workers=data.get('workers',0),clock=data.get('clock_seconds',120),
+                        profile=data.get('profile','standard'),max_swaps=data.get('max_swaps'),training_pods=data.get('training_pods'),
+                        scoring_backend=data.get('scoring_backend','auto'))
                     value['revision']=self.present(value['revision'])
+                elif operation=='learn-games':value=surrogate.train(self.catalog,progress)
                 elif operation=="chat":
                     progress("AI 正在检索牌库、技能与构筑审计")
                     value=advise(self.catalog,self.knowledge,spec,rows,data.get("message",""),client)
@@ -175,10 +180,12 @@ def handler_for(app):
                 if path.path=='/api/library':return self.json(200,library(app))
                 if path.path=='/api/design-guide':return self.json(200,public_guide())
                 if path.path=='/api/brackets':return self.json(200,public_profiles())
+                if path.path=='/api/performance':return self.json(200,dict(gpu=acceleration.status(),cache=sim_cache.status(),learning=surrogate.status(app.catalog),forge=forge_status()))
                 if path.path=="/api/status":
                     with app.lock:active_jobs=sum(j['state'] in {'queued','running'} for j in app.jobs.values())
                     return self.json(200,dict(version=__version__,cards=len(app.catalog.cards),snapshot=app.catalog.snapshot,
                         active_jobs=active_jobs,
+                        experiments=dict(profiles={k:experiment_budget(k) for k in PROFILES},resources=execution_resources()),
                         knowledge_chunks=len(app.knowledge.chunks),gpt=app.ai_status(),themes=THEME_NAMES,
                         presets={"commander":BuildSpec.from_dict({'bracket':3}).to_dict(),"classic":BuildSpec.from_dict({"mode":"classic"}).to_dict()},brackets=public_profiles(),
                         feedback=app.feedback.status("commander:commander"),forge=forge_status()))

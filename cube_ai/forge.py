@@ -1,5 +1,6 @@
 """Native Forge AI games. Outcomes come exclusively from the rules engine."""
 import hashlib
+from contextlib import contextmanager
 import json
 import os
 import random
@@ -8,8 +9,9 @@ import subprocess
 import threading
 import time
 import uuid
+from functools import lru_cache
 import zipfile
-from concurrent.futures import ThreadPoolExecutor, as_completed
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait, FIRST_COMPLETED
 from collections import Counter, defaultdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -18,11 +20,66 @@ from .config import ROOT
 from .draft import draft_pod
 from .engine import audit
 from .forge_setup import RUNTIME, sha256, write_profile
+from .experiment import MAX_PODS, execution_resources
 
 MATCHES=ROOT/'matches'
-_lock=threading.Lock()
+_lock=threading.RLock()
+_worker_state=threading.local()
 _indices={}
+_campaign=threading.local()
 BASICS=dict(W='Plains',U='Island',B='Swamp',R='Mountain',G='Forest',C='Wastes')
+
+@contextmanager
+def forge_session():
+    """One campaign owns the machine budget, including selection/validation stages."""
+    if not _lock.acquire(blocking=False):raise ValueError('已有 Forge 实战或改进任务，请等它完成')
+    if not getattr(_campaign,'depth',0):_campaign.resources=None
+    _campaign.depth=getattr(_campaign,'depth',0)+1
+    try:yield
+    finally:
+        _campaign.depth-=1
+        if not _campaign.depth:
+            from .forge_worker import close_all
+            close_all()
+        _lock.release()
+
+def campaign_resources(workers=0):
+    reserved=getattr(_campaign,'resources',None) if getattr(_campaign,'depth',0) else None
+    if reserved and type(workers)==int and workers in {0,reserved['workers']}:return dict(reserved)
+    try:resources=execution_resources(workers)
+    except ValueError:
+        if not getattr(_campaign,'depth',0) or type(workers)!=int or not 1<=workers<=8:raise
+        resources=execution_resources(0);resources.update(requested=workers,reduced_for_current_memory=True)
+    if getattr(_campaign,'depth',0):_campaign.resources=resources
+    return resources
+
+def worker_home(config,out):
+    """Share read-only assets; isolate preferences, caches and rolling engine logs."""
+    key=(str(Path(config['home']).resolve()),str(out.resolve()))
+    cached=getattr(_worker_state,'home',None)
+    if cached and cached[0]==key:return cached[1]
+    home=out/'engine'/('worker_'+uuid.uuid4().hex[:10]);home.mkdir(parents=True)
+    target=Path(config['home']).resolve()/'res';link=home/'res'
+    if os.name=='nt':
+        env=dict(os.environ,CUBE_SIM_LINK=str(link.resolve()),CUBE_SIM_TARGET=str(target))
+        subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',
+            "$ErrorActionPreference='Stop'; New-Item -ItemType Junction -Path $env:CUBE_SIM_LINK -Target $env:CUBE_SIM_TARGET | Out-Null"],
+            env=env,check=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+            creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+    else:link.symlink_to(target,target_is_directory=True)
+    def escaped(path):
+        return ''.join(c if ord(c)<128 else f'\\u{ord(c):04x}' for c in path.resolve().as_posix())
+    (home/'forge.profile.properties').write_text(
+        f'userDir={escaped(home/"userdata")}\ncacheDir={escaped(home/"cache")}\n',encoding='ascii')
+    _worker_state.home=(key,home)
+    return home
+
+def evidence_files(out):
+    # Do not follow shared resource junctions or package disposable JVM caches.
+    for root,dirs,files in os.walk(out,followlinks=False):
+        dirs[:]=[d for d in dirs if d!='engine']
+        for name in files:
+            if name!='evidence.zip':yield Path(root)/name
 
 def configuration():
     path=RUNTIME/'forge.json'
@@ -41,12 +98,20 @@ def configuration():
     home=Path(value.get('home','__missing__')).resolve()
     if not os.getenv('CUBE_FORGE_HOME') and home.is_relative_to(RUNTIME.resolve()) and (home/'.installed').is_file():
         write_profile(home)
+    value['backend']='isolated'
+    try:
+        from .forge_worker import available,bridge_signature
+        verified=json.loads((RUNTIME/'acceleration/resident-validation.json').read_text(encoding='utf8'))
+        st=Path(value['jar']).stat();actual=_file_hash(value['jar'],st.st_size,st.st_mtime_ns)
+        if available() and verified.get('passed') and verified.get('jar_sha256')==actual and verified.get('bridge_sha256')==bridge_signature():
+            value['backend']='resident'
+    except (OSError,ValueError,KeyError):pass
     return value
 
 def status():
     try:
         config=configuration()
-        return dict(available=True,version=config['version'],pilot='Forge 原生 AI',seed_supported=True)
+        return dict(available=True,version=config['version'],pilot='Forge 原生 AI',seed_supported=True,backend=config['backend'])
     except (ValueError,OSError,KeyError,json.JSONDecodeError) as e:
         return dict(available=False,reason=str(e))
 
@@ -136,20 +201,63 @@ def wilson(wins,n):
     return [round(max(0,center-delta),3),round(min(1,center+delta),3)]
 
 def run_battle(config,deck_dir,order,seed,clock_seconds,out,log_name):
+    from .sim_cache import key,get,put
+    cache_key=None
+    if config.get('cache',True) and config.get('version')!='external':
+        def fingerprint(p):
+            p=Path(p);s=p.stat();return _file_hash(str(p.resolve()),s.st_size,s.st_mtime_ns)
+        from .forge_worker import bridge_signature
+        cache_key=key('game',['native-cache-2',fingerprint(config['jar']),fingerprint(config['java']),
+            bridge_signature() if config.get('backend')=='resident' else '',
+            config.get('backend','isolated'),order,seed,clock_seconds,
+            [fingerprint(deck_dir/(n+'.dck')) for n in order]])
+        cached=get(cache_key)
+        if cached and isinstance(cached.get('record'),dict) and isinstance(cached.get('log'),str) and cached['record'].get('outcome') in {'win','draw'}:
+            (out/log_name).write_text(cached['log'],encoding='utf8')
+            return dict(cached['record'],log=log_name,wall_seconds=0.0,cache_hit=True,
+                original_wall_seconds=cached['record']['wall_seconds'])
+    record=_run_battle(config,deck_dir,order,seed,clock_seconds,out,log_name)
+    record['cache_hit']=False
+    if cache_key and record['outcome'] in {'win','draw'}:
+        put(cache_key,dict(record=record,log=(out/log_name).read_text(encoding='utf8')),'game')
+    return record
+
+@lru_cache(maxsize=128)
+def _file_hash(path,size,mtime):return sha256(Path(path))
+
+def _run_battle(config,deck_dir,order,seed,clock_seconds,out,log_name):
     """One native game, usable for both a draft pod and controlled cross-Cube matches."""
+    fallback=None
+    if config.get('backend')=='resident':
+        from .forge_worker import run,WorkerUnavailable
+        def fresh_home(c,o):
+            _worker_state.home=None
+            return worker_home(c,o)
+        try:
+            value=run(config,fresh_home,deck_dir,order,seed,clock_seconds,out,log_name)
+            log=value.pop('log_text');timeout=value.pop('process_timeout')
+            value.update(order=order,seed=seed,log=log_name,**parse_log(log,value['returncode'],timeout))
+            if value['outcome']=='win' and value['winner'] not in order:
+                value.update(outcome='unrecognized',error='获胜牌组与提交牌组不匹配',winner=None)
+            return value
+        except WorkerUnavailable as e:
+            fallback=str(e) # Startup unavailable: the untouched native CLI is the fallback.
     command=[config['java'],'-Xmx2048m','-Dfile.encoding=UTF-8','-Djava.awt.headless=true',
         '-jar',config['jar'],'sim','-D',str(deck_dir.resolve()),'-d',*[n+'.dck' for n in order],
         '-f','Commander','-n','1','-s',str(seed),'-c',str(clock_seconds)]
+    home=worker_home(config,out)
     started=time.monotonic();timeout=False
     try:
-        process=subprocess.run(command,cwd=config['home'],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
+        process=subprocess.run(command,cwd=home,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
             timeout=clock_seconds+90,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
         log=process.stdout.decode('utf-8',errors='replace');code=process.returncode
     except subprocess.TimeoutExpired as e:
         log=(e.stdout or b'').decode('utf-8',errors='replace');code=-1;timeout=True
     (out/log_name).write_text(log,encoding='utf-8')
     record=dict(order=order,seed=seed,command=command,log=log_name,
-        wall_seconds=round(time.monotonic()-started,3),returncode=code,**parse_log(log,code,timeout))
+        backend='isolated',resident_fallback=fallback,
+        wall_seconds=round(time.monotonic()-started,3),worker_directory=str(home.relative_to(out)),
+        returncode=code,**parse_log(log,code,timeout))
     if record['outcome']=='win' and record['winner'] not in order:
         record.update(outcome='unrecognized',error='获胜牌组与提交牌组不匹配',winner=None)
     return record
@@ -163,56 +271,71 @@ def summarize(records,pods):
             g=groups[identities[deck_id]];g['appearances']+=1
             if r['winner']==deck_id:g['wins']+=1
             if r['outcome']=='draw':g['draws']+=1
+    completed_pods={r['pod'] for r in records if r.get('pod') is not None and r['outcome'] in {'win','draw'}}
+    independent={g:len({p['pod'] for p in pods if p.get('pod') in completed_pods and
+        any(d.get('buildable') and d.get('identity')==g for d in p['decks'])}) for g in groups}
     return dict(outcomes=dict(outcomes),games=len(records),completed=outcomes['win']+outcomes['draw'],
+        executed_games=sum(not r.get('cache_hit') for r in records),reused_games=sum(bool(r.get('cache_hit')) for r in records),
+        completed_draft_pods=len(completed_pods),independent_pods_by_guild=independent,
         guilds={g:dict(c,win_rate=round(c['wins']/c['appearances'],3),wilson95=wilson(c['wins'],c['appearances'])) for g,c in sorted(groups.items())},
         median_turns=__import__('statistics').median([r['turns'] for r in records if r['turns'] is not None and r['outcome'] in {'win','draw'}]) if any(r['turns'] is not None and r['outcome'] in {'win','draw'} for r in records) else None)
 
-def simulate(catalog,rows,spec,pods=2,games_per_pod=3,clock_seconds=90,progress=lambda _:None,
-             pod_seeds=None,preferred_guilds=None,workers=1):
+def simulate(catalog,rows,spec,pods=10,games_per_pod=3,clock_seconds=90,progress=lambda _:None,
+             pod_seeds=None,preferred_guilds=None,workers=0):
     if spec.mode!='commander' or spec.players!=3:raise ValueError('当前 Forge 集成针对三人 Commander Cube')
-    if type(pods)!=int or not 1<=pods<=30:raise ValueError('实战轮抓桌数需为 1–30')
+    if type(pods)!=int or not 1<=pods<=MAX_PODS:raise ValueError(f'实战轮抓桌数需为 1–{MAX_PODS}')
     if type(games_per_pod)!=int or not 3<=games_per_pod<=30 or games_per_pod%3:raise ValueError('每桌对局数需为 3–30 且是 3 的倍数，以轮换座位')
     if type(clock_seconds)!=int or not 15<=clock_seconds<=300:raise ValueError('单局时限需为 15–300 秒')
-    if type(workers)!=int or not 1<=workers<=3:raise ValueError('Forge 同时运行进程需为 1–3')
+    resources=campaign_resources(workers);workers=resources['workers']
     if pod_seeds is not None and (len(pod_seeds)!=pods or any(type(s)!=int for s in pod_seeds)):raise ValueError('每桌随机种子数量无效')
     if preferred_guilds is not None and len(preferred_guilds)!=pods:raise ValueError('每桌轮抓色组数量无效')
     if audit(catalog,rows,spec)['hard_errors']:raise ValueError('请先修复牌表中的硬性错误')
     config=configuration();index=card_index(config);support=coverage(rows,config)
     if support['missing']:progress('Forge 尚未支持：'+', '.join(support['missing'][:15])+'；若实际组入牌组，整桌跳过并记录，不换牌')
-    # A single JVM job at a time prevents competing native AI jobs from distorting clocks.
+    # Reserve a bounded machine budget for the entire campaign.
     if not _lock.acquire(blocking=False):raise ValueError('已有 Forge 实战任务，请等它完成')
     try:
         match_id=datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')+'_'+uuid.uuid4().hex[:8]
         out=MATCHES/match_id;out.mkdir(parents=True)
-        deck_dir=out/'decks';deck_dir.mkdir();records=[];tables=[];rng=random.Random(spec.seed);tasks=[]
+        deck_dir=out/'decks';deck_dir.mkdir();records=[];tables=[];rng=random.Random(spec.seed)
+        started=time.monotonic();draft_seconds=0;submitted=0;peak_pending=0
         cube_hash=hashlib.sha256(json.dumps(rows,sort_keys=True).encode()).hexdigest()
-        for p in range(pods):
-            progress(f'Forge 实战：第 {p+1}/{pods} 桌轮抓与组牌')
-            pod_rng=random.Random(pod_seeds[p]) if pod_seeds is not None else rng
-            pod=draft_pod(catalog,rows,spec,pod_rng,preferred_guilds[p] if preferred_guilds is not None else None);pod['pod']=p
-            pod['draft_seed']=pod_seeds[p] if pod_seeds is not None else None
-            for d in pod['decks']:
-                d['id']=f'p{p:03d}_s{d["seat"]}_{d.get("identity","none")}'
-                if d['buildable']:
-                    d['unsupported']=[n for n in d['spells']+d['lands']+[d['commander']] if not engine_name(n,index)]
-                    d['engine_supported']=not d['unsupported']
-                    if d['engine_supported']:d['export']=write_deck(d,deck_dir/(d['id']+'.dck'),index,catalog,spec)
-            tables.append(pod)
-            if not all(d['buildable'] and d.get('engine_supported') for d in pod['decks']):
-                pod['skip_reason']='无指挥官或组入了 Forge 未实现的牌'
-                progress('整桌因无指挥官或包含未实现牌而跳过；保留真实轮抓，不换牌组');continue
-            ids=[d['id'] for d in pod['decks']]
-            for game in range(games_per_pod):
-                rotation=game%3;order=ids[rotation:]+ids[:rotation]
-                seed=(pod_seeds[p] if pod_seeds is not None else spec.seed+p*10000)+game
-                tasks.append((p,game,order,seed,f'pod{p:03d}_game{game:03d}.log'))
         with ThreadPoolExecutor(max_workers=workers) as pool:
-            pending={pool.submit(run_battle,config,deck_dir,order,seed,clock_seconds,out,log): (p,g)
-                for p,g,order,seed,log in tasks}
-            for future in as_completed(pending):
-                p,g=pending[future];record=dict(pod=p,game=g,**future.result());records.append(record)
-                progress(f'Forge 实战已完成 {len(records)}/{len(tasks)} 局：桌 {p+1} 局 {g+1} {record["outcome"]}')
+            pending={}
+            def collect(futures):
+                for future in futures:
+                    p,g=pending.pop(future);record=dict(pod=p,game=g,**future.result());records.append(record)
+                    progress(f'Forge 已完成 {len(records)}/{submitted} 局；已组牌 {len(tables)}/{pods} 桌；同时最多 {workers} 局：{record["outcome"]}')
                 (out/'games.json').write_text(json.dumps(sorted(records,key=lambda r:(r['pod'],r['game'])),ensure_ascii=False,indent=2),encoding='utf-8')
+            for p in range(pods):
+                # Backpressure bounds queued JVM jobs and keeps results/progress flowing.
+                while len(pending)>=workers*2:
+                    collect(wait(pending,return_when=FIRST_COMPLETED)[0])
+                progress(f'轮抓与对局并行：组牌第 {p+1}/{pods} 桌；已完成 {len(records)} 局')
+                draft_started=time.monotonic()
+                pod_rng=random.Random(pod_seeds[p]) if pod_seeds is not None else rng
+                pod=draft_pod(catalog,rows,spec,pod_rng,preferred_guilds[p] if preferred_guilds is not None else None);pod['pod']=p
+                pod['draft_seed']=pod_seeds[p] if pod_seeds is not None else None
+                for d in pod['decks']:
+                    d['id']=f'p{p:03d}_s{d["seat"]}_{d.get("identity","none")}'
+                    if d['buildable']:
+                        d['unsupported']=[n for n in d['spells']+d['lands']+[d['commander']] if not engine_name(n,index)]
+                        d['engine_supported']=not d['unsupported']
+                        if d['engine_supported']:d['export']=write_deck(d,deck_dir/(d['id']+'.dck'),index,catalog,spec)
+                tables.append(pod);draft_seconds+=time.monotonic()-draft_started
+                if not all(d['buildable'] and d.get('engine_supported') for d in pod['decks']):
+                    pod['skip_reason']='无指挥官或组入了 Forge 未实现的牌'
+                    progress('整桌因无指挥官或包含未实现牌而跳过；保留真实轮抓，不换牌组');continue
+                ids=[d['id'] for d in pod['decks']]
+                for game in range(games_per_pod):
+                    while len(pending)>=workers*2:collect(wait(pending,return_when=FIRST_COMPLETED)[0])
+                    rotation=game%3;order=ids[rotation:]+ids[:rotation]
+                    seed=(pod_seeds[p] if pod_seeds is not None else spec.seed+p*10000)+game
+                    pending[pool.submit(run_battle,config,deck_dir,order,seed,clock_seconds,out,f'pod{p:03d}_game{game:03d}.log')]=(p,game)
+                    submitted+=1
+                    peak_pending=max(peak_pending,len(pending))
+                collect([f for f in pending if f.done()])
+            while pending:collect(wait(pending,return_when=FIRST_COMPLETED)[0])
         records.sort(key=lambda r:(r['pod'],r['game']))
         from .brackets import cube_report
         result=dict(match_id=match_id,path=str(out),engine=dict(version=config['version'],jar_sha256=sha256(config['jar']),
@@ -222,6 +345,9 @@ def simulate(catalog,rows,spec,pods=2,games_per_pod=3,clock_seconds=90,progress=
                 free_basic_lands=True,land_count='按曲线与可用牌决定，不固定 22 张',rounds=spec.rounds,
                 pack_size=spec.pack_size,pick_count=spec.pick_count,discard_after_pass=spec.discard_after_pass),
             tables=tables,games=records,summary=summarize(records,tables),workers=workers,bracket=cube_report(catalog,rows,spec),
+            execution=dict(resources,wall_seconds=round(time.monotonic()-started,3),draft_seconds=round(draft_seconds,3),
+                game_wall_seconds_sum=round(sum(r['wall_seconds'] for r in records),3),peak_pending=peak_pending,
+                isolated_worker_directories=True),
             pod_seeds=pod_seeds,preferred_guilds=preferred_guilds,
             skipped_pods=sum('skip_reason' in p for p in tables),
             limitation='真实 Forge 规则引擎对局，使用 Forge 原生 AI。胜率反映这套抓牌、组牌与驾驶策略；原生 AI 对控制、组合技和多人政治有偏差。小样本及同桌重复对局不能证明色组平衡；Wilson 区间仅为描述性参考。超时与引擎错误不计作正常和局或胜负。')
@@ -231,7 +357,10 @@ def simulate(catalog,rows,spec,pods=2,games_per_pod=3,clock_seconds=90,progress=
         text+='\n'.join(f'- 桌 {r["pod"]+1} 局 {r["game"]+1}：{r["outcome"]}；胜者 {r["winner"]}；回合 {r["turns"]}；日志 [{r["log"]}]({r["log"]})' for r in records)
         (out/'report.md').write_text(text+'\n',encoding='utf-8')
         with zipfile.ZipFile(out/'evidence.zip','w',zipfile.ZIP_DEFLATED) as archive:
-            for p in out.rglob('*'):
-                if p.is_file() and p.name!='evidence.zip':archive.write(p,p.relative_to(out))
+            for p in evidence_files(out):archive.write(p,p.relative_to(out))
         return result
-    finally:_lock.release()
+    finally:
+        if not getattr(_campaign,'depth',0):
+            from .forge_worker import close_all
+            close_all()
+        _lock.release()

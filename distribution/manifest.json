@@ -1,5 +1,5 @@
 {
-  "version": "20261015-r3-portable-ai",
+  "version": "20261015-r4-portable-ai",
   "platform": "Windows 10/11 x64",
   "python": "3.13.16",
   "python_sha256": "97dae5274cc54867065e8d5a3226e48c35017ed332a0fdb0e27d5b5821961297",
@@ -66,14 +66,5 @@
     "user_cubes_included": false,
     "preferences_included": false
   },
-  "card_snapshot": "2026-10-08",
-  "fixes": [
-    "完整流式输出恢复",
-    "互动、扫场、终结与曲线偏好参与真实构筑",
-    "全参数规划与未落实要求提示",
-    "替换前复核、唯一保存及配置恢复",
-    "并发设置与刷新保护",
-    "缓存与CSV导入修复",
-    "网页启动顺序与操作前置条件修复"
-  ]
+  "card_snapshot": "2026-10-08"
 }

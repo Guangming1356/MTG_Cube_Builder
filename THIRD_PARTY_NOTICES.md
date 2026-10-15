@@ -17,6 +17,13 @@ Forge 2.0.15：cube_ai/runtime/forge-2.0.15/LICENSE.txt（GPLv3）。
 完整对应上游源码：本文件夹中的 forge-2.0.15-sources.tar.gz。
 上游及构建定义：https://github.com/Card-Forge/forge/tree/forge-2.0.15
 未修改 Forge 二进制；安装器 SHA256 和来源见 cube_ai/runtime/forge.json。
+常驻桥接：cube_ai/native/CubeWorker.java，GPL-3.0-or-later；对应编译类随包提供。
+构建来源与校验：cube_ai/runtime/acceleration/native-build.json。ECJ仅为构建依赖，本包不含编译器。
+
+可选 NVIDIA Runtime Compilation 12.4.127：
+cube_ai/runtime/acceleration/nvrtc64_120_0.dll、nvrtc-builtins64_124.dll。
+完整许可证保留于同目录 License.txt；组件来源和 SHA256 见 dependencies.json。
+NVIDIA驱动由用户电脑提供，本包不含驱动。没有兼容驱动时使用CPU。
 
 Eclipse Temurin OpenJDK 21.0.12.1+1：cube_ai/runtime/java21 内的 legal 与 NOTICE。
 完整对应官方源码：本文件夹中的 OpenJDK21U-jdk-sources_21.0.12.1_1.tar.gz。

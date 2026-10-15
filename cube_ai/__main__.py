@@ -11,11 +11,13 @@ def main():
     parser.add_argument("--file",type=Path)
     parser.add_argument("--trials",type=int,default=100)
     parser.add_argument("--output",type=Path)
-    parser.add_argument("--pods",type=int,default=2)
+    parser.add_argument("--pods",type=int,default=10)
     parser.add_argument("--games-per-pod",type=int,default=3)
     parser.add_argument("--clock",type=int,default=90)
-    parser.add_argument("--workers",type=int,default=1)
-    parser.add_argument("--training-pods",type=int,default=10)
+    parser.add_argument("--workers",type=int,default=0,help='同时对局数；0 为自动，最多8')
+    parser.add_argument("--training-pods",type=int,default=None)
+    parser.add_argument("--profile",choices=['quick','standard','deep'],default='standard')
+    parser.add_argument("--max-swaps",type=int,default=None)
     args=parser.parse_args()
     if args.command=="serve":
         from .server import serve
@@ -57,7 +59,8 @@ def main():
         elif args.command=='forge-optimize':
             from .optimize import optimize
             if unknown or not rows:parser.error('forge-optimize 需要合法、已确认的 --file')
-            result=optimize(catalog,rows,spec,progress=lambda m:print(m,flush=True),workers=args.workers,clock=args.clock,training_pods=args.training_pods)
+            result=optimize(catalog,rows,spec,progress=lambda m:print(m,flush=True),workers=args.workers,clock=args.clock,
+                training_pods=args.training_pods,profile=args.profile,max_swaps=args.max_swaps)
         else:
             store=FeedbackStore();result=store.train(catalog,store.context(spec))
     text=json.dumps(result,ensure_ascii=False,indent=2)

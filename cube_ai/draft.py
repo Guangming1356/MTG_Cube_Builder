@@ -43,8 +43,8 @@ def opening_test(catalog,spells,land_names,identity,deck_size,rng,hands=40):
             options=lands[:turn]
             spells_here=[c for c in hand if c["kind"]!="land"]
             if any(affordable(c["mana_cost"],options) for c in spells_here):ready[turn]+=1
-    return dict(ready_by_turn={str(t):round(ready[t]/hands,3) for t in range(1,5)},
-                opening_2_to_4_lands=round(sum(2<=x<=4 for x in landcounts)/hands,3),
+    return dict(ready_by_turn={str(t):round(ready[t]/hands,3) for t in range(1,5)} if hands else {},
+                opening_2_to_4_lands=round(sum(2<=x<=4 for x in landcounts)/hands,3) if hands else None,
                 basics=dict(allocated), assumptions="每回合抽牌，每回合最多一地；不结算法术力加速、替代费用、调度、牌面效果或对手行为。来源使用所抽地牌的可产颜色上界。")
 
 def deal(catalog,rows,spec,rng):
@@ -71,14 +71,16 @@ def deal(catalog,rows,spec,rng):
         rng.shuffle(pack);packs.append(pack)
     return packs
 
-def draft_pod(catalog,rows,spec,rng,preferred_guilds=None):
+def draft_pod(catalog,rows,spec,rng,preferred_guilds=None,readiness_hands=40,_packs=None):
     """A single table: decks, pools and packs are never mixed across tables."""
-    packs=deal(catalog,rows,spec,rng)
+    packs=deal(catalog,rows,spec,rng) if _packs is None else _packs
     opened=[[r["name"] for r in p] for p in packs]
     decks=[]
     pools=[[] for _ in range(spec.players)]
     preferred=list(preferred_guilds) if preferred_guilds is not None else [rng.choice(GUILDS) for _ in pools]
     if len(preferred)!=spec.players or any(g not in GUILDS for g in preferred):raise ValueError('轮抓偏好色组必须与玩家数相同且均为有效双色')
+    bucket_counts=[Counter() for _ in pools];land_counts=[0 for _ in pools];have_commanders=[False for _ in pools]
+    themes_by_seat=[set(spec.pair_themes.get(g,[])) for g in preferred]
     for rd in range(spec.rounds):
         current=packs[rd*spec.players:(rd+1)*spec.players]
         steps=spec.players if spec.discard_after_pass else spec.pack_size
@@ -88,15 +90,18 @@ def draft_pod(catalog,rows,spec,rng,preferred_guilds=None):
                 for _ in range(spec.pick_count):
                     if not pack:break
                     g=preferred[seat];pool=pools[seat]
-                    have_cmd=any(catalog.cards[r["name"]]["commander"] and catalog.cards[r["name"]]["identity"]==g for r in pool)
+                    have_cmd=have_commanders[seat]
                     def grade(r):
                         c=catalog.cards[r["name"]];fits=c["identity"]=="C" or set(c["identity"])<=set(g)
-                        if c["kind"]=="land":return 3.0+.4*len(set(c["fixing"]) & set(g))-.4*sum(x["role"]=="Land" for x in pool)
-                        themes=set(spec.pair_themes.get(g,[]))
+                        if c["kind"]=="land":return 3.0+.4*len(set(c["fixing"]) & set(g))-.4*land_counts[seat]
+                        themes=themes_by_seat[seat]
                         signal=.18*len(themes & set(c["enablers"]+c["payoffs"]))
                         cmd=1.8 if spec.mode=="commander" and not have_cmd and c["commander"] and c["identity"]==g else 0
-                        return c["quality"]+signal+cmd+(1.4 if fits else -2.5)-.1*sum(catalog.cards[x["name"]]["bucket"]==c["bucket"] for x in pool)
+                        return c["quality"]+signal+cmd+(1.4 if fits else -2.5)-.1*bucket_counts[seat][c['bucket']]
                     card=max(pack,key=grade);pack.remove(card);pool.append(card)
+                    selected=catalog.cards[card['name']];bucket_counts[seat][selected['bucket']]+=1
+                    land_counts[seat]+=card['role']=='Land'
+                    have_commanders[seat]|=bool(selected['commander'] and selected['identity']==g)
     for seat,pool in enumerate(pools):
         g=preferred[seat]
         commands=[catalog.cards[r["name"]] for r in pool if catalog.cards[r["name"]]["commander"]] if spec.mode=="commander" else [None]
@@ -136,7 +141,7 @@ def draft_pod(catalog,rows,spec,rng,preferred_guilds=None):
             if may_add(catalog,([commander['name']] if commander else [])+spells+accepted,n,spec):accepted.append(n)
         lands=accepted[:land_target]
         # Commander is in the command zone, excluded from random opening hands.
-        ready=opening_test(catalog,spells,lands,identity,target-int(bool(commander)),rng)
+        ready=opening_test(catalog,spells,lands,identity,target-int(bool(commander)),rng,hands=readiness_hands)
         decks.append(dict(seat=seat,guild=g,identity=identity,buildable=True,ready=ready,
             commander=commander and commander["name"],spells=spells,lands=lands,
             basics=ready["basics"],land_count=land_target,spell_count=len(spells),

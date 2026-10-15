@@ -60,7 +60,7 @@ $('home-save').onclick=()=>guard(async()=>{
   setCube(await api('/api/save',{spec:spec(),cards:current.cards,require_valid:true}));await refreshRuns();
   view('home');focusCurrent();notice('牌表已保存。点击下面的“下载牌表”即可下载文件。');
 });
-$('home-optimize').onclick=()=>{view('report');$('optimize-run').click();};
+$('home-optimize').onclick=()=>{view('report');$('optimization-profile').scrollIntoView({block:'center'});$('optimization-profile').focus();};
 $('home-guide').onclick=()=>view('guide');
 onCubeReady(()=>{$('quick-build').disabled=false;window.updateHome();});
 (async()=>{
