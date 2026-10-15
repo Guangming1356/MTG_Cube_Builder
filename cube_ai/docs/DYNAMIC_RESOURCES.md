@@ -53,7 +53,7 @@
 
 - 实现：resources.py、game_queue.py；接入 forge.py、forge_worker.py、optimize.py。
 - 测试：tests/test_dynamic_games.py。
-- 可复现原生测速：tools/benchmark_dynamic.py；关闭结果缓存，按固定／动态／动态／固定顺序运行。
+- 原生测速验收关闭结果缓存，按固定／动态／动态／固定顺序运行。一次性验收脚本已清理，已有报告保留；后续机器测速使用页面中的测速入口。
 - 初版实测：private/benchmarks/dynamic_20261015_193615/report.json。原始记录仅保留在本机，不进入分享包。
 - 修订实测：private/benchmarks/dynamic_20261015_194213/report.json，包含各源码校验、每局结果及资源调整。
 - 系统指标定义：[Windows 进程内存](https://learn.microsoft.com/en-us/windows/win32/api/psapi/ns-psapi-process_memory_counters_ex)、[可用物理内存与可提交内存](https://learn.microsoft.com/en-us/windows/win32/api/sysinfoapi/ns-sysinfoapi-memorystatusex)。
