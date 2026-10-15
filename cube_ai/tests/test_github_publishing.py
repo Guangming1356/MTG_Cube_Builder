@@ -1,4 +1,5 @@
 import hashlib
+import json
 import zipfile
 
 import pytest
@@ -57,3 +58,13 @@ def test_source_export_excludes_runtime_card_database_and_state():
                  'cube_ai/private/ai-settings.bin','cube_ai/.env']:
         assert not publisher.source_member(name)
     assert publisher.tag('20261015-r7')=='v2026.10.15-r7'
+
+
+def test_draft_release_is_found_across_paginated_listing(monkeypatch):
+    draft=dict(tag_name='v2026.10.15-r7',id=123,draft=True,assets=[])
+    calls=[]
+    def request(args):calls.append(args);return json.dumps([[dict(tag_name='other')],[draft]])
+    monkeypatch.setattr(publisher,'run',request)
+    assert publisher.get_release('owner/repo','v2026.10.15-r7')==draft
+    assert '--paginate' in calls[0] and '--slurp' in calls[0]
+    with pytest.raises(ValueError,match='Release not found'):publisher.get_release('owner/repo','missing')

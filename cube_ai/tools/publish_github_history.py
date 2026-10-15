@@ -346,6 +346,11 @@ def prepare(repo):
     run(['git','config','user.email',f"{user['id']}+{user['login']}@users.noreply.github.com"],CHECKOUT)
     run(['git','config','commit.gpgsign','false'],CHECKOUT)
     run(['git','config','credential.https://github.com.helper','!gh auth git-credential'],CHECKOUT)
+    run(['git','config','--local','--replace-all','credential.helper',''],CHECKOUT)
+    run(['git','config','--local','--add','credential.helper','!gh auth git-credential'],CHECKOUT)
+    run(['git','config','credential.interactive','false'],CHECKOUT)
+    if os.name=='nt':run(['git','config','http.sslBackend','schannel'],CHECKOUT)
+    run(['git','config','http.version','HTTP/1.1'],CHECKOUT)
     needles=private_needles();releases=[]
     existing=set(run(['git','tag'],CHECKOUT).splitlines())
     for index,version in enumerate(VERSIONS):
@@ -416,6 +421,16 @@ def private_repo(repo):
     return data
 
 
+def get_release(repo,release_tag):
+    # The tag endpoint omits draft releases. Authenticated listing includes
+    # drafts, so an interrupted upload can safely resume before publication.
+    pages=json.loads(run(['gh','api',f'repos/{repo}/releases?per_page=100','--paginate','--slurp']))
+    for page in pages:
+        for release in page:
+            if release['tag_name']==release_tag:return release
+    raise ValueError('Release not found: '+release_tag)
+
+
 def publish(repo, workers):
     private_repo(repo)
     prepared=json.loads((STATE/'prepared.json').read_text(encoding='utf8'))
@@ -433,7 +448,7 @@ def publish(repo, workers):
         with GUARD:
             state['releases'].setdefault(version,{}).update(value)
             atomic(state_path,state)
-    def api_release(release_tag):return json.loads(run(['gh','api',f'repos/{repo}/releases/tags/{release_tag}']))
+    def api_release(release_tag):return get_release(repo,release_tag)
     def publish_one(release):
         version=release['version'];release_tag=release['tag'];folder=OUTPUT/version
         print('Uploading '+release_tag,flush=True);update(version,state='uploading',started=time.time())
