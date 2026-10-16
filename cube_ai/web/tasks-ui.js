@@ -33,7 +33,7 @@ async function showTaskResult(id){
     $('ai-output').innerHTML=`<h3>已完成的顾问建议</h3><p>${esc(result.analysis||result.summary||'分析已完成，完整结果见下方。')}</p><details><summary>完整建议</summary><pre>${esc(JSON.stringify(result,null,2))}</pre></details>`;view('advisor');
   }else{
     const target=job.operation==='calibrate'?'calibration-result':'learning-result';
-    $(target).innerHTML=`<h3>${esc(taskLabels[job.operation])}已完成</h3><details open><summary>查看结果</summary><pre>${esc(JSON.stringify(result,null,2))}</pre></details>`;
+    if(job.operation==='calibrate')renderCalibration(result);else renderLearning(result);
     view('report');$(target).scrollIntoView({block:'start'});await refreshPerformance();
   }
   notice(`已打开${job.cube_name?'「'+job.cube_name+'」的':''}${taskLabels[job.operation]||'任务'}结果。`);
@@ -45,13 +45,16 @@ async function refreshTaskMonitor(){
   try{
     const jobs=await api('/api/jobs'),panel=$('task-monitor');
     const active=jobs.filter(job=>liveTaskStates.has(job.state));
-    const recent=jobs.filter(job=>!liveTaskStates.has(job.state)).slice(-5).reverse();
+    const finished=jobs.filter(job=>!liveTaskStates.has(job.state));
+    const recent=finished.slice(-5).reverse(),older=finished.slice(0,-5).reverse();
     taskMonitorActive=active.length>0;
-    const signature=JSON.stringify([active,recent,Math.floor(Date.now()/10000)]);
+    const signature=JSON.stringify([active,recent,older,Math.floor(Date.now()/10000)]);
     if(signature===taskPanelSignature)return;taskPanelSignature=signature;
     panel.hidden=!active.length&&!recent.length;if(panel.hidden)return;
     const wasOpen=panel.querySelector('details')?.open;
+    const olderOpen=panel.querySelector('[data-older-tasks]')?.open;
     panel.innerHTML=`<h2>任务与进度</h2>${active.length?'<p class="sub">暂停会等待当前步骤结束并释放空闲对局内存；继续时可能需要稍等。强制结束会回收该任务的计算进程，已保存结果保留。</p>'+active.map(taskRow).join(''):'<p class="sub">当前没有进行中的任务。</p>'}${recent.length?`<details ${wasOpen?'open':''}><summary>最近任务 · ${recent.length} 条记录</summary>${recent.map(taskRow).join('')}</details>`:''}`;
+    if(older.length)panel.insertAdjacentHTML('beforeend',`<details data-older-tasks ${olderOpen?'open':''}><summary>更早任务 · ${older.length} 条记录</summary>${older.map(taskRow).join('')}</details>`);
     for(const button of panel.querySelectorAll('button[data-task]'))button.onclick=async()=>{
       button.disabled=true;
       try{const result=await api('/api/task/control',{id:button.dataset.task,action:button.dataset.action});notice(result.progress);taskPanelSignature='';await refreshTaskMonitor();}

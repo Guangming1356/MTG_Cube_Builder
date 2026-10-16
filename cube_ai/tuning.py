@@ -115,6 +115,19 @@ def choose(phases,minimum_normal=5,goal='balanced'):
     return min(near,key=lambda p:(p['workers'],statistics.median(p['seconds']),p['jvm_profile']))
 
 
+def profile_choices(requested,best,profile_name,snapshot=None):
+    """Recheck full-heap capacity for the actual profile, before starting JVMs."""
+    from .resources import system_memory,capacity
+    settings=JVM_PROFILES[profile_name]
+    memory=capacity(system_memory() if snapshot is None else snapshot,
+                    heap_mib=settings['heap_mib'],ceiling=min(8,max(1,(os.cpu_count() or 1)//2)))
+    allowed=[n for n in requested if n<=memory['capacity']]
+    if not allowed:return [],memory
+    # A smaller heap may permit another concurrent game. Test that boundary in
+    # addition to the default profile winner, rather than fixing its old limit.
+    return sorted({min(best,max(allowed)),max(allowed)} & set(allowed)),memory
+
+
 def calibrate(catalog,rows,spec,progress=print,mode='quick',worker_choices=None,
               jvm_choices=None,repetitions=2,fixtures=None,apply_result=True,goal='balanced'):
     from .draft import draft_pod
@@ -129,11 +142,11 @@ def calibrate(catalog,rows,spec,progress=print,mode='quick',worker_choices=None,
         resources=execution_resources();config=configuration()
         if config.get('backend')!='resident':raise ValueError('先安装并验证常驻 Forge，才能校准')
         maximum=resources['maximum']
-        choices=worker_choices if worker_choices is not None else ([1,2,3,4] if mode=='quick' else [1,2,3,4,6,8])
-        if not choices or any(type(n)!=int or not 1<=n<=8 for n in choices):raise ValueError('无效并行数')
-        choices=sorted({n for n in choices if n<=maximum})
+        requested=worker_choices if worker_choices is not None else ([1,2,3,4] if mode=='quick' else [1,2,3,4,6,8])
+        if not requested or any(type(n)!=int or not 1<=n<=8 for n in requested):raise ValueError('无效并行数')
+        choices=sorted({n for n in requested if n<=maximum})
         if not choices:raise ValueError('当前资源不足以运行所选并行数')
-        variants=jvm_choices if jvm_choices is not None else (['default','bounded_gc','parallel_gc'] if mode=='quick' else list(JVM_PROFILES))
+        variants=jvm_choices if jvm_choices is not None else list(JVM_PROFILES)
         if not variants or any(n not in JVM_PROFILES for n in variants):raise ValueError('无效引擎配置')
         out=RUNS/(datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')+'_'+uuid.uuid4().hex[:8]);out.mkdir(parents=True)
         deck_dir=out/'decks';deck_dir.mkdir();index=card_index(config)
@@ -154,14 +167,18 @@ def calibrate(catalog,rows,spec,progress=print,mode='quick',worker_choices=None,
                     d['id']=f'calibration_{p}_{d["seat"]}';ids.append(d['id']);write_deck(d,deck_dir/(d['id']+'.dck'),index,catalog,spec)
                 tasks.extend(dict(order=ids[r:]+ids[:r],seed=seed+r) for r in range(3))
         report=dict(version=VERSION,path=str(out),machine=machine_key(),engine=engine_key(config),phases=[],
-            resources=resources,cache=False,fixture_games=len(tasks),adopted=False,goal=goal,
+            resources=resources,cache=False,fixture_games=len(tasks),adopted=False,goal=goal,profile_specific_concurrency=True,skipped_configurations=[],
             note='同一批固定牌组与种子重复测速，不进入学习或独立强度样本。均衡模式在最快耗时15%以内优先低内存，内存相差10%以内再选更快设置；缺少内存数据时沿用速度对照。')
         def save():
             tmp=out/'report.tmp';tmp.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf8');tmp.replace(out/'report.json')
         reference=None
         def phase(workers,jvm):
             nonlocal reference
-            settings=JVM_PROFILES[jvm];phase=dict(workers=workers,jvm_profile=jvm,seconds=[],runs=[],compatible=True,normal_games=0,attempted_games=len(tasks),peak_engine_private_bytes=0)
+            settings=JVM_PROFILES[jvm]
+            eligible,memory=profile_choices([workers],workers,jvm)
+            if not eligible:
+                report['skipped_configurations'].append(dict(workers=workers,jvm_profile=jvm,reason='当前空闲内存不足',memory=memory));save();return
+            phase=dict(workers=workers,jvm_profile=jvm,seconds=[],runs=[],compatible=True,normal_games=0,attempted_games=len(tasks),peak_engine_private_bytes=0,memory_budget_at_start=memory)
             report['phases'].append(phase)
             # Never reuse a JVM across different parameter sets or measurements.
             for repeat in range(repetitions):
@@ -190,10 +207,14 @@ def calibrate(catalog,rows,spec,progress=print,mode='quick',worker_choices=None,
             best=choose(report['phases'],goal=goal)
             best_workers=best['workers'] if best else choices[0]
             for jvm in variants:
-                if jvm!='default':phase(best_workers,jvm)
+                if jvm!='default':
+                    tested,_=profile_choices(requested,best_workers,jvm)
+                    for workers in tested:phase(workers,jvm)
             selected=choose(report['phases'],goal=goal)
             if selected and apply_result:
-                report.update(adopted=True,workers=selected['workers'],jvm_profile=selected['jvm_profile'],measured=datetime.now(timezone.utc).isoformat(),tested_workers=choices)
+                by_profile={name:sorted({p['workers'] for p in report['phases'] if p['jvm_profile']==name}) for name in JVM_PROFILES}
+                report.update(adopted=True,workers=selected['workers'],jvm_profile=selected['jvm_profile'],measured=datetime.now(timezone.utc).isoformat(),
+                              tested_workers=by_profile[selected['jvm_profile']],tested_workers_by_profile=by_profile)
                 value={k:report[k] for k in ['version','machine','engine','adopted','workers','jvm_profile','measured','tested_workers']}
                 value['evidence']=out.name;value['goal']=goal;PROFILE.parent.mkdir(parents=True,exist_ok=True)
                 tmp=PROFILE.with_suffix('.tmp');tmp.write_text(json.dumps(value,ensure_ascii=False,indent=2),encoding='utf8');tmp.replace(PROFILE)

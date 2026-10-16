@@ -153,6 +153,17 @@ def test_workers_with_different_java_options_cannot_be_reused():
     assert worker_key(config)!=worker_key(dict(config,jvm_options=['-XX:ActiveProcessorCount=2']))
 
 
+def test_calibration_can_test_more_games_only_when_actual_heap_fits_memory(monkeypatch):
+    monkeypatch.setattr(tuning.os,'cpu_count',lambda:24)
+    snapshot=dict(available=12*2**30,commit_available=30*2**30)
+    default,budget=tuning.profile_choices([1,2,3,4],2,'default',snapshot)
+    compact,smaller=tuning.profile_choices([1,2,3,4],2,'compact_heap',snapshot)
+    assert default==[2,3] and compact==[2,4]
+    assert budget['per_engine_bytes']>smaller['per_engine_bytes']
+    assert tuning.profile_choices([1,2],2,'compact_heap',snapshot)[0]==[2] # User cap is retained.
+    assert tuning.profile_choices([2,4],2,'compact_heap',{})[0]==[]
+
+
 def test_calibration_runs_repeats_and_saves_only_validated_profile(fixture,tmp_path,monkeypatch):
     from cube_ai import forge,experiment
     c,rows,spec=fixture;decks=tmp_path/'decks';decks.mkdir()

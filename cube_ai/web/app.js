@@ -123,16 +123,24 @@ async function refreshPerformance(){
  $('forge-compat-mode').value=compat?.mode||'auto';
  $('forge-compat-save').onclick=()=>guard(async()=>{await api('/api/forge/compatibility',{mode:$('forge-compat-mode').value});await refreshPerformance();notice('引擎设置已保存，后续任务使用新设置。');});
 }
-$('learn-games').onclick=()=>guard(async()=>{const r=await job('learn-games');$('learning-result').innerHTML=`<p>${r.games} 局 / ${r.independent_groups} 组独立牌组；${r.active?'模型通过验证，供后续改进使用':r.status==='insufficient_data'?'数据不足，继续积累对局':'未达到采用门槛，当前评分保持原样'}。</p><details><summary>学习与验证结果</summary><pre>${esc(JSON.stringify(r,null,2))}</pre></details>`;await refreshPerformance();notice(r.status==='insufficient_data'?'已完成检查；对局数据不足，继续积累后再学习。':'历史实战学习与独立验证完成。');});
+function renderLearning(r){
+ const improvement=Number(r.relative_improvement),testGroups=r.split_groups?.test;
+ $('learning-result').innerHTML=`<h3>这次实战学习${r.active?'通过了验证':r.status==='insufficient_data'?'需要更多数据':'未达到采用门槛'}</h3><p>${esc(r.games)} 局 / ${esc(r.independent_groups)} 组独立牌组${testGroups?`，其中 ${esc(testGroups)} 组用于最终测试`:''}。</p>${r.reason?`<p>${esc(r.reason)}</p>`:''}${Number.isFinite(improvement)?`<p>保留数据上的预测误差比简单基准${improvement>=0?'低':'高'} ${(Math.abs(improvement)*100).toFixed(1)}%。${r.active?'已超过本次采用门槛。':'尚不能据此稳定改善评分，继续使用已有有效模型或固定评分。'}</p>`:''}<p class="sub">${r.excluded_engine_games?`引擎版本不同或实际入口无法核实，排除 ${esc(r.excluded_engine_games)} 次记录。`:''}${r.censored_games?`观察周期不足，跳过 ${esc(r.censored_games)} 次记录。`:''} 异常和重复比赛不参加训练。预测的是 Forge AI 的行动表现，不是人类娱乐性或牌力认证。当前是否启用以本页引擎与模型状态为准。</p>`;
+}
+$('learn-games').onclick=()=>guard(async()=>{const r=await job('learn-games');renderLearning(r);await refreshPerformance();notice(r.status==='insufficient_data'?'已完成检查；对局数据不足，继续积累后再学习。':'历史实战学习与独立验证完成。');});
 refreshPerformance().catch(e=>{$('performance-summary').textContent=e.message;});
 
 function renderSpeedDetails(o){
  const search=o.search,timing=o.timings;
  return `${search?`<p>搜索 ${search.proposals} 个候选，${search.full_evaluations} 个完成完整开发轮抓；复用 ${search.reused_tables} 桌，重新轮抓 ${search.redrafted_tables} 桌。${search.approximate?'分轮筛选可能遗漏候选；采用前均已通过完整开发检查。':''}</p>`:''}${timing?`<details><summary>查看各阶段耗时</summary><p class="sub">部分阶段重叠执行，时间不能直接相加。</p><table><thead><tr><th>阶段</th><th>耗时</th><th>状态</th></tr></thead><tbody>${timing.stages.map(s=>`<tr><td>${esc(({development_drafts:'开发轮抓',training_forge:'训练对局',training_trace_analysis:'训练记录分析',candidate_search:'筛选替换',holdout_structure_before:'原版结构验收',holdout_structure_after:'新版结构验收',holdout_forge_before:'原版实战验收',holdout_forge_after:'新版实战验收',holdout_trace_before:'原版记录分析',holdout_trace_after:'新版记录分析',cross_forge:'新旧交叉对局',export_evidence:'保存证据',learning_update:'更新评分模型'})[s.stage]||s.stage)}</td><td>${s.seconds.toFixed(1)} 秒</td><td>${s.status==='completed'?'完成':'异常'}</td></tr>`).join('')}</tbody></table></details>`:''}`;
 }
+function renderCalibration(r){
+ const profile=name=>({default:'默认内存设置',bounded_gc:'限制后台回收线程',parallel_gc:'吞吐量优先回收',compact_heap:'较小内存占用'})[name]||name;
+ $('calibration-result').innerHTML=`<h3>这次测速${r.adopted?'找到了可用设置':'没有足够有效对照'}</h3><p>${r.adopted?`选择同时 ${esc(r.workers)} 局，${esc(profile(r.jvm_profile))}。`:'保留原设置。'}当前是否采用以本页自动测速状态为准。</p><p class="sub">${r.profile_specific_concurrency?"已按每种内存配置重新检查可容纳的并行数。":"这是历史测速，沿用当时的并行数设置。"}表中耗时针对同一批固定比赛；内存为观测值，未测到的峰值可能更高。正常完成和完整事件一致是采用前提。</p><details><summary>查看各配置对照（${r.phases.length} 项）</summary><div class="table-wrap"><table><thead><tr><th>同时对局</th><th>配置</th><th>中位耗时</th><th>观测引擎内存</th><th>每轮正常完成</th><th>事件一致</th></tr></thead><tbody>${r.phases.map(p=>`<tr><td>${esc(p.workers)}</td><td>${esc(profile(p.jvm_profile))}</td><td>${Number(p.median_seconds).toFixed(1)} 秒</td><td>${p.peak_engine_private_bytes?(p.peak_engine_private_bytes/2**20).toFixed(0)+' MiB':'未采集'}</td><td>${esc(p.normal_games)} / ${esc(p.attempted_games??r.fixture_games)}</td><td>${p.compatible?'是':'否'}</td></tr>`).join('')}</tbody></table></div></details>${r.skipped_configurations?.length?`<p>有 ${r.skipped_configurations.length} 项配置因当前内存不足而跳过。</p>`:''}`;
+}
 $('calibrate-speed').onclick=()=>guard(async()=>{
  if(!current)throw Error('请先载入一套三人 Commander Cube');
  const r=await job('calibrate',{mode:$('calibration-mode').value,goal:$('calibration-goal').value});
- $('calibration-result').innerHTML=`<p>${r.adopted?`已采用：同时 ${r.workers} 局，${esc(({default:'默认内存设置',bounded_gc:'限制后台回收线程',parallel_gc:'吞吐量优先回收',compact_heap:'较小内存占用'})[r.jvm_profile]||r.jvm_profile)}。`:'本轮没有足够的有效对照，继续使用原设置。'}</p><details><summary>测速结果</summary><table><thead><tr><th>同时对局</th><th>配置</th><th>中位耗时</th><th>引擎内存峰值</th><th>事件一致</th></tr></thead><tbody>${r.phases.map(p=>`<tr><td>${p.workers}</td><td>${esc(p.jvm_profile)}</td><td>${p.median_seconds.toFixed(1)} 秒</td><td>${p.peak_engine_private_bytes?(p.peak_engine_private_bytes/2**20).toFixed(0)+' MB':'未采集'}</td><td>${p.compatible?'是':'否'}</td></tr>`).join('')}</tbody></table></details>`;
+ renderCalibration(r);
  await refreshPerformance();statusInfo=await api('/api/status');configureExperiments();notice(r.adopted?'测速完成，后续任务将使用测得的设置。':'测速完成；本轮未更改自动设置。');
 });
