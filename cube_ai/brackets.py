@@ -69,8 +69,8 @@ def extra_turn(card):
     # Both singular and multiple extra turns; excludes skipping turns.
     return bool(re.search(r'\b(?:take|takes) (?:an?|one|two|three|\d+|X) extra turns?\b',card.get('text',''),re.I))
 
-def card_reasons(card,spec):
-    p=profile(spec)
+def card_reasons(card,spec,*,power=None):
+    p=power or profile(spec)
     if not p:return ['项目偏好：排除额外回合'] if spec.allow_extra_turns is False and extra_turn(card) else []
     reasons=[]
     if is_gc(card) and (p['deck_gc']==0 or p['gc_limit']==0):reasons.append('该 Bracket/数量预算排除 Game Changers')
@@ -115,6 +115,30 @@ def may_add(catalog,names,name,spec):
     if not p:return True
     cards=[catalog.cards[n] for n in names+[name]]
     return not (p['deck_gc'] is not None and sum(is_gc(c) for c in cards)>p['deck_gc']) and not card_reasons(catalog.cards[name],spec)
+
+
+class DeckRules:
+    """Reuse immutable card checks within one table; count GC slots incrementally.
+
+    The public may_add function remains the reference for one-off decisions.
+    This object belongs to one draft/spec only, so edits never share stale rules.
+    """
+    def __init__(self,catalog,spec):
+        self.catalog=catalog;self.spec=spec;self.power=profile(spec);self.checks={}
+
+    def select(self,initial,candidates):
+        if not self.power:return list(candidates)
+        cap=self.power['deck_gc']
+        count=sum(is_gc(self.catalog.cards[n]) for n in initial) if cap is not None else 0
+        selected=[]
+        for name in candidates:
+            if name not in self.checks:
+                card=self.catalog.cards[name]
+                self.checks[name]=(is_gc(card),not card_reasons(card,self.spec,power=self.power))
+            gc,allowed=self.checks[name]
+            if not allowed or (cap is not None and count+gc>cap):continue
+            selected.append(name);count+=gc
+        return selected
 
 def deck_report(catalog,deck,spec):
     p=profile(spec)

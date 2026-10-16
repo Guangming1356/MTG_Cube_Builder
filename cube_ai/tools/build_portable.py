@@ -18,8 +18,8 @@ SOURCE=Path(__file__).resolve().parents[2]
 RELEASES=SOURCE/'发布包'
 CACHE=RELEASES/'构建缓存'
 PYTHON_VERSION='3.13.16'
-RELEASE_DATE='20261015'
-RELEASE_TAG=RELEASE_DATE+'-r7'
+RELEASE_DATE='20261016'
+RELEASE_TAG=RELEASE_DATE
 PYTHON_SHA='97dae5274cc54867065e8d5a3226e48c35017ed332a0fdb0e27d5b5821961297'
 JAVA_SOURCE_SHA='573057d03584ae793fb7ec9a14c76d826d9187a53efeefd99da47403a5308234'
 FORBIDDEN_NAMES={'.env','.git','__pycache__','.pytest_cache','preferences.sqlite','catalog.json',
@@ -41,6 +41,10 @@ def unzip_checked(src,dst):
         z.extractall(dst)
 
 def stage():
+    required=[CACHE/f'python-{PYTHON_VERSION}-embed-amd64.zip',CACHE/'forge-2.0.15-sources.tar.gz',CACHE/'OpenJDK21U-jdk-sources_21.0.12.1_1.tar.gz']
+    missing=[str(p.name) for p in required if not p.is_file()]
+    if not list((CACHE/'wheels').glob('*.whl')):missing.append('wheels/*.whl')
+    if missing:raise ValueError('缺少构建缓存：'+', '.join(missing)+'。请按 tools/README.md 准备；未创建构建目录。')
     target=RELEASES/'构建目录'/time.strftime('%Y%m%d_%H%M%S')/'Cube助手'
     target.mkdir(parents=True,exist_ok=False)
     app=target/'cube_ai';app.mkdir()
@@ -88,7 +92,7 @@ def stage():
     # Scan and normalize only our application text, never third-party licenses.
     for root in (app/'knowledge',app/'docs',app/'research'):
         for p in root.rglob('*.md'):
-            text=p.read_text(encoding='utf8').replace(str(SOURCE),'本项目文件夹').replace(SOURCE.as_posix(),'本项目文件夹')
+            text=p.read_text(encoding='utf8').replace('D:\\MTG\\Cube助手','本项目文件夹').replace('D:/MTG/Cube助手','本项目文件夹')
             p.write_text(text,encoding='utf8')
     (app/'requirements.txt').write_text('numpy==2.4.6\nscipy==1.18.0\nrequests==2.34.2\nPyJWT==2.13.0\ncryptography==49.0.0\n',encoding='ascii')
     (app/'.env.example').write_text('OPENAI_API_KEY=\nOPENAI_MODEL=gpt-6-astra\nOPENAI_BASE_URL=https://api.openai.com/v1\nCUBE_API_STYLE=responses\n',encoding='utf8')
@@ -206,7 +210,7 @@ def privacy_scan(target):
     bad=[]
     # A bare numeric username is also common in public IDs and scientific DLLs.
     # Match its Windows home path rather than unrelated numeric constants.
-    needles=[str(SOURCE.resolve()).encode(), str(Path.home()).encode(), b'sk-proj-']
+    needles=[b'Anaconda2026',b'D:\\MTG',b'D:/MTG',b'C:\\Users\\32860',b'C:/Users/32860',b'sk-proj-']
     for p in target.rglob('*'):
         if not p.is_file():continue
         rel=p.relative_to(target)
@@ -252,5 +256,12 @@ def package(target):
     return dest
 
 if __name__=='__main__':
-    if len(sys.argv)>1 and sys.argv[1]=='--package':package(Path(sys.argv[2]).resolve())
+    import argparse
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--version',required=True,help='YYYYMMDD or YYYYMMDD-rN; use a new version for every release')
+    parser.add_argument('--package',type=Path,help='Package a previously staged and compiled directory')
+    args=parser.parse_args()
+    if not re.fullmatch(r'20\d{6}(?:-r[1-9]\d*)?',args.version):parser.error('版本需为 YYYYMMDD 或 YYYYMMDD-rN')
+    RELEASE_TAG=args.version;RELEASE_DATE=args.version[:8]
+    if args.package:package(args.package.resolve())
     else:stage()

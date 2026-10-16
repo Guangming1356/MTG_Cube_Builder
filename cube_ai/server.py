@@ -4,6 +4,7 @@ import re
 import threading
 import uuid
 import os
+import time
 from datetime import datetime, timezone, timedelta
 from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -66,7 +67,9 @@ def execute_operation(app,operation,spec,rows,data,progress):
         if run_id and re.fullmatch(r"[A-Za-z0-9_]+",run_id) and (RUNS/run_id).is_dir():
             (RUNS/run_id/"stress.json").write_text(json.dumps(value,ensure_ascii=False,indent=2),encoding="utf-8")
     elif operation=='calibrate':
-        value=tuning.calibrate(app.catalog,rows,spec,progress,mode=data.get('mode','quick'))
+        options=dict(mode=data.get('mode','quick'))
+        if 'goal' in data:options['goal']=data['goal']
+        value=tuning.calibrate(app.catalog,rows,spec,progress,**options)
     elif operation=="forge":
         value=forge_simulate(app.catalog,rows,spec,data.get('pods',10),data.get('games_per_pod',3),data.get('clock_seconds',90),progress,workers=data.get('workers',0))
     elif operation=="optimize":
@@ -87,14 +90,49 @@ DEFAULT_ISOLATED_JOBS=True
 
 class Application:
     def __init__(self,catalog=None,ai_store=None,isolated_jobs=None):
-        self.catalog=catalog or Catalog();self.knowledge=Knowledge();self.feedback=FeedbackStore()
+        self.catalog=catalog or Catalog();self._knowledge=None;self._feedback=None;self._service_lock=threading.Lock()
         self.ai_store=ai_store or SettingsStore();self.auth=ChatGPTAuth(self.ai_store)
-        self.jobs={};self.lock=threading.Lock();self.executor=ThreadPoolExecutor(max_workers=2)
-        self.isolated_jobs=DEFAULT_ISOLATED_JOBS if isolated_jobs is None else isolated_jobs;self.controls={}
+        self.jobs={};self.lock=threading.Lock();self.executor=ThreadPoolExecutor(max_workers=2);self.closing=False
+        self.isolated_jobs=DEFAULT_ISOLATED_JOBS if isolated_jobs is None else isolated_jobs;self.controls={};self.job_paths={}
+        self.restore_jobs()
         example_root = LIBRARY if LIBRARY.is_dir() else WORKSPACE
         self.examples={p.parent.name:p for p in example_root.glob("commander_cube_600*/cube_600.csv")}
         ref=WORKSPACE/"ref_thecommandercube.csv"
         if ref.exists():self.examples["reference_commandercube"]=ref
+
+    @property
+    def knowledge(self):
+        with self._service_lock:
+            if self._knowledge is None:self._knowledge=Knowledge()
+            return self._knowledge
+
+    @property
+    def feedback(self):
+        with self._service_lock:
+            if self._feedback is None:self._feedback=FeedbackStore()
+            return self._feedback
+
+    def restore_jobs(self):
+        from . import task_process
+        paths=sorted(task_process.JOBS.glob('*/summary.json'),key=lambda p:p.stat().st_mtime,reverse=True)[:30]
+        for path in reversed(paths):
+            try:
+                job=json.loads(path.read_text(encoding='utf8'));id_=path.parent.name
+                if not re.fullmatch(r'[a-f0-9]{16}',id_) or job.get('id')!=id_ or job.get('state') not in {'done','failed','cancelled'}:continue
+                job.pop('result',None);job.pop('worker_pid',None)
+                self.jobs[id_]=job;self.job_paths[id_]=path.parent
+            except (OSError,ValueError,AttributeError):continue
+
+    def get_job(self,id_):
+        with self.lock:
+            value=dict(self.jobs[id_]) if id_ in self.jobs else None
+            path=self.job_paths.get(id_)
+        if value and value['state']=='done' and 'result' not in value and path:
+            try:
+                saved=json.loads((path/'result.json').read_text(encoding='utf8'))
+                value['result']=saved['result']
+            except (OSError,ValueError,KeyError):raise FileNotFoundError('任务结果暂时无法读取，原有生成与实战记录仍保留') from None
+        return value
 
     def update_job(self,id_,state):
         with self.lock:
@@ -104,7 +142,7 @@ class Application:
             if job['state']=='pausing' and state.get('state')=='running':
                 job['progress']=state['progress'];return
             if state.get('state')=='paused' and self.controls[id_].action!='pause':return
-            job.update(state)
+            job.update(state);job['updated_at']=time.time()
 
     def public_jobs(self):
         with self.lock:
@@ -186,21 +224,31 @@ class Application:
             if discover():raise ValueError('旧后台仍有任务，请先在任务控制区结束旧任务，再开始实战')
         job_id=uuid.uuid4().hex[:16]
         with self.lock:
+            if self.closing:raise ValueError('助手正在退出，请重新双击入口后再使用')
             if operation in native_operations and any(j['operation'] in native_operations and j['state'] in ACTIVE for j in self.jobs.values()):
                 raise ValueError('已有实战或改进任务，请先继续或结束它')
             if sum(j["state"] in ACTIVE for j in self.jobs.values())>=4:raise ValueError("已有 4 个任务，请等待其中一个完成")
-            self.jobs[job_id]=dict(id=job_id,operation=operation,state="queued",progress="等待运行")
+            self.jobs[job_id]=dict(id=job_id,operation=operation,state="queued",progress="等待运行",
+                                  created_at=time.time(),updated_at=time.time(),cube_name=spec.name)
             completed=[k for k,j in self.jobs.items() if j["state"] in {"done","failed","cancelled"}]
-            for k in completed[:-30]:del self.jobs[k]
+            for k in completed[:-30]:
+                del self.jobs[k]
+                self.controls.pop(k,None)
+                self.job_paths.pop(k,None)
         if self.isolated_jobs:
-            allowed={'operation','message','trials','run_id','pods','games_per_pod','clock_seconds','workers','profile','max_swaps','training_pods','scoring_backend','search_mode','mode'}
+            allowed={'operation','message','trials','run_id','pods','games_per_pod','clock_seconds','workers','profile','max_swaps','training_pods','scoring_backend','search_mode','mode','goal'}
             request={k:v for k,v in data.items() if k in allowed};request.update(spec=spec.to_dict(),cards=rows)
-            self.controls[job_id]=TaskProcess(job_id,request,getattr(self.ai_store,'path',None))
+            snapshot=None
+            if operation in {'stress','forge','calibrate'}:
+                snapshot=dict(snapshot=self.catalog.snapshot,signature=self.catalog.signature,
+                              cards=[self.catalog.cards[name] for name in sorted({row['name'] for row in rows})])
+            self.controls[job_id]=TaskProcess(job_id,request,getattr(self.ai_store,'path',None),catalog_data=snapshot)
+            self.job_paths[job_id]=self.controls[job_id].folder
         def progress(message):
-            with self.lock:self.jobs[job_id]["progress"]=message
+            with self.lock:self.jobs[job_id].update(progress=message,updated_at=time.time())
         def execute():
             with self.lock:
-                if self.jobs[job_id]["state"]=="queued":self.jobs[job_id]["state"]="running"
+                if self.jobs[job_id]["state"]=="queued":self.jobs[job_id].update(state="running",started_at=time.time())
             try:
                 if self.isolated_jobs:
                     value=self.controls[job_id].run(lambda state:self.update_job(job_id,state))
@@ -212,6 +260,15 @@ class Application:
                 with self.lock:self.jobs[job_id].update(state="done",progress="完成",result=value)
             except Exception as e:
                 with self.lock:self.jobs[job_id].update(state="failed",progress="任务未完成",error=str(e))
+            finally:
+                with self.lock:
+                    if job_id in self.jobs:
+                        self.jobs[job_id].update(finished_at=time.time(),updated_at=time.time())
+                        if job_id in self.job_paths:
+                            from .task_control import atomic_json
+                            summary={k:v for k,v in self.jobs[job_id].items() if k not in {'result','worker_pid'}}
+                            try:atomic_json(self.job_paths[job_id]/'summary.json',summary)
+                            except OSError:pass
         self.executor.submit(execute)
         return {"job_id":job_id}
 
@@ -249,7 +306,7 @@ def handler_for(app):
                 if path.path=='/api/performance':return self.json(200,dict(gpu=acceleration.status(),cache=sim_cache.status(),learning=surrogate.status(app.catalog),forge=forge_status(),tuning=tuning.status()))
                 if path.path=="/api/status":
                     with app.lock:active_jobs=sum(j['state'] in ACTIVE for j in app.jobs.values())
-                    return self.json(200,dict(version=__version__,cards=len(app.catalog.cards),snapshot=app.catalog.snapshot,
+                    return self.json(200,dict(version=__version__,workspace_id=WORKSPACE_ID,cards=len(app.catalog.cards),snapshot=app.catalog.snapshot,
                         active_jobs=active_jobs,speed_version=2,task_controls=True,
                         experiments=dict(profiles={k:experiment_budget(k) for k in PROFILES},resources=execution_resources()),
                         knowledge_chunks=len(app.knowledge.chunks),gpt=app.ai_status(),themes=THEME_NAMES,
@@ -286,12 +343,15 @@ def handler_for(app):
                     return self.json(200,{k:v for k,v in app.catalog.cards[n].items() if k!="vector"})
                 if path.path=="/api/knowledge":return self.json(200,app.knowledge.search(q("q")))
                 if path.path=="/api/job":
-                    with app.lock:job=app.jobs.get(q("id"));job=dict(job) if job else None
+                    job=app.get_job(q('id'))
                     if not job:raise FileNotFoundError("任务已过期或不存在")
                     return self.json(200,job)
                 if path.path=='/api/job/checkpoint':
                     with app.lock:runner=app.controls.get(q('id'))
-                    if not runner:raise FileNotFoundError('任务不存在')
+                    if not runner:
+                        folder=app.job_paths.get(q('id'))
+                        if not folder:raise FileNotFoundError('任务不存在')
+                        runner=TaskProcess.__new__(TaskProcess);runner.folder=folder
                     return self.json(200,runner.checkpoint_records())
                 if path.path=="/api/runs":
                     return self.json(200,[p.name for p in sorted(RUNS.glob("*"),reverse=True) if p.is_dir()][:30])
@@ -309,12 +369,26 @@ def handler_for(app):
             except Exception:self.json(500,{"error":"请求处理失败"})
         def file(self,target,download=False):
             if not target.is_file():raise FileNotFoundError()
-            raw=target.read_bytes();self.send_response(200)
-            self.send_header("Content-Type",(mimetypes.guess_type(str(target))[0] or "application/octet-stream")+"; charset=utf-8")
-            self.send_header("Content-Length",str(len(raw)))
-            self.send_header('Cache-Control','no-cache')
-            if download:self.send_header("Content-Disposition",f'attachment; filename="{target.name}"')
-            self.end_headers();self.wfile.write(raw)
+            with target.open('rb') as source:
+                stat=os.fstat(source.fileno());etag=f'"{stat.st_mtime_ns:x}-{stat.st_size:x}"'
+                if not download and self.headers.get('If-None-Match')==etag:
+                    self.send_response(304);self.send_header('ETag',etag)
+                    self.send_header('Cache-Control','no-cache');self.end_headers();return
+                content_type=mimetypes.guess_type(str(target))[0] or 'application/octet-stream'
+                if content_type.startswith('text/') or content_type in {'application/json','application/javascript','image/svg+xml'}:content_type+='; charset=utf-8'
+                self.send_response(200);self.send_header('Content-Type',content_type)
+                self.send_header('Content-Length',str(stat.st_size));self.send_header('Cache-Control','no-cache')
+                self.send_header('X-Content-Type-Options','nosniff')
+                if not download:self.send_header('ETag',etag)
+                if download:self.send_header('Content-Disposition',f'attachment; filename="{target.name}"')
+                self.end_headers()
+                remaining=stat.st_size
+                try:
+                    while remaining:
+                        chunk=source.read(min(128*1024,remaining))
+                        if not chunk:break
+                        self.wfile.write(chunk);remaining-=len(chunk)
+                except (BrokenPipeError,ConnectionResetError):return
         def do_POST(self):
             try:
                 if not self.local_host():return self.json(403,{'error':'只接受本地工作台请求'})
@@ -327,6 +401,13 @@ def handler_for(app):
                 if not 0<length<=2_000_000:return self.json(413,{"error":"请求大小必须在 1–2,000,000 字节之间"})
                 data=json.loads(self.rfile.read(length));path=urlparse(self.path).path
                 if not isinstance(data,dict):raise ValueError('请求内容必须是对象')
+                if path=='/api/shutdown':
+                    with app.lock:
+                        if any(job['state'] in ACTIVE for job in app.jobs.values()):raise ValueError('还有运行或暂停中的任务，请先继续完成或强制结束，再退出助手。')
+                        app.closing=True
+                    self.json(200,dict(closing=True,message='助手已退出。牌表与记录已保留，重新双击入口即可继续。'))
+                    threading.Thread(target=self.server.shutdown,daemon=True).start()
+                    return
                 if path=='/api/ai/settings':
                     app.ai_store.save(data);return self.json(200,self.ai_public())
                 if path=='/api/ai/reset':

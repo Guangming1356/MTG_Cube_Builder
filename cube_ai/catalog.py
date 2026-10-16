@@ -5,6 +5,8 @@ import json
 import re
 import os
 import tempfile
+from collections import OrderedDict
+from heapq import nsmallest
 from pathlib import Path
 from .config import DATA, WORKSPACE, card_pool_path
 from .features import VERSION, extract, oracle, tribes_from_cards
@@ -56,6 +58,7 @@ class Catalog:
         self.signature = hashlib.sha256(signature.encode()).hexdigest()[:16]
         self.cards = {c["name"]: c for c in j["cards"]}
         self.aliases = {n.casefold(): n for n in self.cards}
+        self._search_cache = OrderedDict()
         for n in self.cards:
             if " // " in n:
                 self.aliases.setdefault(n.split(" // ")[0].casefold(), n)
@@ -70,12 +73,37 @@ class Catalog:
         if not isinstance(name,str):return None
         return self.aliases.get(name.strip().casefold())
 
+    @classmethod
+    def from_records(cls,records,snapshot,signature):
+        """A trusted, read-only task snapshot; never writes the full catalog cache.
+
+        Used only by operations that evaluate an already validated card list.
+        Construction/search/AI operations still receive the complete catalog.
+        """
+        value=cls.__new__(cls);value.source=None;value.snapshot=snapshot;value.signature=signature
+        value.cards={card['name']:card for card in records};value.reference=set()
+        value.aliases={name.casefold():name for name in value.cards};value._search_cache=OrderedDict()
+        for name in value.cards:
+            if ' // ' in name:value.aliases.setdefault(name.split(' // ')[0].casefold(),name)
+        return value
+
     def search(self, query="", identity=None, limit=30):
-        words = query.casefold().split()
-        cards = [c for c in self.cards.values() if (not identity or c["identity"] == identity)
-                 and all(w in (c["name"] + " " + c["text"] + " " + c["type"]).casefold() for w in words)]
-        cards.sort(key=lambda c: (not c["name"].casefold().startswith(query.casefold()), -c["quality"], c["name"]))
-        return cards[:min(100, max(1, limit))]
+        query=query.casefold();limit=min(100,max(1,limit));token=(query,identity,limit)
+        if token in self._search_cache:
+            names=self._search_cache[token];self._search_cache.move_to_end(token)
+            return [self.cards[n] for n in names]
+        words = query.split()
+        cards=[]
+        for card in self.cards.values():
+            if identity and card['identity']!=identity:continue
+            if words:
+                text=(card['name']+' '+card['text']+' '+card['type']).casefold()
+                if not all(word in text for word in words):continue
+            cards.append(card)
+        result=nsmallest(limit,cards,key=lambda c:(not c['name'].casefold().startswith(query),-c['quality'],c['name']))
+        self._search_cache[token]=tuple(c['name'] for c in result)
+        if len(self._search_cache)>64:self._search_cache.popitem(last=False)
+        return result
 
     def parse(self, text):
         if not isinstance(text,str):raise ValueError('牌表内容必须是文本')

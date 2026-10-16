@@ -75,16 +75,18 @@ def draft_evaluation(catalog,rows,spec,seeds,guilds,include_tables=False,learned
     from .sim_cache import draft as cached_draft
     if len(seeds)!=len(guilds) or not seeds:raise ValueError('轮抓种子与色组安排需非空且长度相同')
     started=time.perf_counter();observations=[];tables=[];card_counts=defaultdict(Counter);cache_hits=0
+    need_tables=include_tables or bool(learned and learned.get('active'))
     for p,(seed,prefs) in enumerate(zip(seeds,guilds)):
         from .task_control import checkpoint
         checkpoint()
         if workspace:
             (original,(metrics,counts)),hit=workspace.table(catalog,rows,spec,seed,prefs,lambda pod:_pod_metrics(catalog,pod))
-            pod=dict(original)
+            pod=dict(original) if need_tables else original
         else:
             pod,hit=cached_draft(catalog,rows,spec,seed,prefs);metrics,counts=_pod_metrics(catalog,pod)
-        cache_hits+=hit;pod['pod']=p;pod['draft_seed']=seed
-        tables.append(pod)
+        cache_hits+=hit
+        if need_tables:
+            pod=dict(pod,pod=p,draft_seed=seed);tables.append(pod)
         observations.extend(dict(pod=p,**m) for m in metrics)
         for n,stat in counts.items():card_counts[n].update(stat)
     values=[m['strength'] for m in observations]

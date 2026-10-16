@@ -5,6 +5,10 @@ import json
 import sqlite3
 import threading
 import time
+import pickle
+import sys
+import zlib
+from array import array
 from functools import lru_cache
 from pathlib import Path
 from .config import ROOT
@@ -43,9 +47,23 @@ class DraftWorkspace:
     Trial cubes are not written to disk. Changed tables are redrafted completely;
     unchanged tables reuse both their draft and deck metrics. No picked-pool shortcut.
     """
-    def __init__(self,catalog,spec,limit=4096):
+    def __init__(self,catalog,spec,limit=4096,max_bytes=32*1024**2):
         from collections import OrderedDict
+        if limit<1 or max_bytes<1:raise ValueError('轮抓缓存容量需为正数')
         self.catalog=catalog;self.settings=spec.to_dict();self.entries=OrderedDict();self.limit=limit
+        self.max_bytes=max_bytes;self.bytes_used=0;self._codes={}
+
+    def _layout(self,packs):
+        # A lossless code for each (name, role), not a hash of only picked cards.
+        # Pack lengths are included even if a future deal policy varies them.
+        codes=array('I')
+        for pack in packs:
+            for row in pack:
+                item=(row['name'],row['role'])
+                code=self._codes.get(item)
+                if code is None:code=len(self._codes);self._codes[item]=code
+                codes.append(code)
+        return (tuple(map(len,packs)),codes.tobytes())
 
     def table(self,catalog,rows,spec,seed,prefs,summarize):
         import random
@@ -53,14 +71,23 @@ class DraftWorkspace:
         if catalog is not self.catalog or spec.to_dict()!=self.settings:
             raise ValueError('增量轮抓工作区不能跨卡池或构筑参数复用')
         rng=random.Random(seed);packs=deal(catalog,rows,spec,rng)
-        layout=tuple(tuple((r['name'],r['role']) for r in pack) for pack in packs)
+        layout=self._layout(packs)
         token=(seed,tuple(prefs),layout)
         if token in self.entries:
-            result=self.entries[token];self.entries.move_to_end(token)
-            return result,True
+            payload,_=self.entries[token];self.entries.move_to_end(token)
+            # Only bytes created by this workspace are unpickled. No disk/input
+            # pickle is accepted, and callers cannot mutate cached evidence.
+            return pickle.loads(zlib.decompress(payload)),True
         pod=draft_pod(catalog,rows,spec,rng,prefs,readiness_hands=0,_packs=packs)
-        result=(pod,summarize(pod));self.entries[token]=result
-        if len(self.entries)>self.limit:self.entries.popitem(last=False)
+        result=(pod,summarize(pod))
+        payload=zlib.compress(pickle.dumps(result,protocol=5),level=1)
+        weight=(sys.getsizeof(payload)+sys.getsizeof(layout[1])+sys.getsizeof(layout[0])
+                +sys.getsizeof(token)+sys.getsizeof(token[1])+256)
+        # Oversized tables are still fully evaluated; only reuse is declined.
+        if weight<=self.max_bytes:
+            self.entries[token]=(payload,weight);self.bytes_used+=weight
+            while len(self.entries)>self.limit or self.bytes_used>self.max_bytes:
+                _,(_,removed)=self.entries.popitem(last=False);self.bytes_used-=removed
         return result,False
 
 def key(kind,value):

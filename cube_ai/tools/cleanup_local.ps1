@@ -4,6 +4,13 @@ $cubeRoot = (Resolve-Path -LiteralPath (Join-Path $PSScriptRoot '..\..')).Path.T
 $cubePlanPath = Join-Path $cubeRoot 'cube_ai\private\cleanup-plan.json'
 $cubeReceiptPath = Join-Path $cubeRoot '项目资料\发布验收\github-releases-verified.json'
 $cubeReportPath = Join-Path $cubeRoot '项目资料\本机清理结果.json'
+if (Test-Path -LiteralPath $cubeReportPath -PathType Leaf) {
+    $cubePreviousCleanup = Get-Content -LiteralPath $cubeReportPath -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($cubePreviousCleanup.status -eq 'done') {
+        Write-Host '本次清理已经完成，无需重复执行。以后新增的构建文件不会由旧清单删除。'
+        exit 0
+    }
+}
 if (!(Test-Path -LiteralPath $cubePlanPath) -or !(Test-Path -LiteralPath $cubeReceiptPath)) {
     throw '未找到维护者本机的清单或发布验收记录，未删除任何文件。'
 }

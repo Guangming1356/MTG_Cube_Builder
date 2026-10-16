@@ -4,6 +4,7 @@ import json
 import math
 import random
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from .config import DATA
 
@@ -15,8 +16,14 @@ class FeedbackStore:
             db.execute("CREATE TABLE IF NOT EXISTS comparisons(id INTEGER PRIMARY KEY, winner TEXT, loser TEXT, context TEXT, note TEXT, created TEXT)")
             db.execute("CREATE TABLE IF NOT EXISTS models(context TEXT PRIMARY KEY, payload TEXT)")
 
+    @contextmanager
     def connect(self):
-        return sqlite3.connect(self.path, timeout=15)
+        # sqlite3's own context manager handles transactions, not handle closure.
+        # Closing here avoids idle database locks and abandoned connections.
+        database=sqlite3.connect(self.path, timeout=15)
+        try:
+            with database:yield database
+        finally:database.close()
 
     @staticmethod
     def context(spec):

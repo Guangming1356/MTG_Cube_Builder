@@ -18,7 +18,12 @@ def main():
         from .config import BuildSpec
         from .ai_settings import SettingsStore
         source=json.loads((folder/'input.json').read_text(encoding='utf8'));data=source['request']
-        app=Application(ai_store=SettingsStore(Path(source['settings_path'])) if source.get('settings_path') else None,isolated_jobs=False)
+        catalog=None
+        if data.get('operation') in {'stress','forge','calibrate'} and source.get('catalog'):
+            from .catalog import Catalog
+            snapshot=source['catalog']
+            catalog=Catalog.from_records(snapshot['cards'],snapshot['snapshot'],snapshot['signature'])
+        app=Application(catalog=catalog,ai_store=SettingsStore(Path(source['settings_path'])) if source.get('settings_path') else None,isolated_jobs=False)
         try:
             rows,unknown=app.rows(data)
             if unknown:raise ValueError('任务包含未确认的牌名')

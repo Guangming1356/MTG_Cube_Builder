@@ -4,7 +4,7 @@ import random
 import re
 from collections import Counter
 from .config import GUILDS
-from .brackets import may_add, deck_report, profile
+from .brackets import DeckRules, deck_report
 
 def affordable(cost, lands):
     symbols=re.findall(r"\{([^}]+)\}",cost)
@@ -76,6 +76,7 @@ def draft_pod(catalog,rows,spec,rng,preferred_guilds=None,readiness_hands=40,_pa
     packs=deal(catalog,rows,spec,rng) if _packs is None else _packs
     opened=[[r["name"] for r in p] for p in packs]
     decks=[]
+    rules=DeckRules(catalog,spec)
     pools=[[] for _ in range(spec.players)]
     preferred=list(preferred_guilds) if preferred_guilds is not None else [rng.choice(GUILDS) for _ in pools]
     if len(preferred)!=spec.players or any(g not in GUILDS for g in preferred):raise ValueError('轮抓偏好色组必须与玩家数相同且均为有效双色')
@@ -105,7 +106,7 @@ def draft_pod(catalog,rows,spec,rng,preferred_guilds=None,readiness_hands=40,_pa
     for seat,pool in enumerate(pools):
         g=preferred[seat]
         commands=[catalog.cards[r["name"]] for r in pool if catalog.cards[r["name"]]["commander"]] if spec.mode=="commander" else [None]
-        power=profile(spec)
+        power=rules.power
         if power:commands=[c for c in commands if c['quality']<=power['commander_ceiling']]
         target=60 if spec.mode=="commander" else 40
         best=None
@@ -115,11 +116,7 @@ def draft_pod(catalog,rows,spec,rng,preferred_guilds=None,readiness_hands=40,_pa
                 and (catalog.cards[r["name"]]["identity"]=="C" or set(catalog.cards[r["name"]]["identity"])<=set(identity))
                 and (not commander or r["name"]!=commander["name"])]
             spells.sort(key=lambda n:(-catalog.cards[n]["quality"],catalog.cards[n]["mv"],n))
-            accepted=[]
-            for n in spells:
-                names=([commander['name']] if commander else [])+accepted
-                if may_add(catalog,names,n,spec):accepted.append(n)
-            spells=accepted
+            spells=rules.select([commander['name']] if commander else [],spells)
             # Free basic lands are unlimited. Land count is a deck-building decision,
             # not a requirement that 37 drafted spells must be available.
             sample=spells[:38 if target==60 else 23]
@@ -136,10 +133,7 @@ def draft_pod(catalog,rows,spec,rng,preferred_guilds=None,readiness_hands=40,_pa
         lands=[r["name"] for r in pool if catalog.cards[r["name"]]["kind"]=="land"
                and (catalog.cards[r["name"]]["identity"]=="C" or set(catalog.cards[r["name"]]["identity"])<=set(identity))
                and set(catalog.cards[r["name"]]["fixing"]) & set(identity)]
-        accepted=[]
-        for n in lands:
-            if may_add(catalog,([commander['name']] if commander else [])+spells+accepted,n,spec):accepted.append(n)
-        lands=accepted[:land_target]
+        lands=rules.select(([commander['name']] if commander else [])+spells,lands)[:land_target]
         # Commander is in the command zone, excluded from random opening hands.
         ready=opening_test(catalog,spells,lands,identity,target-int(bool(commander)),rng,hands=readiness_hands)
         decks.append(dict(seat=seat,guild=g,identity=identity,buildable=True,ready=ready,

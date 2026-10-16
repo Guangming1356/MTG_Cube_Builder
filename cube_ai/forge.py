@@ -9,6 +9,7 @@ import subprocess
 import threading
 import time
 import uuid
+import tempfile
 from functools import lru_cache
 import zipfile
 from collections import Counter, defaultdict
@@ -26,6 +27,7 @@ MATCHES=ROOT/'matches'
 _lock=threading.RLock()
 _worker_state=threading.local()
 _indices={}
+INDEX_CACHE=RUNTIME/'cache/card-indices'
 _campaign=threading.local()
 BASICS=dict(W='Plains',U='Island',B='Swamp',R='Mountain',G='Forest',C='Wastes')
 
@@ -63,11 +65,16 @@ def worker_home(config,out):
     home=out/'engine'/('worker_'+uuid.uuid4().hex[:10]);home.mkdir(parents=True)
     target=Path(config['home']).resolve()/'res';link=home/'res'
     if os.name=='nt':
-        env=dict(os.environ,CUBE_SIM_LINK=str(link.resolve()),CUBE_SIM_TARGET=str(target))
-        subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',
-            "$ErrorActionPreference='Stop'; New-Item -ItemType Junction -Path $env:CUBE_SIM_LINK -Target $env:CUBE_SIM_TARGET | Out-Null"],
-            env=env,check=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
-            creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+        try:
+            import _winapi
+            _winapi.CreateJunction(str(target),str(link))
+        except (ImportError,AttributeError):
+            # Older or alternative Python runtimes keep the existing path.
+            env=dict(os.environ,CUBE_SIM_LINK=str(link.absolute()),CUBE_SIM_TARGET=str(target))
+            subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',
+                "$ErrorActionPreference='Stop'; New-Item -ItemType Junction -Path $env:CUBE_SIM_LINK -Target $env:CUBE_SIM_TARGET | Out-Null"],
+                env=env,check=True,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
+                creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
     else:link.symlink_to(target,target_is_directory=True)
     def escaped(path):
         return ''.join(c if ord(c)<128 else f'\\u{ord(c):04x}' for c in path.resolve().as_posix())
@@ -119,8 +126,22 @@ def status():
         return dict(available=False,reason=str(e))
 
 def card_index(config):
-    home=Path(config['home']);key=(str(home),config.get('jar_sha256'))
+    home=Path(config['home']);folder=home/'res'/'cardsfolder'
+    loose=list(folder.rglob('*.txt')) if folder.is_dir() else []
+    archives=[p for p in (home/'res').rglob('*.zip') if 'card' in p.name.lower()]
+    sources=[(str(p.relative_to(home)),p.stat().st_size,p.stat().st_mtime_ns) for p in loose+archives]
+    key=hashlib.sha256(json.dumps(['forge-card-index-1',str(home.resolve()),config.get('jar_sha256'),sources]).encode()).hexdigest()
     if key in _indices:return _indices[key]
+    cache=INDEX_CACHE/(key+'.json')
+    try:
+        saved=json.loads(cache.read_text(encoding='utf8'))
+        names=saved.get('names')
+        if (saved.get('signature')==key and isinstance(names,dict) and names
+                and all(isinstance(k,str) and isinstance(v,str) and v for k,v in names.items())):
+            _indices[key]=names
+            if len(_indices)>4:_indices.pop(next(iter(_indices)))
+            return names
+    except (OSError,ValueError,AttributeError):pass
     names={}
     def add(raw):
         text=raw.decode('utf-8-sig',errors='replace')
@@ -129,16 +150,27 @@ def card_index(config):
         first=found[0].strip()
         names[first.casefold()]=first
         names.setdefault(first.split(' // ')[0].casefold(),first)
-    folder=home/'res'/'cardsfolder'
-    if folder.is_dir():
-        for p in folder.rglob('*.txt'):add(p.read_bytes())
-    for p in (home/'res').rglob('*.zip'):
-        if 'card' not in p.name.lower():continue
+    for p in loose:add(p.read_bytes())
+    for p in archives:
         with zipfile.ZipFile(p) as archive:
             for n in archive.namelist():
                 if n.endswith('.txt'):add(archive.read(n))
     if not names:raise ValueError('运行时没有找到 Forge 牌张脚本')
     _indices[key]=names
+    if len(_indices)>4:_indices.pop(next(iter(_indices)))
+    try:
+        INDEX_CACHE.mkdir(parents=True,exist_ok=True)
+        fd,tmp=tempfile.mkstemp(prefix='index-',suffix='.tmp',dir=INDEX_CACHE)
+        try:
+            with os.fdopen(fd,'w',encoding='utf8') as stream:json.dump(dict(signature=key,names=names),stream,ensure_ascii=False)
+            os.replace(tmp,cache)
+        finally:
+            if os.path.exists(tmp):os.unlink(tmp)
+        # Only generated cache files are evicted; never touch engine/user files.
+        for old in sorted(INDEX_CACHE.glob('*.json'),key=lambda p:p.stat().st_mtime,reverse=True)[8:]:
+            try:old.unlink()
+            except OSError:pass
+    except OSError:pass
     return names
 
 def engine_name(name,index):

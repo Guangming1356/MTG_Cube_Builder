@@ -55,10 +55,10 @@ class ProcessTree:
 
 
 class TaskProcess:
-    def __init__(self,id_,request,settings_path=None):
+    def __init__(self,id_,request,settings_path=None,catalog_data=None):
         self.folder=JOBS/id_;self.folder.mkdir(parents=True,exist_ok=False)
         self.lock=threading.RLock();self.process=None;self.tree=None;self.cancelled=False;self.action='run'
-        self.request=request;self.settings_path=settings_path
+        self.request=request;self.settings_path=settings_path;self.catalog_data=catalog_data
         atomic_json(self.folder/'command.json',dict(action='run'))
 
     def command(self,action):
@@ -72,7 +72,8 @@ class TaskProcess:
     def run(self,update):
         with self.lock:
             if self.cancelled:return dict(state='cancelled',progress='已强制结束')
-            atomic_json(self.folder/'input.json',dict(request=self.request,settings_path=str(self.settings_path) if self.settings_path else None))
+            atomic_json(self.folder/'input.json',dict(request=self.request,settings_path=str(self.settings_path) if self.settings_path else None,catalog=self.catalog_data))
+            self.catalog_data=None
             self.tree=ProcessTree()
             executable=Path(sys.executable)
             if executable.name.lower()=='pythonw.exe':executable=executable.with_name('python.exe')
@@ -88,11 +89,15 @@ class TaskProcess:
                 self.tree.close();log.close();raise
         update(dict(worker_pid=self.process.pid))
         try:
-            last=None
+            last=None;last_stamp=None
             while self.process.poll() is None:
                 try:
-                    state=json.loads((self.folder/'progress.json').read_text(encoding='utf8'))
-                    if state!=last:update(state);last=state
+                    progress_path=self.folder/'progress.json'
+                    stat=progress_path.stat();stamp=(stat.st_mtime_ns,stat.st_size)
+                    if stamp!=last_stamp:
+                        state=json.loads(progress_path.read_text(encoding='utf8'))
+                        if state!=last:update(state);last=state
+                        last_stamp=stamp
                 except (OSError,ValueError):pass
                 time.sleep(.1)
             if self.cancelled:return dict(state='cancelled',progress='已强制结束；已落盘的结果保留')

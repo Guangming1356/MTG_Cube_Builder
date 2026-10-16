@@ -1,0 +1,77 @@
+name: Build verified Windows release
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version: YYYYMMDD or YYYYMMDD-rN"
+        required: true
+        type: string
+      base_tag:
+        description: "Verified portable release to reuse runtimes from"
+        required: true
+        default: v2026.10.15-r7
+        type: string
+permissions:
+  contents: write
+concurrency:
+  group: portable-release
+  cancel-in-progress: false
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+      CUBE_VERSION: ${{ inputs.version }}
+      CUBE_BASE_TAG: ${{ inputs.base_tag }}
+    steps:
+      - name: Fetch exact source revision
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          gh auth setup-git
+          git init .
+          git remote add origin ("https://github.com/" + $env:GITHUB_REPOSITORY + ".git")
+          git fetch --depth=1 origin $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Source fetch failed' }
+          git checkout --detach FETCH_HEAD
+          if ($LASTEXITCODE -ne 0) { throw 'Source checkout failed' }
+      - name: Build and check archive
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $cubeOutput = Join-Path $env:RUNNER_TEMP 'cube-release-output'
+          python cube_ai/tools/repackage_release.py --version $env:CUBE_VERSION --base-tag $env:CUBE_BASE_TAG --out $cubeOutput --commit $env:GITHUB_SHA
+          if ($LASTEXITCODE -ne 0) { throw 'Packaging failed' }
+          $cubeInfo = Get-Content -LiteralPath (Join-Path $cubeOutput 'release-info.json') -Raw | ConvertFrom-Json
+          $cubeExtract = Join-Path $env:RUNNER_TEMP 'cube-release-verification'
+          Expand-Archive -LiteralPath (Join-Path $cubeOutput $cubeInfo.asset) -DestinationPath $cubeExtract
+          $cubeApp = Join-Path $cubeExtract 'Cube助手'
+          python cube_ai/tools/verify_portable_release.py --root $cubeApp --fixture cube_ai/tests/fixtures/forge_cube.csv --out (Join-Path $cubeOutput 'portable-verification.json')
+          if ($LASTEXITCODE -ne 0) { throw 'Portable acceptance failed' }
+      - name: Record verified dependency metadata and publish
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $cubeOutput = Join-Path $env:RUNNER_TEMP 'cube-release-output'
+          $cubeInfo = Get-Content -LiteralPath (Join-Path $cubeOutput 'release-info.json') -Raw | ConvertFrom-Json
+          Copy-Item -LiteralPath (Join-Path $cubeOutput 'release-info.json') -Destination distribution/archive.json
+          Copy-Item -LiteralPath (Join-Path $cubeOutput 'manifest.json') -Destination distribution/manifest.json
+          Copy-Item -LiteralPath (Join-Path $cubeOutput 'portable-verification.json') -Destination docs/PORTABLE_VERIFICATION.json
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -- distribution/archive.json distribution/manifest.json docs/PORTABLE_VERIFICATION.json
+          git commit -m ("Record verified portable release " + $env:CUBE_VERSION)
+          if ($LASTEXITCODE -ne 0) { throw 'Metadata commit failed' }
+          git push origin HEAD:main
+          if ($LASTEXITCODE -ne 0) { throw 'Main changed during build; publishing stopped' }
+          git tag $cubeInfo.tag
+          git push origin $cubeInfo.tag
+          if ($LASTEXITCODE -ne 0) { throw 'Tag push failed' }
+          gh release create $cubeInfo.tag (Join-Path $cubeOutput $cubeInfo.asset) (Join-Path $cubeOutput 'release-info.json') (Join-Path $cubeOutput 'SHA256SUMS.txt') --repo $env:GITHUB_REPOSITORY --verify-tag --draft --title ("Cube 助手 " + $env:CUBE_VERSION) --notes-file distribution/notes.md
+          if ($LASTEXITCODE -ne 0) { throw 'Draft release upload failed' }
+          $cubeRemote = gh api ("repos/" + $env:GITHUB_REPOSITORY + "/releases/tags/" + $cubeInfo.tag) | ConvertFrom-Json
+          $cubeZip = @($cubeRemote.assets | Where-Object name -eq $cubeInfo.asset)
+          if ($cubeZip.Count -ne 1 -or $cubeZip[0].state -ne 'uploaded' -or $cubeZip[0].size -ne $cubeInfo.bytes -or $cubeZip[0].digest -ne ("sha256:" + $cubeInfo.sha256) -or $cubeRemote.assets.Count -ne 3) { throw 'Remote asset verification failed' }
+          gh release edit $cubeInfo.tag --repo $env:GITHUB_REPOSITORY --draft=false --latest
+          if ($LASTEXITCODE -ne 0) { throw 'Release publication failed' }

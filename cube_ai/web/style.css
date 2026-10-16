@@ -8,3 +8,14 @@
 @media(max-width:650px){header{flex-direction:column;align-items:flex-start;gap:12px}#gpt-status{max-width:100%;white-space:normal;overflow-wrap:anywhere}}
 
 #task-monitor{margin-bottom:24px;border-color:#a4baa7}#task-monitor h2{font-size:18px}.task-row{display:flex;align-items:center;justify-content:space-between;gap:16px;border-top:1px solid var(--line);padding-top:14px;margin-top:14px}.task-row p{font-size:12px;margin:7px 0}.task-row>.actions{flex-shrink:0}.danger-button{color:#9b3c2b;border-color:#d5a99b;background:#fff8f3}@media(max-width:760px){.task-row{align-items:flex-start;flex-direction:column}}
+
+/* Workspace continuity and bounded browsing. */
+.workspace-status{margin:-8px 0 18px;padding:9px 13px;border-left:3px solid var(--green);background:#eaf0e4;color:#3b574a;font-size:12px;overflow-wrap:anywhere}
+.card-pagination{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;margin-top:18px;color:var(--muted);font-size:13px}
+.card-pagination label{display:flex;align-items:center;gap:9px;margin:0}.card-pagination select{width:90px}.card-pagination .actions{margin:0}
+.empty-state{padding:32px 18px;text-align:center;color:var(--muted)}.mana-identity{font-family:ui-monospace,monospace;letter-spacing:1px}
+.card-art{float:right;width:min(220px,42%);height:auto;border-radius:10px;margin:0 0 18px 20px}dialog::after{content:'';display:block;clear:both}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation:none!important;transition:none!important}}
+@media(max-width:650px){.card-pagination{gap:10px}.card-art{float:none;display:block;width:min(230px,100%);margin:0 auto 18px}.filters>*{min-width:0}#card-sort{width:150px}}
+
+.header-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.header-actions .text-button{margin:0;font-size:12px}

@@ -42,7 +42,12 @@ class TaskControl:
                 return
             with self.lock:
                 if self.active_native==0 and self.pause_started is None:
-                    self.pause_started=time.monotonic();self.emit('paused')
+                    self.pause_started=time.monotonic()
+                    # Every in-flight game has finished. Release only idle owned
+                    # JVMs so a user pause gives back RAM as well as CPU time.
+                    from .forge_worker import trim_idle
+                    trim_idle(0)
+                    self.emit('paused')
             time.sleep(.1)
 
     def progress(self,message):

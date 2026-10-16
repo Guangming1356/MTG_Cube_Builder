@@ -20,7 +20,10 @@ def until(predicate,seconds=15):
     raise AssertionError('等待状态超时')
 
 
-def test_pause_drains_current_native_and_blocks_new_work(tmp_path):
+def test_pause_drains_current_native_and_blocks_new_work(tmp_path,monkeypatch):
+    from cube_ai import forge_worker
+    trims=[]
+    monkeypatch.setattr(forge_worker,'trim_idle',lambda limit:trims.append(limit))
     control=TaskControl(tmp_path);atomic_json(tmp_path/'command.json',dict(action='run'))
     started=threading.Event();finish=threading.Event();resumed=threading.Event()
     def game():
@@ -30,10 +33,12 @@ def test_pause_drains_current_native_and_blocks_new_work(tmp_path):
     atomic_json(tmp_path/'command.json',dict(action='pause'))
     waiter=threading.Thread(target=lambda:(control.checkpoint(),resumed.set()));waiter.start()
     time.sleep(.15);assert not resumed.is_set() and control.pause_started is None
+    assert trims==[]
     finish.set();first.join(2)
     until(lambda:(tmp_path/'progress.json').exists())
     assert json.loads((tmp_path/'progress.json').read_text(encoding='utf8'))['state']=='paused'
     assert len((tmp_path/'completed-games.jsonl').read_text().splitlines())==1
+    assert trims==[0]
     atomic_json(tmp_path/'command.json',dict(action='run'));waiter.join(2);assert resumed.is_set()
 
 

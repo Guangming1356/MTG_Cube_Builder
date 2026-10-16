@@ -8,18 +8,21 @@ from concurrent.futures import ProcessPoolExecutor
 _state=None
 
 
-def _initialize(source,spec_data,seeds,guilds,learned):
+def _initialize(spec_data,seeds,guilds,learned):
     global _state
-    from .catalog import Catalog
+    from types import SimpleNamespace
     from .config import BuildSpec
     from .sim_cache import DraftWorkspace
-    catalog=Catalog(source);spec=BuildSpec.from_dict(spec_data)
+    # Evaluation only reads cards in the candidate rows. Loading all 31k Oracle
+    # records in every spawned process wastes memory and startup I/O.
+    catalog=SimpleNamespace(cards={});spec=BuildSpec.from_dict(spec_data)
     _state=(catalog,spec,seeds,guilds,learned,DraftWorkspace(catalog,spec))
 
 
 def _evaluate(payload):
     from .optimize import draft_evaluation
-    rows,count=payload;catalog,spec,seeds,guilds,learned,workspace=_state
+    rows,count,additions=payload;catalog,spec,seeds,guilds,learned,workspace=_state
+    catalog.cards.update(additions)
     return draft_evaluation(catalog,rows,spec,seeds[:count],guilds[:count],learned=learned,workspace=workspace)
 
 
@@ -52,6 +55,7 @@ class CandidateEvaluator:
         if workers is not None and (type(workers)!=int or not 1<=workers<=4):raise ValueError('候选评估进程数需为 1–4')
         self.workers=min(limit,workers) if workers is not None else limit
         self.workspace=DraftWorkspace(catalog,spec);self.pool=None;self.fallback=None;self.use_full=False
+        self._worker_names=None
         self.stats=dict(proposals=0,full_evaluations=0,table_evaluations=0,full_table_budget=0,
             reused_tables=0,redrafted_tables=0,uncertain_batches=0,stage_runs=[],stages=stages(len(seeds)) if adaptive else [len(seeds)],workers=self.workers)
 
@@ -63,7 +67,7 @@ class CandidateEvaluator:
     def close(self):
         if self.pool:
             for executor in self.pool:executor.shutdown(wait=True,cancel_futures=True)
-            self.pool=None
+            self.pool=None;self._worker_names=None
 
     def evaluate(self,rows,count):
         from .optimize import draft_evaluation
@@ -74,10 +78,17 @@ class CandidateEvaluator:
             try:
                 if self.pool is None:
                     self.pool=[ProcessPoolExecutor(max_workers=1,mp_context=multiprocessing.get_context('spawn'),
-                        initializer=_initialize,initargs=(str(self.catalog.source),self.spec.to_dict(),self.seeds,self.guilds,self.learned)) for _ in range(self.workers)]
+                        initializer=_initialize,initargs=(self.spec.to_dict(),self.seeds,self.guilds,self.learned)) for _ in range(self.workers)]
+                    self._worker_names=[set() for _ in self.pool]
                 # Stable affinity preserves each candidate's workspace across rounds.
                 # Result order remains the input order regardless of completion order.
-                futures=[self.pool[sum(item['add'].encode('utf8'))%self.workers].submit(_evaluate,(item['rows'],count)) for item in items]
+                futures=[]
+                for item in items:
+                    slot=sum(item['add'].encode('utf8'))%self.workers
+                    missing={row['name'] for row in item['rows']}-self._worker_names[slot]
+                    additions={name:self.catalog.cards[name] for name in missing}
+                    futures.append(self.pool[slot].submit(_evaluate,(item['rows'],count,additions)))
+                    self._worker_names[slot].update(missing)
                 return [future.result() for future in futures]
             except (OSError,RuntimeError) as error:
                 self.fallback=type(error).__name__+': '+str(error)
