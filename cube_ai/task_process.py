@@ -101,7 +101,10 @@ class TaskProcess:
                 except (OSError,ValueError):pass
                 time.sleep(.1)
             if self.cancelled:return dict(state='cancelled',progress='已强制结束；已落盘的结果保留')
-            try:return json.loads((self.folder/'result.json').read_text(encoding='utf8'))
+            try:
+                metadata=self.folder/'completion.json'
+                saved=json.loads((metadata if metadata.exists() else self.folder/'result.json').read_text(encoding='utf8'))
+                return {k:v for k,v in saved.items() if k!='result'}
             except (OSError,ValueError):return dict(state='failed',progress='任务异常退出',error='任务未返回完整结果，已完成的中间记录仍保留。')
         finally:
             with self.lock:self.tree.close();log.close()

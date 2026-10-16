@@ -80,3 +80,23 @@ def test_missing_full_build_inputs_fail_before_creating_partial_runtime_copies(t
     monkeypatch.setattr(build_portable,'CACHE',releases/'cache')
     with pytest.raises(ValueError,match='未创建构建目录'):build_portable.stage()
     assert not releases.exists()
+
+
+@pytest.mark.parametrize('pattern',[b'D:/MTG',b'C:/Users/32860'.decode().encode('utf-16-le'),b'ghp_'+b'A'*40])
+def test_full_build_privacy_scan_detects_patterns_crossing_buffer_boundaries(tmp_path,pattern):
+    from cube_ai.tools.build_portable import privacy_scan
+    (tmp_path/'example.txt').write_bytes(b'x'*(1024*1024-3)+pattern+b'x'*512)
+    with pytest.raises(ValueError,match='隐私扫描失败'):privacy_scan(tmp_path)
+
+
+def test_full_build_privacy_scan_has_bounded_memory_for_large_runtime_files(tmp_path):
+    import tracemalloc
+    from cube_ai.tools.build_portable import privacy_scan
+    with (tmp_path/'runtime.bin').open('wb') as stream:
+        for _ in range(16):stream.write(b'x'*(1024*1024))
+    tracemalloc.start()
+    try:
+        assert privacy_scan(tmp_path)['files']==1
+        _,peak=tracemalloc.get_traced_memory()
+    finally:tracemalloc.stop()
+    assert peak<5*1024*1024

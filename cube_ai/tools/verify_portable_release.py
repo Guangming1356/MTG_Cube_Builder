@@ -43,7 +43,7 @@ def main():
                       if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='__version__' for t in n.targets))
         assert status['version']==expected and status.get('workspace_id')
         assert not status['gpt']['configured'] and status['forge']['available']
-        for asset in ['workspace.js','tasks-ui.js','style.css']:
+        for asset in ['workspace.js','tasks-ui.js','deck-study-ui.js','style.css']:
             with urllib.request.urlopen(url+asset,timeout=10) as response:assert response.status==200
         code="from pathlib import Path;import json,sys;from cube_ai.catalog import Catalog;from cube_ai.config import BuildSpec;c=Catalog();rows,unknown=c.parse(Path(sys.argv[1]).read_text(encoding='utf-8-sig'));assert not unknown;print(json.dumps(dict(operation='stress',cards=rows,spec=BuildSpec().to_dict(),trials=5)))"
         prepared=subprocess.check_output([str(python),'-X','utf8','-c',code,str(args.fixture.resolve())],cwd=root,text=True,encoding='utf8',timeout=90)

@@ -208,11 +208,31 @@ def write_deck(deck,path,index,catalog,spec=None):
     path.write_text('\n'.join(content)+'\n',encoding='utf-8')
     return dict(main=sum(main.values()),commander=1,total=60,sha256=sha256(path))
 
+def diagnose_log(log):
+    """Explain engine symptoms without blaming a card or changing outcomes."""
+    findings=[]
+    def add(code,message,hint,severity='error'):
+        findings.append(dict(code=code,message=message,hint=hint,severity=severity))
+    if 'getActivatingPlayer()' in log and 'is null' in log and 'CharmEffect.' in log:
+        add('null_modal_activator','Forge AI 评估模式目标时缺少施放者',
+            '这是引擎内部异常，不能当作正常胜负，也不能仅凭同桌出现就认定某张牌有问题。降低并行数不一定能修复；保留日志供复现。')
+    if 'OutOfMemoryError' in log or 'Could not reserve enough space' in log:
+        add('engine_memory','引擎无法分配所需内存','先减少同时进行的对局，再检查剩余内存；此局不纳入正常胜负。')
+    if 'TimeoutException' in log and 'Stopping slow match as draw' not in log:
+        add('ai_choice_timeout','Forge AI 的单次行动选择超时',
+            '这与整局时限不同。可能是复杂决策或异常循环，不能把日志最后的胜者直接视为可靠实战证据。')
+    apis=sorted(set(re.findall(r'No AI assigned for API: (\w+)',log)))
+    if apis:
+        add('missing_ai_api','引擎提示缺少 AI 驾驶逻辑：'+', '.join(apis[:8]),
+            '牌张有规则实现不等于 AI 能正确使用。此提示本身不改变原始结果分类，也不代表人类使用时牌张较弱。','warning')
+    return findings
+
+
 def parse_log(log,returncode=0,process_timeout=False):
     """Engine failures and time limits are never counted as ordinary wins/draws."""
     duration=re.search(r'Game Result: Game \d+ ended (?:in a Draw! Took |in )(\d+) ms',log)
     turn_numbers=[int(n) for n in re.findall(r'\bTurn\s+(\d+)\b',log,re.I)]
-    base=dict(engine_ms=int(duration.group(1)) if duration else None,
+    base=dict(engine_ms=int(duration.group(1)) if duration else None,diagnostics=diagnose_log(log),
               turns=max(turn_numbers) if turn_numbers else None)
     if process_timeout:return dict(base,outcome='process_timeout',winner=None)
     pattern=r'(?:Exception in thread|\w+(?:Exception|Error):|^\s+at forge\.|Could not load deck|No deck found|[Cc]ould not find card|[Cc]ard not found)'
@@ -258,7 +278,7 @@ def _cached_battle(config,deck_dir,order,seed,clock_seconds,out,log_name):
         if cached and isinstance(cached.get('record'),dict) and isinstance(cached.get('log'),str) and cached['record'].get('outcome') in {'win','draw'}:
             (out/log_name).write_text(cached['log'],encoding='utf8')
             return dict(cached['record'],log=log_name,wall_seconds=0.0,cache_hit=True,
-                original_wall_seconds=cached['record']['wall_seconds'])
+                original_wall_seconds=cached['record']['wall_seconds'],diagnostics=diagnose_log(cached['log']))
     record=_run_battle(config,deck_dir,order,seed,clock_seconds,out,log_name)
     record['cache_hit']=False
     if cache_key and record['outcome'] in {'win','draw'}:
@@ -317,7 +337,8 @@ def summarize(records,pods):
     completed_pods={r['pod'] for r in records if r.get('pod') is not None and r['outcome'] in {'win','draw'}}
     independent={g:len({p['pod'] for p in pods if p.get('pod') in completed_pods and
         any(d.get('buildable') and d.get('identity')==g for d in p['decks'])}) for g in groups}
-    return dict(outcomes=dict(outcomes),games=len(records),completed=outcomes['win']+outcomes['draw'],
+    diagnostics=Counter(finding['code'] for record in records for finding in record.get('diagnostics',[]))
+    return dict(outcomes=dict(outcomes),games=len(records),completed=outcomes['win']+outcomes['draw'],diagnostics=dict(diagnostics),
         executed_games=sum(not r.get('cache_hit') for r in records),reused_games=sum(bool(r.get('cache_hit')) for r in records),
         completed_draft_pods=len(completed_pods),independent_pods_by_guild=independent,
         guilds={g:dict(c,win_rate=round(c['wins']/c['appearances'],3),wilson95=wilson(c['wins'],c['appearances'])) for g,c in sorted(groups.items())},

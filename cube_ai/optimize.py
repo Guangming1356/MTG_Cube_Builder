@@ -27,7 +27,7 @@ from .experiment import experiment_budget, execution_resources
 from .performance import Timings
 
 OPTIMIZATIONS=ROOT/'optimizations'
-POLICY_VERSION='forge-feedback-1.4'
+POLICY_VERSION='forge-feedback-1.5'
 _eligible_cache={}
 # Sparse self-play cannot justify cutting these efficient, broadly useful spells.
 # This expert guard is versioned policy, not invented training labels.
@@ -113,41 +113,65 @@ def draft_evaluation(catalog,rows,spec,seeds,guilds,include_tables=False,learned
         incremental=workspace is not None,wall_seconds=round(time.perf_counter()-started,6))
     return report
 
-def log_events(log):
-    """Accept native wrapped console logs and resident unwrapped game logs."""
+def iter_log_events(log):
+    """Stream events without copying every remaining suffix of a large log."""
     text=log.replace('\r\n','\n')
-    starts=[m.start() for m in re.finditer(r'^(?:Turn|Phase|Land|Add To Stack|Resolve Stack|Combat|Damage|Life|Mulligan|Game Outcome|Match Result|Game Result):',text,re.M)]
-    return [text[a:b].strip().replace('\n','') for a,b in zip(starts,starts[1:]+[len(text)])
-        if not text[a:].startswith(('Match Result:','Game Result:'))]
+    previous=None
+    for match in re.finditer(r'^(?:Turn|Phase|Land|Add To Stack|Resolve Stack|Combat|Damage|Life|Mulligan|Game Outcome|Match Result|Game Result):',text,re.M):
+        if previous is not None and not text.startswith(('Match Result:','Game Result:'),previous):
+            yield text[previous:match.start()].strip().replace('\n','')
+        previous=match.start()
+    if previous is not None and not text.startswith(('Match Result:','Game Result:'),previous):
+        yield text[previous:].strip().replace('\n','')
 
-def game_trace(catalog,log,decks):
+
+def log_events(log):
+    """Compatibility list for trace fingerprints and stored evidence."""
+    return list(iter_log_events(log))
+
+def game_trace(catalog,log,decks,*,extended=False):
     cards={};players={};active=None
     for d in decks:
         players[d['id']]=dict(own_turns=0,turn_spells=[],casts=Counter(),activations=Counter(),
             spellcasts=0,first_spell_turn=None,damage_taken=0,loss_reason=None)
+        if extended:
+            players[d['id']].update(cycle_spells=[],cycle_activations=[],cycle_attacks=[],early_offturn_casts=0)
         for n in d['spells']+[d['commander']]:
             c=catalog.cards[n]
             cards[n.split(' // ')[0]]=n
             if ' // ' in n:cards[n.split(' // ')[1]]=n
+    card_prefixes=sorted(cards.items(),key=lambda x:-len(x[0]))
     def name_of(text):
-        return next((name for prefix,name in sorted(cards.items(),key=lambda x:-len(x[0])) if text==prefix or text.startswith(prefix+' targeting') or text.startswith(prefix+' (')),None)
-    for event in log_events(log):
+        if text in cards:return cards[text]
+        return next((name for prefix,name in card_prefixes if text.startswith(prefix+' targeting') or text.startswith(prefix+' (')),None)
+    for event in iter_log_events(log):
         turn=re.match(r'Turn: Turn (\d+) \(Ai\(\d+\)-([^\)]+)\)',event)
         if turn:
             active=turn[2]
             if active in players:
                 players[active]['own_turns']+=1;players[active]['turn_spells'].append(0)
+                if extended:
+                    for key in ['cycle_spells','cycle_activations','cycle_attacks']:players[active][key].append(0)
             continue
         cast=re.match(r'Add To Stack: Ai\(\d+\)-(\S+) cast (.+)',event)
         if cast and cast[1] in players:
             p=players[cast[1]];n=name_of(cast[2]);p['spellcasts']+=1
             if n:p['casts'][n]+=1
             if cast[1]==active and p['turn_spells']:p['turn_spells'][-1]+=1
+            if extended and p['cycle_spells']:
+                p['cycle_spells'][-1]+=1
+                if cast[1]!=active and p['own_turns']<=4:p['early_offturn_casts']+=1
             if p['first_spell_turn'] is None and cast[1]==active:p['first_spell_turn']=p['own_turns']
-        ability=re.match(r'Add To Stack: Ai\(\d+\)-(\S+) (?:activated|triggered) (.+)',event)
+        ability=re.match(r'Add To Stack: Ai\(\d+\)-(\S+) (activated|triggered) (.+)',event)
         if ability and ability[1] in players:
-            n=name_of(ability[2])
+            n=name_of(ability[3])
             if n:players[ability[1]]['activations'][n]+=1
+            if extended and ability[2]=='activated' and players[ability[1]]['cycle_activations']:
+                players[ability[1]]['cycle_activations'][-1]+=1
+        if extended:
+            attack=re.match(r'Combat: Ai\(\d+\)-(\S+) assigned .+ to attack ',event)
+            if attack and attack[1] in players and players[attack[1]]['cycle_attacks']:
+                players[attack[1]]['cycle_attacks'][-1]+=1
         damage=re.search(r'Damage: .+ deals (\d+) (?:combat )?damage to Ai\(\d+\)-(\S+)\.',event)
         if damage and damage[2] in players:players[damage[2]]['damage_taken']+=int(damage[1])
         loss=re.match(r'Game Outcome: Ai\(\d+\)-(\S+) has lost because (.+)',event)
@@ -159,14 +183,25 @@ def game_trace(catalog,log,decks):
         p['finisher_casts']=sum(count for n,count in p['casts'].items() if catalog.cards[n]['finisher'])
         p['interaction_casts']=sum(count for n,count in p['casts'].items() if catalog.cards[n]['interaction'])
         p['casts']=dict(p['casts']);p['activations']=dict(p['activations'])
-    return dict(players=players,ai_missing_apis=sorted(set(re.findall(r'No AI assigned for API: (\w+)',log))),
+        if extended:
+            # A player's last interval is right-censored at game end. Four
+            # complete cycles require observing the start of their fifth turn.
+            count=min(4,max(0,p['own_turns']-1));p['complete_early_cycles']=count
+            p['no_spell_cycle_rate']=sum(x==0 for x in p['cycle_spells'][:count])/count if count else None
+            actions=[sum(values) for values in zip(p['cycle_spells'][:count],p['cycle_activations'][:count],p['cycle_attacks'][:count])]
+            p['no_action_cycle_rate']=sum(x==0 for x in actions)/count if count else None
+    result=dict(players=players,ai_missing_apis=sorted(set(re.findall(r'No AI assigned for API: (\w+)',log))),
         limitation='前四个自己的回合只统计实际施放咒语；零施放不等于卡手，保留互动或发动异能也可能是正确策略。未记录手牌，未施放牌不能当作抽到的死牌。')
+    if extended:
+        result.update(activity_version='completed-player-cycles-1',
+            activity_definition='从自己的回合开始，到自己的下一回合开始为一个周期；计入期间任意回合施放、主动异能和宣攻，排除自动触发、下地及未完整观察的最后周期。零行动不能证明卡手，未记录手牌。')
+    return result
 
 def evidence_from_match(catalog,result):
     out=Path(result['path']);tables={p['pod']:p for p in result['tables']};traces=[];card_stats=defaultdict(Counter)
     for r in result['games']:
         if r['outcome'] not in {'win','draw'}:continue
-        trace=game_trace(catalog,(out/r['log']).read_text(encoding='utf-8'),tables[r['pod']]['decks'])
+        trace=game_trace(catalog,(out/r['log']).read_text(encoding='utf-8'),tables[r['pod']]['decks'],extended=True)
         traces.append(dict(pod=r['pod'],game=r['game'],winner=r['winner'],turns=r['turns'],**trace))
         for d in tables[r['pod']]['decks']:
             p=trace['players'][d['id']]
@@ -174,11 +209,14 @@ def evidence_from_match(catalog,result):
                 c=card_stats[n];c['deck_games']+=1;c['cast_games']+=int(p['casts'].get(n,0)>0)
                 c['casts']+=p['casts'].get(n,0);c['ability_events']+=p['activations'].get(n,0)
     normal=result['summary']['completed'];all_players=[p for t in traces for p in t['players'].values()]
+    full_cycles=[p for p in all_players if p['complete_early_cycles']==4]
     summary=dict(completed=normal,attempted=result['summary']['games'],skipped_pods=result['skipped_pods'],
         completed_draft_pods=result['summary'].get('completed_draft_pods',0),
         independent_pods_by_guild=result['summary'].get('independent_pods_by_guild',{}),
         failure_rate=1-normal/max(1,result['summary']['games']),
         mean_early_no_spell_rate=statistics.mean(p['no_spell_first4_rate'] for p in all_players) if all_players else None,
+        mean_early_no_action_rate=statistics.mean(p['no_action_cycle_rate'] for p in full_cycles) if full_cycles else None,
+        complete_cycle_coverage=len(full_cycles)/len(all_players) if all_players else None,
         no_finisher_cast_rate=statistics.mean(p['finisher_casts']==0 for p in all_players) if all_players else None,
         deckout_rate=statistics.mean('draw a card' in (p['loss_reason'] or '') or 'library' in (p['loss_reason'] or '').lower() for p in all_players) if all_players else None,
         median_global_turns=statistics.median(t['turns'] for t in traces) if traces else None)
@@ -227,7 +265,12 @@ def unsupported_cost(card):
 
 def feedback_model(catalog,evidence,drafts):
     """Small, bounded feedback weights; no card receives its deck's win as a label."""
-    early=evidence['summary']['mean_early_no_spell_rate'] or 0
+    summary=evidence['summary']
+    # New traces include offturn instants and deliberate abilities. Historical
+    # evidence retains its explicit legacy definition instead of fabricating it.
+    cycle_metric=summary.get('mean_early_no_action_rate')
+    use_cycles=cycle_metric is not None and (summary.get('complete_cycle_coverage') or 0)>=.9
+    early=cycle_metric if use_cycles else (summary['mean_early_no_spell_rate'] or 0)
     finisher=evidence['summary']['no_finisher_cast_rate'] or 0
     needs={}
     for g in GUILDS:
@@ -244,7 +287,7 @@ def feedback_model(catalog,evidence,drafts):
             for component in (['fodder','outlet','reward'] if package=='sacrifice' else ['entry','return','target']):
                 key=package+':'+component
                 needs[g]['package_gaps'][key]=statistics.mean(component in d.get('design',{}).get('packages',{}).get(package,{}).get('missing',[]) for d in decks) if decks else 0
-    return dict(version=POLICY_VERSION,early_no_spell=early,finisher_uncast=finisher,guilds=needs,
+    return dict(version=POLICY_VERSION,early_no_spell=early,early_activity_metric='completed_cycle_no_action' if use_cycles else 'legacy_own_turn_no_spell',finisher_uncast=finisher,guilds=needs,
         low_weight=.15+.35*early,finisher_weight=.12+.25*finisher,
         note='权重来自整副牌的缺口与真实行为；胜率仅做收缩后的弱压力信号。未施放牌不扣分，未知牌不伪造样本。')
 
@@ -484,7 +527,12 @@ def paired_behavior(before,after):
     for field in ['no_spell_first4_rate','finisher_casts','interaction_casts','spellcasts']:
         metrics[field]=dict(before=statistics.mean(a[k][field] for k in shared) if shared else None,
             after=statistics.mean(b[k][field] for k in shared) if shared else None)
+    cycle_pairs=[k for k in shared if a[k].get('complete_early_cycles')==4 and b[k].get('complete_early_cycles')==4]
+    for field in ['no_action_cycle_rate','no_spell_cycle_rate']:
+        metrics[field]=dict(before=statistics.mean(a[k][field] for k in cycle_pairs) if cycle_pairs else None,
+                           after=statistics.mean(b[k][field] for k in cycle_pairs) if cycle_pairs else None)
     return dict(paired_player_observations=len(shared),paired_games=len({k[:2] for k in shared}),metrics=metrics,
+        complete_cycle_paired_observations=len(cycle_pairs),
         limitation='仅比较两版都正常完成的同种子/局序/玩家席位；同桌重复相关。异常导致缺失选择偏差，行为不是独立牌力标签。')
 
 def finish_revision(catalog,out,progress=print):

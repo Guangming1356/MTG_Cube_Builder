@@ -17,7 +17,7 @@ import zipfile
 
 REPOSITORY='Guangming1356/MTG_Cube_Builder'
 DOCS={'BRACKETS.md','AI_CONNECTIONS.md','DEBUG_REPORT.md','PARALLEL_EVALUATION.md',
-      'SPEED_REPORT.md','SPEED_SEARCH_REPORT.md','DYNAMIC_RESOURCES.md','TASK_CONTROL.md'}
+      'SPEED_REPORT.md','SPEED_SEARCH_REPORT.md','DYNAMIC_RESOURCES.md','TASK_CONTROL.md','DECK_POLICY_STUDY.md','NATIVE_DIAGNOSTICS.md'}
 SECRET=re.compile(rb'(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{25,}|gh[pousr]_[A-Za-z0-9]{25,})')
 LOCAL_PROFILE=re.compile(rb'[A-Za-z]:[/\\]+Users[/\\]+[^/\\\s"\']+',re.I)
 PRIVATE_NAMES={'.env','.git','__pycache__','.pytest_cache','preferences.sqlite','catalog.json','ai-settings.bin','entrance.json','launcher.log','forge.profile.properties'}

@@ -75,7 +75,12 @@ def test_isolated_job_pause_resume_complete_and_cancel(tmp_path):
         time.sleep(.2);assert app.jobs[id_]['state']=='paused'
         app.control(id_,'resume');until(lambda:app.jobs[id_]['state'] in {'done','failed'},60)
         assert app.jobs[id_]['state']=='done',app.jobs[id_]
-        assert app.jobs[id_]['result']['trials']==5
+        assert 'result' not in app.jobs[id_]
+        assert app.get_job(id_)['result']['trials']==5
+        assert 'result' not in app.jobs[id_] # Reading must not pin it in history.
+        completion=app.controls[id_].folder/'completion.json'
+        assert completion.stat().st_size<1024
+        assert json.loads(completion.read_text(encoding='utf8'))['state']=='done'
         second=app.submit(dict(operation='stress',cards=rows,trials=500))['job_id']
         app.control(second,'pause');until(lambda:app.jobs[second]['state']=='paused',30)
         process=app.controls[second].process;app.control(second,'cancel')

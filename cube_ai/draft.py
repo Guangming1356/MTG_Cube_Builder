@@ -3,10 +3,12 @@ import math
 import random
 import re
 from collections import Counter
+from functools import lru_cache
 from .config import GUILDS
 from .brackets import DeckRules, deck_report
 
-def affordable(cost, lands):
+@lru_cache(maxsize=8192)
+def _mana_requirements(cost):
     symbols=re.findall(r"\{([^}]+)\}",cost)
     generic=sum(int(s) for s in symbols if s.isdigit()) + int("X" in symbols)
     required=[]
@@ -15,13 +17,19 @@ def affordable(cost, lands):
         elif "/" in s and "P" not in s:
             opts=set(s.replace("/", "")) & set("WUBRGC")
             if opts:required.append(opts)
-    if generic+len(required)>len(lands):return False
     required.sort(key=len)
+    return generic,tuple(frozenset(colors) for colors in required)
+
+
+def affordable(cost, lands, *, max_sources=None):
+    generic,required=_mana_requirements(cost)
+    available=len(lands) if max_sources is None else min(len(lands),max_sources)
+    if generic+len(required)>available:return False
     def assign(index,used):
         if index==len(required):return True
-        return any(assign(index+1,used|{j}) for j,colors in enumerate(lands)
-                   if j not in used and colors & required[index])
-    return assign(0,set())
+        return any(assign(index+1,used|(1<<j)) for j,colors in enumerate(lands)
+                   if not used&(1<<j) and colors & required[index])
+    return assign(0,0)
 
 def opening_test(catalog,spells,land_names,identity,deck_size,rng,hands=40):
     pips=Counter()
@@ -39,13 +47,14 @@ def opening_test(catalog,spells,land_names,identity,deck_size,rng,hands=40):
         sample=rng.sample(deck,len(deck));hand=sample[:7];landcounts.append(sum(c["kind"]=="land" for c in hand))
         for turn in range(1,5):
             hand.append(sample[6+turn]);lands=[set(c["fixing"]) for c in hand if c["kind"]=="land"]
-            # Select up to one land per turn, considering alternative land choices.
-            options=lands[:turn]
+            # Test feasible choices among every land seen, while respecting one
+            # land drop per turn. The first lands in a shuffled hand need not be
+            # the lands a player would actually choose to play.
             spells_here=[c for c in hand if c["kind"]!="land"]
-            if any(affordable(c["mana_cost"],options) for c in spells_here):ready[turn]+=1
+            if any(affordable(c["mana_cost"],lands,max_sources=turn) for c in spells_here):ready[turn]+=1
     return dict(ready_by_turn={str(t):round(ready[t]/hands,3) for t in range(1,5)} if hands else {},
                 opening_2_to_4_lands=round(sum(2<=x<=4 for x in landcounts)/hands,3) if hands else None,
-                basics=dict(allocated), assumptions="每回合抽牌，每回合最多一地；不结算法术力加速、替代费用、调度、牌面效果或对手行为。来源使用所抽地牌的可产颜色上界。")
+                basics=dict(allocated), assumptions="每回合抽牌，每回合最多一地；在已见地牌中选择可行来源，以各回合最佳可行下地为上界。不结算法术力加速、进场横置、替代费用、调度、牌面效果或对手行为；复合法术力仅作近似处理。")
 
 def deal(catalog,rows,spec,rng):
     count=spec.players*spec.rounds

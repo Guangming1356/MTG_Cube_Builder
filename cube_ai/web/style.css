@@ -19,3 +19,9 @@
 @media(max-width:650px){.card-pagination{gap:10px}.card-art{float:none;display:block;width:min(230px,100%);margin:0 auto 18px}.filters>*{min-width:0}#card-sort{width:150px}}
 
 .header-actions{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.header-actions .text-button{margin:0;font-size:12px}
+
+/* Keep every main action visible in narrow desktop side panels. */
+.report-shortcuts{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 18px}.report-shortcuts a{padding:7px 12px;border:1px solid var(--line);border-radius:6px;text-decoration:none;background:var(--white);font-size:12px}.report-shortcuts a:hover{background:#e9eee3}
+#report .panel,#report-content{scroll-margin-top:90px}#report td:first-child{min-width:75px}.bar-row{grid-template-columns:85px minmax(0,1fr) 40px}
+@media(max-width:650px){nav{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));overflow:visible}nav button{white-space:normal;text-align:center;min-height:38px;padding:7px 3px}#task-monitor .task-row{gap:2px}#task-monitor .task-row>.actions{margin:7px 0}.report-shortcuts{gap:6px}.report-shortcuts a{padding:6px 9px}}
+@media(max-width:420px){nav{grid-template-columns:repeat(2,minmax(0,1fr))}.fields{grid-template-columns:minmax(0,1fr)}.actions label{flex-wrap:wrap;max-width:100%}.actions select{max-width:100%}}

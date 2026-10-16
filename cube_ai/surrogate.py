@@ -13,7 +13,7 @@ from .config import ROOT
 from .acceleration import linear
 
 MODELS=ROOT/'models'
-VERSION='activity-2'
+VERSION='activity-3'
 _training_lock=threading.Lock()
 
 def fingerprint(deck):
@@ -36,7 +36,7 @@ def contexts(vectors):
 def collect(catalog,progress=lambda _:None):
     from .forge import MATCHES
     from .optimize import game_trace
-    x=[];y=[];groups=[];cubes=[];seen=set();games=0;sources=[]
+    x=[];y=[];groups=[];cubes=[];seen=set();games=0;sources=[];censored=0
     for path in sorted(MATCHES.glob('*/report.json')):
         try:
             r=json.loads(path.read_text(encoding='utf8'));tables={p['pod']:p for p in r['tables']}
@@ -48,18 +48,19 @@ def collect(catalog,progress=lambda _:None):
                 group=hashlib.sha256(json.dumps(sorted(identities.values())).encode()).hexdigest()
                 unique=(r['engine'].get('jar_sha256'),tuple(identities[n] for n in game['order']),game['seed'])
                 if unique in seen:continue
-                trace=game_trace(catalog,(path.parent/game['log']).read_text(encoding='utf8'),decks)
+                trace=game_trace(catalog,(path.parent/game['log']).read_text(encoding='utf8'),decks,extended=True)
+                if any(trace['players'][d['id']]['complete_early_cycles']<4 for d in decks):
+                    censored+=1;continue
                 features=contexts([deck_vector(catalog,d) for d in decks])
                 labels=[]
                 for d in decks:
                     p=trace['players'][d['id']]
-                    if not p['early_turns']:raise ValueError('没有可用行动记录')
-                    labels.append([1-p['no_spell_first4_rate'],min(1,p['spellcasts']/max(1,p['own_turns']*1.5)),float(p['finisher_casts']>0)])
+                    labels.append([1-p['no_action_cycle_rate'],min(1,p['spellcasts']/max(1,p['own_turns']*1.5)),float(p['finisher_casts']>0)])
                 seen.add(unique);games+=1;x.extend(features);y.extend(labels)
                 groups.extend([group]*3);cubes.extend([r['cube_sha256']]*3)
             sources.append(r['match_id'])
         except (KeyError,ValueError,OSError,TypeError):continue
-    return dict(x=np.asarray(x,dtype=np.float32),y=np.asarray(y,dtype=np.float32),groups=groups,cubes=cubes,games=games,sources=sources)
+    return dict(x=np.asarray(x,dtype=np.float32),y=np.asarray(y,dtype=np.float32),groups=groups,cubes=cubes,games=games,sources=sources,censored_games=censored)
 
 def split_groups(groups,cubes):
     """Keep both related decks and entire Cube versions out of training when possible."""
@@ -108,7 +109,9 @@ def _train(catalog,progress=lambda _:None):
     data=collect(catalog,progress);x,y=data['x'],data['y'];groups=data['groups']
     root=MODELS/(datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')+'_'+uuid.uuid4().hex[:8]);root.mkdir(parents=True)
     report=dict(id=root.name,version=VERSION,games=data['games'],independent_groups=len(set(groups)),cubes=len(set(data['cubes'])),
-        status='insufficient_data',active=False,targets=['前四回合施放活动','每回合施放密度','本局施放过终结牌'],
+        status='insufficient_data',active=False,targets=['前四完整个人周期的主动行动','每回合施放密度','本局施放过终结牌'],
+        censored_games=data.get('censored_games',0),
+        activity_definition='完整个人周期内任意回合的施放、主动异能或宣攻；不计自动触发、下地及最后未完整观察的周期。四周期不足的整局不训练，可能少代表结束很早的牌组。',
         limitation='学习 Forge 原生 AI 的可观测行为，不预测人类娱乐性或认证牌力。没有把一副牌的胜负分摊到单卡。')
     if len(set(groups))<10:
         report['reason']='独立轮抓牌组不足10组；保留固定评分，继续积累实战'
@@ -201,8 +204,16 @@ def active_model(catalog):
 
 def status(catalog):
     reports=sorted(MODELS.glob('*/report.json'),reverse=True)
-    try:latest=json.loads(reports[0].read_text(encoding='utf8')) if reports else None
-    except (OSError,ValueError):latest=None
-    if not isinstance(latest,dict):latest=None
+    latest=None;historical=None
+    # A task started before an update can finish afterwards. Its legacy report
+    # must not hide a current-version report or imply the active model is stale.
+    for path in reports[:30]:
+        try:record=json.loads(path.read_text(encoding='utf8'))
+        except (OSError,ValueError):continue
+        if not isinstance(record,dict):continue
+        if historical is None:historical=record
+        if record.get('version')==VERSION:latest=record;break
+    latest=latest or historical
     model=active_model(catalog)
-    return dict(active=bool(model),active_id=model.get('id') if model else None,latest=latest)
+    return dict(version=VERSION,active=bool(model),active_id=model.get('id') if model else None,latest=latest,
+                latest_compatible=bool(latest and latest.get('version')==VERSION))

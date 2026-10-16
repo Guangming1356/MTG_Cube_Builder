@@ -76,3 +76,16 @@ def test_failures_excluded_from_observed_win_rates():
     s=summarize(records,pods)
     assert s['completed']==1 and s['games']==2 and s['guilds']['UW']['appearances']==1
     assert s['guilds']['UW']['win_rate']==1
+
+
+def test_engine_diagnostics_explain_failures_without_reclassifying_games_or_blame():
+    from cube_ai.forge import diagnose_log
+    null='java.lang.NullPointerException: getActivatingPlayer() is null\n at forge.game.ability.effects.CharmEffect.makePossibleOptions(CharmEffect.java:44)'
+    result=parse_log(null+'\nGame Result: Game 1 ended in 5000 ms. Ai(1)-a has won!')
+    assert result['outcome']=='engine_error' and result['diagnostics'][0]['code']=='null_modal_activator'
+    warning='No AI assigned for API: Empower\nNo AI assigned for API: Empower\nGame Result: Game 1 ended in 5000 ms. Ai(1)-a has won!'
+    result=parse_log(warning)
+    assert result['outcome']=='win' and len(result['diagnostics'])==1 and result['diagnostics'][0]['severity']=='warning'
+    assert diagnose_log('java.lang.OutOfMemoryError: Java heap space')[0]['code']=='engine_memory'
+    assert diagnose_log('java.util.concurrent.TimeoutException')[0]['code']=='ai_choice_timeout'
+    assert not diagnose_log('Stopping slow match as draw\njava.util.concurrent.TimeoutException')

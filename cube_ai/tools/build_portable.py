@@ -56,7 +56,9 @@ def stage():
     data=app/'data';data.mkdir()
     for name in ('card_pool.json','cube_studies.json','learning_sources.json'):shutil.copyfile(SOURCE/'cube_ai/data'/name,data/name)
     docs=app/'docs';docs.mkdir()
-    for name in ('BRACKETS.md','AI_CONNECTIONS.md','DEBUG_REPORT.md','PARALLEL_EVALUATION.md','SPEED_REPORT.md','SPEED_SEARCH_REPORT.md','DYNAMIC_RESOURCES.md','TASK_CONTROL.md'):shutil.copyfile(SOURCE/'cube_ai/docs'/name,docs/name)
+    for name in ('BRACKETS.md','AI_CONNECTIONS.md','DEBUG_REPORT.md','PARALLEL_EVALUATION.md','SPEED_REPORT.md','SPEED_SEARCH_REPORT.md','DYNAMIC_RESOURCES.md','TASK_CONTROL.md','DECK_POLICY_STUDY.md','NATIVE_DIAGNOSTICS.md'):shutil.copyfile(SOURCE/'cube_ai/docs'/name,docs/name)
+    for path in (SOURCE/'cube_ai/docs').glob('OPTIMIZATION_*.md'):
+        if re.fullmatch(r'OPTIMIZATION_20\d{6}\.md',path.name):shutil.copyfile(path,docs/path.name)
     for name in ('CUBECobra_DESIGN.md','MULTI_SITE_DESIGN.md'):
         to=app/'research'/name;to.parent.mkdir(exist_ok=True);shutil.copyfile(SOURCE/'cube_ai/research'/name,to)
     # The active generator uses only this legacy land recipe, not personal cubes.
@@ -207,24 +209,33 @@ magic-skill：MIT，版权与许可证见 magic-skill/LICENSE。
 '''
 
 def privacy_scan(target):
-    bad=[]
+    bad=[];files=0
     # A bare numeric username is also common in public IDs and scientific DLLs.
     # Match its Windows home path rather than unrelated numeric constants.
     needles=[b'Anaconda2026',b'D:\\MTG',b'D:/MTG',b'C:\\Users\\32860',b'C:/Users/32860',b'sk-proj-']
+    patterns=needles+[n.decode('ascii').encode('utf-16-le') for n in needles]
+    credential=re.compile(rb'(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{25,}|gh[pousr]_[A-Za-z0-9]{25,})')
     for p in target.rglob('*'):
         if not p.is_file():continue
+        files+=1
         rel=p.relative_to(target)
         if any(part in FORBIDDEN_NAMES for part in rel.parts) or p.suffix in {'.pyc','.lnk','.pdb'}:bad.append(str(rel));continue
         # Scan arbitrary bytes too, including both encodings used by Windows.
-        data=p.read_bytes()
-        for n in needles:
-            if n in data or n.decode('ascii').encode('utf-16-le') in data:
-                bad.append(str(rel)+': '+n.decode('ascii'));break
-        if p.suffix in {'.py','.md','.json','.txt','.cs','.html','.js','.example'}:
-            for match in re.finditer(rb'(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{25,}|gh[pousr]_[A-Za-z0-9]{25,})',data):
-                bad.append(str(rel)+': credential-like string');break
+        text_file=p.suffix in {'.py','.md','.json','.txt','.cs','.html','.js','.example'}
+        # Source archives and runtime DLLs can be hundreds of MB. Keep only a
+        # bounded buffer; overlap covers every fixed needle and the shortest
+        # credential match even when it straddles two reads.
+        previous=b''
+        with p.open('rb') as stream:
+            for block in iter(lambda:stream.read(1024*1024),b''):
+                data=previous+block
+                if any(n in data for n in patterns):
+                    bad.append(str(rel)+': local path or credential prefix');break
+                if text_file and credential.search(data):
+                    bad.append(str(rel)+': credential-like string');break
+                previous=data[-256:]
     if bad:raise ValueError('发布隐私扫描失败：'+str(bad[:20]))
-    return dict(files=sum(p.is_file() for p in target.rglob('*')),private_patterns_found=0,state_files_included=0)
+    return dict(files=files,private_patterns_found=0,state_files_included=0)
 
 def package(target):
     import gzip

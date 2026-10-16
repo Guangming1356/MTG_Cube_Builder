@@ -19,7 +19,7 @@ def main():
         from .ai_settings import SettingsStore
         source=json.loads((folder/'input.json').read_text(encoding='utf8'));data=source['request']
         catalog=None
-        if data.get('operation') in {'stress','forge','calibrate'} and source.get('catalog'):
+        if data.get('operation') in {'stress','forge','calibrate','deck-study','diagnose-game'} and source.get('catalog'):
             from .catalog import Catalog
             snapshot=source['catalog']
             catalog=Catalog.from_records(snapshot['cards'],snapshot['snapshot'],snapshot['signature'])
@@ -33,6 +33,9 @@ def main():
     except TaskStopped:result=dict(state='cancelled',progress='已强制结束')
     except Exception as error:result=dict(state='failed',progress='任务未完成',error=str(error))
     atomic_json(folder/'result.json',result)
+    # The parent needs only lifecycle state. Full tables/traces stay on disk and
+    # are loaded only when a user opens this result, including before a restart.
+    atomic_json(folder/'completion.json',{k:v for k,v in result.items() if k!='result'})
     return 0
 
 

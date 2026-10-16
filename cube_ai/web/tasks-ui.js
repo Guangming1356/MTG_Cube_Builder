@@ -1,6 +1,6 @@
 // One adaptive monitor: no overlapping requests and quiet while the tab is hidden.
 let taskMonitorTimer,taskMonitorLoading=false,taskPanelSignature='',taskMonitorActive=false;
-const taskLabels={build:'生成 Cube',repair:'修订 Cube',stress:'轮抓检查',forge:'Forge 实战',optimize:'实战改进',calibrate:'机器测速','learn-games':'更新实战评分',chat:'AI 分析',plan:'构筑规划',legacy:'旧后台任务'};
+const taskLabels={build:'生成 Cube',repair:'修订 Cube',stress:'轮抓检查',forge:'Forge 实战',optimize:'实战改进',calibrate:'机器测速','deck-study':'组牌方式对照','diagnose-game':'对局异常诊断','learn-games':'更新实战评分',chat:'AI 分析',plan:'构筑规划',legacy:'旧后台任务'};
 const taskStateLabels={queued:'排队中',running:'运行中',pausing:'等待安全暂停',paused:'已暂停',cancelling:'正在结束',cancelled:'已结束',done:'已完成',failed:'未完成'};
 const liveTaskStates=new Set(['queued','running','pausing','paused','cancelling']);
 
@@ -23,6 +23,8 @@ async function showTaskResult(id){
   if(['build','repair'].includes(job.operation)){setCube(result);await refreshRuns();view('cards');}
   else if(job.operation==='forge'){renderForge(result);view('report');$('forge-result').scrollIntoView({block:'start'});await refreshForge();}
   else if(job.operation==='optimize'){renderOptimization(result);view('report');$('optimization-result').scrollIntoView({block:'start'});await refreshOptimizations();}
+  else if(job.operation==='deck-study'){renderDeckStudy(result);view('report');$('deck-study-result').scrollIntoView({block:'start'});await refreshDeckStudies();}
+  else if(job.operation==='diagnose-game'){renderNativeDiagnostic(result);view('report');$('native-diagnostic-panel').scrollIntoView({block:'start'});}
   else if(job.operation==='plan'){fillSpec(result.spec);view('design');}
   else if(job.operation==='stress'){
     $('stress-result').innerHTML=`<h3>${result.trials} 桌轮抓已完成</h3><p>合法组牌率 ${(result.buildable_rate*100).toFixed(1)}%。这是组牌与法术力检查，不代表实战胜率。</p><details><summary>查看完整轮抓结果</summary><pre>${esc(JSON.stringify(result,null,2))}</pre></details>`;

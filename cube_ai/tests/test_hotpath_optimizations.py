@@ -93,6 +93,34 @@ def test_spawn_workers_do_not_load_the_full_card_pool_and_accept_new_cards(fixtu
     finally:catalog.source=original
 
 
+def test_parallel_assignment_balances_name_collisions_and_keeps_warm_ties(monkeypatch):
+    from collections import Counter
+    from types import SimpleNamespace
+    from cube_ai import experiment,search
+    monkeypatch.setattr(experiment,'memory_available',lambda:16*1024**3)
+    monkeypatch.setattr(search.os,'cpu_count',lambda:8)
+    items=[dict(add=chr(65+4*i)) for i in range(8)]
+    assert len({sum(item['add'].encode())%4 for item in items})==1
+    with CandidateEvaluator(SimpleNamespace(cards={}),BuildSpec(),[1],[['UW','BR','GU']],workers=4) as evaluator:
+        first=evaluator._assign_slots(items)
+        assert sorted(Counter(first).values())==[2,2,2,2]
+        assert evaluator._assign_slots(items)==first
+        assert evaluator.stats['max_batch_slot_load']==2
+
+
+def test_readiness_chooses_feasible_seen_lands_without_exceeding_land_drop_limit(fixture):
+    from cube_ai.draft import affordable,opening_test
+    catalog,_=fixture
+    class FixedOpening:
+        def sample(self,deck,count):
+            return sorted(deck,key=lambda c:0 if c['name']=='Forest' else 1 if c['name']=='Island' else 2)
+    result=opening_test(catalog,['Counterspell']+['Darksteel Colossus']*7,['Forest','Island','Island'],'U',11,FixedOpening(),hands=1)
+    assert result['ready_by_turn']=={'1':0,'2':1,'3':1,'4':1}
+    assert affordable('{U}{U}',[{'G'},{'U'},{'U'}],max_sources=2)
+    assert not affordable('{1}{U}{U}',[{'G'},{'U'},{'U'}],max_sources=2)
+    assert not affordable('{U}{U}',[{'G','U'}],max_sources=2) # One dual cannot pay two pips.
+
+
 @pytest.mark.skipif(__import__('os').name!='nt',reason='Windows native junction')
 def test_worker_resources_use_native_junction_without_launching_powershell(tmp_path,monkeypatch):
     from cube_ai import forge
@@ -241,3 +269,28 @@ def test_shutdown_refuses_live_work_and_blocks_new_submissions(fixture):
         worker.join(3);assert not worker.is_alive()
         with pytest.raises(ValueError,match='退出'):app.submit(dict(operation='learn-games'))
     finally:server.shutdown();server.server_close();app.shutdown()
+
+
+def test_streamed_native_events_preserve_wrapping_and_skip_summary_blocks():
+    from cube_ai.optimize import log_events,iter_log_events
+    text=('startup text\r\nTurn: Turn 1 (Ai(1)-a)\r\n'
+          'Add To Stack: Ai(1)-a cast Fire\r\n targeting b\r\n'
+          'Game Outcome: a has won!\r\nMatch Result: summary\r\n'
+          'Game Result: details\r\n')
+    expected=['Turn: Turn 1 (Ai(1)-a)','Add To Stack: Ai(1)-a cast Fire targeting b','Game Outcome: a has won!']
+    assert log_events(text)==expected and list(iter_log_events(text))==expected
+    assert log_events('startup only')==[]
+
+
+def test_trace_card_prefixes_and_alternate_faces_remain_unambiguous():
+    from types import SimpleNamespace
+    from cube_ai.optimize import game_trace
+    cards={name:dict(finisher=name=='Fireball',interaction=name=='Fire') for name in ['Commander','Fire','Fireball','Front // Back']}
+    deck=dict(id='a',commander='Commander',spells=['Fire','Fireball','Front // Back'])
+    log=('Turn: Turn 1 (Ai(1)-a)\n'
+         'Add To Stack: Ai(1)-a cast Fireball targeting b\n'
+         'Add To Stack: Ai(1)-a cast Fire\n'
+         'Add To Stack: Ai(1)-a cast Back (alternate face)\n')
+    value=game_trace(SimpleNamespace(cards=cards),log,[deck])['players']['a']
+    assert value['casts']=={'Fireball':1,'Fire':1,'Front // Back':1}
+    assert value['finisher_casts']==1 and value['interaction_casts']==1 and value['spellcasts']==3

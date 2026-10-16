@@ -130,6 +130,46 @@ def test_malformed_active_model_is_rejected():
     (surrogate.MODELS/'active.json').write_text(json.dumps(dict(active=True,version=surrogate.VERSION,catalog='fixture')))
     assert surrogate.active_model(SimpleNamespace(signature='fixture')) is None
 
+
+def test_current_model_report_is_not_hidden_by_late_finishing_legacy_task():
+    for name,version in [('20260101_current',surrogate.VERSION),('20260102_legacy','activity-2')]:
+        folder=surrogate.MODELS/name;folder.mkdir(parents=True)
+        (folder/'report.json').write_text(json.dumps(dict(id=name,version=version)),encoding='utf8')
+    status=surrogate.status(SimpleNamespace(signature='fixture'))
+    assert status['latest']['id']=='20260101_current' and status['latest_compatible']
+
+
+def test_activity_training_counts_offturn_actions_censors_short_games_and_deduplicates(fixture,tmp_path,monkeypatch):
+    catalog,_,_=fixture;matches=tmp_path/'matches';folder=matches/'fixture';folder.mkdir(parents=True)
+    monkeypatch.setattr(forge,'MATCHES',matches)
+    decks=[dict(id=name,commander='Talrand, Sky Summoner',spells=['Counterspell'],lands=[],basics={'U':24},land_count=24) for name in ['a','b','c']]
+    lines=[]
+    for turn in range(5):
+        for name in ['a','b','c']:
+            lines.append(f'Turn: Turn {turn*3+1} (Ai(1)-{name})')
+            if name=='b':
+                lines.append('Add To Stack: Ai(1)-a cast Counterspell')
+                lines.append('Add To Stack: Ai(1)-b triggered Talrand, Sky Summoner')
+            if name=='c':lines.append('Combat: Ai(1)-c assigned Drake (1) to attack Ai(1)-a.')
+    (folder/'full.log').write_text('\n'.join(lines),encoding='utf8')
+    (folder/'short.log').write_text('\n'.join(lines[:5]),encoding='utf8')
+    game=dict(pod=0,outcome='win',order=['a','b','c'],seed=1,log='short.log')
+    report=dict(match_id='fixture',cube_sha256='fixture',engine={'jar_sha256':'fixture'},tables=[dict(pod=0,decks=[dict(d,buildable=True) for d in decks])],
+                games=[game,dict(game,seed=2,log='full.log'),dict(game,seed=2,log='full.log'),dict(game,seed=3,log='full.log',cache_hit=True)])
+    (folder/'report.json').write_text(json.dumps(report),encoding='utf8')
+    data=surrogate.collect(catalog)
+    assert data['games']==1 and data['censored_games']==1 and data['x'].shape==(3,54)
+    assert data['y'][:,0].tolist()==[1,0,1]
+
+
+def test_feedback_uses_observed_cycle_metric_when_coverage_is_sufficient(fixture):
+    catalog,_,_=fixture
+    summary=dict(mean_early_no_spell_rate=.4,mean_early_no_action_rate=.2,complete_cycle_coverage=1,no_finisher_cast_rate=.2)
+    model=feedback_model(catalog,dict(summary=summary,guilds={}),dict(observations=[]))
+    assert model['early_activity_metric']=='completed_cycle_no_action' and model['low_weight']==pytest.approx(.22)
+    summary['complete_cycle_coverage']=.4
+    assert feedback_model(catalog,dict(summary=summary,guilds={}),dict(observations=[]))['early_activity_metric']=='legacy_own_turn_no_spell'
+
 def test_resident_memory_reservation_survives_next_validation_stage(monkeypatch):
     calls=[]
     def resources(workers):

@@ -72,6 +72,13 @@ def execute_operation(app,operation,spec,rows,data,progress):
         value=tuning.calibrate(app.catalog,rows,spec,progress,**options)
     elif operation=="forge":
         value=forge_simulate(app.catalog,rows,spec,data.get('pods',10),data.get('games_per_pod',3),data.get('clock_seconds',90),progress,workers=data.get('workers',0))
+    elif operation=='deck-study':
+        from .deck_study import compare
+        value=compare(app.catalog,rows,spec,pods=data.get('pods',20),workers=data.get('workers',0),
+                      clock_seconds=data.get('clock_seconds',180),seed=data.get('study_seed'),progress=progress)
+    elif operation=='diagnose-game':
+        from .native_diagnostic import compare_entries
+        value=compare_entries(data.get('source_type'),data.get('source_id'),data.get('game_index'),progress)
     elif operation=="optimize":
         value=optimize(app.catalog,rows,spec,progress,workers=data.get('workers',0),clock=data.get('clock_seconds',120),
             profile=data.get('profile','standard'),max_swaps=data.get('max_swaps'),training_pods=data.get('training_pods'),
@@ -210,15 +217,18 @@ class Application:
         operation=data.get("operation","build");spec=BuildSpec.from_dict(data.get("spec"))
         rows,unknown=self.rows(data)
         if unknown:raise ValueError("这些牌名未被确认: "+", ".join(unknown[:10]))
-        if operation not in {"build","repair","stress","forge","optimize","chat","plan","learn-games","calibrate"}:raise ValueError("未知操作")
-        if operation in {"repair","stress","forge","optimize","calibrate"} and not rows:raise ValueError("请先载入牌表")
+        if operation not in {"build","repair","stress","forge","optimize","chat","plan","learn-games","calibrate","deck-study","diagnose-game"}:raise ValueError("未知操作")
+        if operation in {"repair","stress","forge","optimize","calibrate","deck-study"} and not rows:raise ValueError("请先载入牌表")
         if operation in {'chat','plan'}:
             message=data.get('message','')
             if not isinstance(message,str) or not message.strip():raise ValueError('请先输入具体需求或问题')
             if len(message)>12000:raise ValueError('单次 AI 需求请控制在 12000 字以内')
         client=LLMClient(self.ai_store,self.auth) if operation in {'chat','plan'} else None
         if client and not client.status()['configured']:raise ValueError('AI 尚未就绪，请在“AI 设置”中连接服务并选择模型。离线功能可直接使用。')
-        native_operations={'forge','optimize','calibrate'}
+        native_operations={'forge','optimize','calibrate','deck-study','diagnose-game'}
+        if operation=='diagnose-game':
+            from .native_diagnostic import validate_case
+            validate_case(data.get('source_type'),data.get('source_id'),data.get('game_index'))
         if operation in native_operations:
             from .legacy_tasks import discover
             if discover():raise ValueError('旧后台仍有任务，请先在任务控制区结束旧任务，再开始实战')
@@ -236,12 +246,14 @@ class Application:
                 self.controls.pop(k,None)
                 self.job_paths.pop(k,None)
         if self.isolated_jobs:
-            allowed={'operation','message','trials','run_id','pods','games_per_pod','clock_seconds','workers','profile','max_swaps','training_pods','scoring_backend','search_mode','mode','goal'}
+            allowed={'operation','message','trials','run_id','pods','games_per_pod','clock_seconds','workers','profile','max_swaps','training_pods','scoring_backend','search_mode','mode','goal','study_seed','source_type','source_id','game_index'}
             request={k:v for k,v in data.items() if k in allowed};request.update(spec=spec.to_dict(),cards=rows)
             snapshot=None
-            if operation in {'stress','forge','calibrate'}:
+            if operation in {'stress','forge','calibrate','deck-study'}:
                 snapshot=dict(snapshot=self.catalog.snapshot,signature=self.catalog.signature,
                               cards=[self.catalog.cards[name] for name in sorted({row['name'] for row in rows})])
+            elif operation=='diagnose-game':
+                request['cards']=[];snapshot=dict(snapshot=self.catalog.snapshot,signature=self.catalog.signature,cards=[])
             self.controls[job_id]=TaskProcess(job_id,request,getattr(self.ai_store,'path',None),catalog_data=snapshot)
             self.job_paths[job_id]=self.controls[job_id].folder
         def progress(message):
@@ -253,7 +265,7 @@ class Application:
                 if self.isolated_jobs:
                     value=self.controls[job_id].run(lambda state:self.update_job(job_id,state))
                     with self.lock:
-                        self.jobs[job_id].update(value)
+                        self.jobs[job_id].update({k:v for k,v in value.items() if k!='result'})
                         self.jobs[job_id]['checkpoint']=self.controls[job_id].checkpoint_summary()
                     return
                 value=execute_operation(self,operation,spec,rows,data,progress)
@@ -307,12 +319,32 @@ def handler_for(app):
                 if path.path=="/api/status":
                     with app.lock:active_jobs=sum(j['state'] in ACTIVE for j in app.jobs.values())
                     return self.json(200,dict(version=__version__,workspace_id=WORKSPACE_ID,cards=len(app.catalog.cards),snapshot=app.catalog.snapshot,
-                        active_jobs=active_jobs,speed_version=2,task_controls=True,
+                        active_jobs=active_jobs,speed_version=2,task_controls=True,features=dict(deck_study=True,native_diagnostic=True,persistent_job_history=True,workspace_restore=True),
                         experiments=dict(profiles={k:experiment_budget(k) for k in PROFILES},resources=execution_resources()),
                         knowledge_chunks=len(app.knowledge.chunks),gpt=app.ai_status(),themes=THEME_NAMES,
                         presets={"commander":BuildSpec.from_dict({'bracket':3}).to_dict(),"classic":BuildSpec.from_dict({"mode":"classic"}).to_dict()},brackets=public_profiles(),
                         feedback=app.feedback.status("commander:commander"),forge=forge_status()))
                 if path.path=="/api/forge/status":return self.json(200,forge_status())
+                if path.path=='/api/deck-studies':
+                    from .deck_study import STUDIES
+                    records=[]
+                    for folder in sorted(STUDIES.glob('*'),reverse=True):
+                        try:
+                            item=json.loads((folder/'summary.json').read_text(encoding='utf8'))
+                            if item.get('state')=='done':records.append(item)
+                        except (OSError,ValueError):continue
+                        if len(records)>=30:break
+                    return self.json(200,records)
+                if path.path.startswith('/studies/'):
+                    from .deck_study import STUDIES
+                    parts=path.path.split('/')
+                    if len(parts)!=4 or not re.fullmatch(r'[A-Za-z0-9_]+',parts[2]) or parts[3] not in {'report.json','report.md','evidence.zip'}:raise FileNotFoundError()
+                    return self.file(STUDIES/parts[2]/parts[3],True)
+                if path.path.startswith('/diagnostics/'):
+                    from .native_diagnostic import DIAGNOSTICS
+                    parts=path.path.split('/')
+                    if len(parts)!=4 or not re.fullmatch(r'[A-Za-z0-9_]+',parts[2]) or parts[3] not in {'report.json','report.md','evidence.zip'}:raise FileNotFoundError()
+                    return self.file(DIAGNOSTICS/parts[2]/parts[3],True)
                 if path.path=='/api/optimizations':
                     return self.json(200,[p.name for p in sorted(OPTIMIZATIONS.glob('*'),reverse=True) if (p/'report.json').is_file()][:30])
                 if path.path.startswith('/optimizations/'):

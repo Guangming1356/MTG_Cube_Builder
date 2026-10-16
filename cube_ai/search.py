@@ -55,9 +55,10 @@ class CandidateEvaluator:
         if workers is not None and (type(workers)!=int or not 1<=workers<=4):raise ValueError('候选评估进程数需为 1–4')
         self.workers=min(limit,workers) if workers is not None else limit
         self.workspace=DraftWorkspace(catalog,spec);self.pool=None;self.fallback=None;self.use_full=False
-        self._worker_names=None
+        self._worker_names=None;self._affinity={}
         self.stats=dict(proposals=0,full_evaluations=0,table_evaluations=0,full_table_budget=0,
-            reused_tables=0,redrafted_tables=0,uncertain_batches=0,stage_runs=[],stages=stages(len(seeds)) if adaptive else [len(seeds)],workers=self.workers)
+            reused_tables=0,redrafted_tables=0,uncertain_batches=0,stage_runs=[],stages=stages(len(seeds)) if adaptive else [len(seeds)],workers=self.workers,
+            assignment='balanced-sticky-1',worker_tasks=[0]*self.workers,max_batch_slot_load=0)
 
     def __enter__(self):return self
 
@@ -73,6 +74,20 @@ class CandidateEvaluator:
         from .optimize import draft_evaluation
         return draft_evaluation(self.catalog,rows,self.spec,self.seeds[:count],self.guilds[:count],learned=self.learned,workspace=self.workspace)
 
+    def _assign_slots(self,items):
+        # A name hash can put all eight candidates on one worker. Balance each
+        # equal-size batch; prefer the prior worker when it is equally loaded so
+        # staged survivors can still reuse their previous draft workspace.
+        loads=[0]*self.workers;slots=[]
+        for item in items:
+            previous=self._affinity.get(item['add'])
+            minimum=min(loads)
+            slot=previous if previous is not None and loads[previous]==minimum else min(range(self.workers),key=lambda i:(loads[i],self.stats['worker_tasks'][i],i))
+            loads[slot]+=1;slots.append(slot);self._affinity[item['add']]=slot
+            self.stats['worker_tasks'][slot]+=1
+        self.stats['max_batch_slot_load']=max([self.stats['max_batch_slot_load'],*loads])
+        return slots
+
     def batch(self,items,count):
         if self.workers>1 and len(items)>1 and not self.fallback:
             try:
@@ -80,11 +95,9 @@ class CandidateEvaluator:
                     self.pool=[ProcessPoolExecutor(max_workers=1,mp_context=multiprocessing.get_context('spawn'),
                         initializer=_initialize,initargs=(self.spec.to_dict(),self.seeds,self.guilds,self.learned)) for _ in range(self.workers)]
                     self._worker_names=[set() for _ in self.pool]
-                # Stable affinity preserves each candidate's workspace across rounds.
                 # Result order remains the input order regardless of completion order.
                 futures=[]
-                for item in items:
-                    slot=sum(item['add'].encode('utf8'))%self.workers
+                for item,slot in zip(items,self._assign_slots(items)):
                     missing={row['name'] for row in item['rows']}-self._worker_names[slot]
                     additions={name:self.catalog.cards[name] for name in missing}
                     futures.append(self.pool[slot].submit(_evaluate,(item['rows'],count,additions)))
