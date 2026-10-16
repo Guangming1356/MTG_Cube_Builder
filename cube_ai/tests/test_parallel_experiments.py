@@ -70,6 +70,7 @@ def test_pipeline_starts_games_before_next_draft_and_bounds_queue(tmp_path,monke
         return dict(outcome='win',winner=order[0],order=order,seed=seed,log=log,turns=20,wall_seconds=.01)
     monkeypatch.setattr(forge,'MATCHES',tmp_path)
     monkeypatch.setattr(forge,'configuration',lambda:dict(home=str(tmp_path),jar=str(tmp_path/'forge.jar'),java='unused',version='test'))
+    monkeypatch.setattr(forge,'engine_description',lambda config:dict(version='test',fingerprint=['fixture']))
     (tmp_path/'forge.jar').write_bytes(b'test')
     monkeypatch.setattr(forge,'card_index',lambda c:{n.casefold():n for n in catalog.cards})
     monkeypatch.setattr(forge,'audit',lambda *a,**kw:dict(hard_errors=0))

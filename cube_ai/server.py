@@ -71,7 +71,8 @@ def execute_operation(app,operation,spec,rows,data,progress):
         if 'goal' in data:options['goal']=data['goal']
         value=tuning.calibrate(app.catalog,rows,spec,progress,**options)
     elif operation=="forge":
-        value=forge_simulate(app.catalog,rows,spec,data.get('pods',10),data.get('games_per_pod',3),data.get('clock_seconds',90),progress,workers=data.get('workers',0))
+        value=forge_simulate(app.catalog,rows,spec,data.get('pods',10),data.get('games_per_pod',3),data.get('clock_seconds',90),progress,workers=data.get('workers',0),
+                             pod_seeds=data.get('pod_seeds'),preferred_guilds=data.get('preferred_guilds'))
     elif operation=='deck-study':
         from .deck_study import compare
         value=compare(app.catalog,rows,spec,pods=data.get('pods',20),workers=data.get('workers',0),
@@ -213,6 +214,18 @@ class Application:
                 for r in result["cards"]]
         return result
 
+    def set_engine_mode(self,mode):
+        from .forge_compat import set_mode
+        from .legacy_tasks import discover
+        from .forge_worker import close_all
+        with self.lock:
+            if self.closing:raise ValueError('助手正在退出，请重新打开后设置')
+            operations={'forge','optimize','calibrate','deck-study','diagnose-game','learn-games'}
+            if any(j['operation'] in operations and j['state'] in ACTIVE for j in self.jobs.values()) or discover():
+                raise ValueError('实战或学习任务正在运行或暂停中；请先完成或结束任务，再切换引擎')
+            set_mode(mode);close_all()
+        return forge_status()
+
     def submit(self,data):
         operation=data.get("operation","build");spec=BuildSpec.from_dict(data.get("spec"))
         rows,unknown=self.rows(data)
@@ -246,7 +259,7 @@ class Application:
                 self.controls.pop(k,None)
                 self.job_paths.pop(k,None)
         if self.isolated_jobs:
-            allowed={'operation','message','trials','run_id','pods','games_per_pod','clock_seconds','workers','profile','max_swaps','training_pods','scoring_backend','search_mode','mode','goal','study_seed','source_type','source_id','game_index'}
+            allowed={'operation','message','trials','run_id','pods','games_per_pod','clock_seconds','workers','profile','max_swaps','training_pods','scoring_backend','search_mode','mode','goal','study_seed','source_type','source_id','game_index','pod_seeds','preferred_guilds'}
             request={k:v for k,v in data.items() if k in allowed};request.update(spec=spec.to_dict(),cards=rows)
             snapshot=None
             if operation in {'stress','forge','calibrate','deck-study'}:
@@ -454,6 +467,7 @@ def handler_for(app):
                     app.ai_store.select_account(data.get('account_id',''));return self.json(200,self.ai_public())
                 if path=='/api/ai/chatgpt/logout':return self.json(200,app.auth.logout(data.get('account_id','')))
                 if path=='/api/task/control':return self.json(200,app.control(data.get('id'),data.get('action')))
+                if path=='/api/forge/compatibility':return self.json(200,app.set_engine_mode(data.get('mode')))
                 if path=="/api/tasks":return self.json(202,app.submit(data))
                 spec=BuildSpec.from_dict(data.get("spec"))
                 if path=='/api/save':

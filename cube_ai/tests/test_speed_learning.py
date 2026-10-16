@@ -131,10 +131,30 @@ def test_malformed_active_model_is_rejected():
     assert surrogate.active_model(SimpleNamespace(signature='fixture')) is None
 
 
-def test_current_model_report_is_not_hidden_by_late_finishing_legacy_task():
+def test_learning_excludes_other_engines_and_legacy_reports_before_loading_logs(tmp_path,monkeypatch):
+    matches=tmp_path/'matches';monkeypatch.setattr(forge,'MATCHES',matches)
+    monkeypatch.setattr(surrogate,'engine_scope',lambda:['current','patched'])
+    for name,engine in [('legacy',dict(jar_sha256='same-jar')),('original',dict(fingerprint=['current','off']))]:
+        folder=matches/name;folder.mkdir(parents=True)
+        (folder/'report.json').write_text(json.dumps(dict(engine=engine,tables=[],games=[dict(outcome='win')]*3)))
+    result=surrogate.collect(SimpleNamespace())
+    assert result['games']==0 and result['excluded_engine_games']==6 and result['engine']==['current','patched']
+
+
+def test_valid_model_is_rejected_after_engine_change_and_restored_for_original_scope(monkeypatch):
+    model=dict(active=True,version=surrogate.VERSION,catalog='fixture',engine=['original'],kind='ridge',
+        mean=[0]*54,scale=[1]*54,weights=np.zeros((55,3)).tolist())
+    surrogate.MODELS.mkdir();(surrogate.MODELS/'active.json').write_text(json.dumps(model))
+    catalog=SimpleNamespace(signature='fixture')
+    monkeypatch.setattr(surrogate,'engine_scope',lambda:['patched']);assert surrogate.active_model(catalog) is None
+    monkeypatch.setattr(surrogate,'engine_scope',lambda:['original']);assert surrogate.active_model(catalog)==model
+
+
+def test_current_model_report_is_not_hidden_by_late_finishing_legacy_task(monkeypatch):
+    monkeypatch.setattr(surrogate,'engine_scope',lambda:['jar','java','resident','bridge'])
     for name,version in [('20260101_current',surrogate.VERSION),('20260102_legacy','activity-2')]:
         folder=surrogate.MODELS/name;folder.mkdir(parents=True)
-        (folder/'report.json').write_text(json.dumps(dict(id=name,version=version)),encoding='utf8')
+        (folder/'report.json').write_text(json.dumps(dict(id=name,version=version,engine=['jar','java','resident','bridge'])),encoding='utf8')
     status=surrogate.status(SimpleNamespace(signature='fixture'))
     assert status['latest']['id']=='20260101_current' and status['latest_compatible']
 
@@ -142,6 +162,7 @@ def test_current_model_report_is_not_hidden_by_late_finishing_legacy_task():
 def test_activity_training_counts_offturn_actions_censors_short_games_and_deduplicates(fixture,tmp_path,monkeypatch):
     catalog,_,_=fixture;matches=tmp_path/'matches';folder=matches/'fixture';folder.mkdir(parents=True)
     monkeypatch.setattr(forge,'MATCHES',matches)
+    monkeypatch.setattr(surrogate,'engine_scope',lambda:['jar','java','resident','bridge'])
     decks=[dict(id=name,commander='Talrand, Sky Summoner',spells=['Counterspell'],lands=[],basics={'U':24},land_count=24) for name in ['a','b','c']]
     lines=[]
     for turn in range(5):
@@ -153,8 +174,8 @@ def test_activity_training_counts_offturn_actions_censors_short_games_and_dedupl
             if name=='c':lines.append('Combat: Ai(1)-c assigned Drake (1) to attack Ai(1)-a.')
     (folder/'full.log').write_text('\n'.join(lines),encoding='utf8')
     (folder/'short.log').write_text('\n'.join(lines[:5]),encoding='utf8')
-    game=dict(pod=0,outcome='win',order=['a','b','c'],seed=1,log='short.log')
-    report=dict(match_id='fixture',cube_sha256='fixture',engine={'jar_sha256':'fixture'},tables=[dict(pod=0,decks=[dict(d,buildable=True) for d in decks])],
+    game=dict(pod=0,outcome='win',order=['a','b','c'],seed=1,log='short.log',backend='resident-1')
+    report=dict(match_id='fixture',cube_sha256='fixture',engine={'jar_sha256':'fixture','fingerprint':['jar','java','resident','bridge']},tables=[dict(pod=0,decks=[dict(d,buildable=True) for d in decks])],
                 games=[game,dict(game,seed=2,log='full.log'),dict(game,seed=2,log='full.log'),dict(game,seed=3,log='full.log',cache_hit=True)])
     (folder/'report.json').write_text(json.dumps(report),encoding='utf8')
     data=surrogate.collect(catalog)

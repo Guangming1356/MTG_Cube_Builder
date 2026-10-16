@@ -85,3 +85,7 @@ GPU 内核已在本机真实运行。31,070 行 × 48 特征 × 32 输出的比�
 - 学习：models/20261015_072617_b6883d4b 中的模型、划分与评估报告，仅本机保留。
 - 新实现：forge_worker.py、native/CubeWorker.java、sim_cache.py、acceleration.py、candidate_scoring.py、surrogate.py。
 - [Forge 原生 AI 说明](https://github.com/Card-Forge/forge/wiki/AI)、[NVIDIA CUDA 最佳实践](https://docs.nvidia.com/cuda/cuda-c-best-practices-guide/index.html)。
+
+## 后续引擎版本说明
+
+后续加入可关闭的 Forge 模式说明兼容组件和完整引擎身份隔离，见 [兼容修复与模型重验证](FORGE_COMPATIBILITY.md)。实战模型当前为 activity-4；旧版指标和引擎的验证结论保留，不自动用于新引擎，重新学习仍须通过相同独立验证门槛。

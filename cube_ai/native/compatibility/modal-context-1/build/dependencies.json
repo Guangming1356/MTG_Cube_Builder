@@ -1,0 +1,20 @@
+{
+  "forge_version": "2.0.15",
+  "java_release": 21,
+  "forge_sha256": "85a4c31e07d4d5621a84bb03b6d75fd08e9f4ba289e575c870579b49c0033766",
+  "original_class_sha256": "ad0677919155403fc56117eef0438316a78c4132d41aa984720a3becdbce5b4c",
+  "patched_class_sha256": "e0b5bda6dae6fab57e1a062d8e1731056d54c997d9629b01e0f0d3bc1ea4c8dd",
+  "transformer_sha256": "ad190364f60d20c88743b9d1cd44803fccfa262cc568bc9863ad94883c3de0ce",
+  "ecj": {
+    "version": "3.46.100",
+    "sha256": "74c93172475fee0cd4e6eefb44233516dd40525642da35d009146d97ea598229",
+    "source": "https://repo.maven.apache.org/maven2/org/eclipse/jdt/ecj/3.46.100/ecj-3.46.100.jar"
+  },
+  "asm": {
+    "version": "9.11",
+    "source": "https://repo.maven.apache.org/maven2/org/ow2/asm/asm/9.11/asm-9.11.jar",
+    "bytes": 131056,
+    "sha256": "5fe3b469b8646e5bc53a897840952d63b712d4923d2a7a26aebc585f1fec7676",
+    "purpose": "Experimental build tool only; not installed in the application"
+  }
+}

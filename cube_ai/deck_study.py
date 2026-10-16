@@ -19,7 +19,7 @@ from .deck_building import revise
 from .draft import draft_pod
 from .engine import audit
 from .forge import (campaign_resources,card_index,configuration,engine_name,
-                    evidence_files,forge_session,run_battle,write_deck)
+                    engine_description,evidence_files,forge_session,run_battle,write_deck)
 from .game_queue import GameQueue
 from .optimize import game_trace,schedule
 from .task_control import atomic_json
@@ -110,7 +110,7 @@ def compare(catalog,rows,spec,pods=20,workers=0,clock_seconds=180,seed=None,prog
         result=dict(study_id=id_,version=VERSION,purpose='controlled_policy_comparison',state='running',
             spec=spec.to_dict(),pods=pods,games_per_policy=pods*3,seed=seed,clock_seconds=clock_seconds,
             cube_sha256=hashlib.sha256(json.dumps(rows,sort_keys=True).encode()).hexdigest(),
-            engine=dict(version=config['version'],backend=config.get('backend'),fingerprint=engine_key(config)),
+            engine=engine_description(config),
             fixed=['drafted_pool','commander','identity','nonbasic_lands','land_count','deck_size'],
             policy=dict(name='balanced',low_target=12,high_target=6,max_spell_swaps=6,experimental=True),
             policy_sha256=hashlib.sha256(Path(__file__).with_name('deck_building.py').read_bytes()).hexdigest(),

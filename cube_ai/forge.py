@@ -90,7 +90,7 @@ def evidence_files(out):
         for name in files:
             if name!='evidence.zip':yield Path(root)/name
 
-def configuration():
+def configuration(compatibility_mode=None):
     path=RUNTIME/'forge.json'
     value=json.loads(path.read_text(encoding='utf-8')) if path.exists() else {}
     if os.getenv('CUBE_FORGE_HOME'):
@@ -108,22 +108,31 @@ def configuration():
     if not os.getenv('CUBE_FORGE_HOME') and home.is_relative_to(RUNTIME.resolve()) and (home/'.installed').is_file():
         write_profile(home)
     value['backend']='isolated'
+    st=Path(value['jar']).stat();actual=_file_hash(value['jar'],st.st_size,st.st_mtime_ns)
+    value['jar_sha256']=actual
     try:
         from .forge_worker import available,bridge_signature
         verified=json.loads((RUNTIME/'acceleration/resident-validation.json').read_text(encoding='utf8'))
-        st=Path(value['jar']).stat();actual=_file_hash(value['jar'],st.st_size,st.st_mtime_ns)
         if available() and verified.get('passed') and verified.get('jar_sha256')==actual and verified.get('bridge_sha256')==bridge_signature():
             value['backend']='resident'
     except (OSError,ValueError,KeyError):pass
+    from .forge_compat import apply as compatibility
+    value=compatibility(value,mode=compatibility_mode)
     from .tuning import apply
     return apply(value)
 
 def status():
     try:
         config=configuration()
-        return dict(available=True,version=config['version'],pilot='Forge 原生 AI',seed_supported=True,backend=config['backend'])
+        return dict(available=True,version=config['version'],pilot='Forge 原生 AI',seed_supported=True,backend=config['backend'],compatibility=config.get('compatibility'))
     except (ValueError,OSError,KeyError,json.JSONDecodeError) as e:
         return dict(available=False,reason=str(e))
+
+
+def engine_description(config):
+    from .tuning import engine_key
+    return dict(version=config['version'],jar_sha256=config.get('jar_sha256'),java=config.get('java'),backend=config.get('backend','isolated'),
+                pilot='Forge native AI',rng='Forge -s',fingerprint=engine_key(config),compatibility=config.get('compatibility'))
 
 def card_index(config):
     home=Path(config['home']);folder=home/'res'/'cardsfolder'
@@ -265,15 +274,19 @@ def run_battle(config,deck_dir,order,seed,clock_seconds,out,log_name):
 
 def _cached_battle(config,deck_dir,order,seed,clock_seconds,out,log_name):
     from .sim_cache import key,get,put
+    from .forge_compat import signature
+    compat=signature(config)
     cache_key=None
-    if config.get('cache',True) and config.get('version')!='external':
+    if config.get('cache',True) and config.get('version')!='external' and (not config.get('extra_classpath') or compat):
         def fingerprint(p):
             p=Path(p);s=p.stat();return _file_hash(str(p.resolve()),s.st_size,s.st_mtime_ns)
         from .forge_worker import bridge_signature
-        cache_key=key('game',['native-cache-2',fingerprint(config['jar']),fingerprint(config['java']),
+        identity=['native-cache-2',fingerprint(config['jar']),fingerprint(config['java']),
             bridge_signature() if config.get('backend')=='resident' else '',
             config.get('backend','isolated'),config.get('heap_mib',2048),config.get('jvm_options',[]),order,seed,clock_seconds,
-            [fingerprint(deck_dir/(n+'.dck')) for n in order]])
+            [fingerprint(deck_dir/(n+'.dck')) for n in order]]
+        if compat:identity.extend(['compatibility',compat])
+        cache_key=key('game',identity)
         cached=get(cache_key)
         if cached and isinstance(cached.get('record'),dict) and isinstance(cached.get('log'),str) and cached['record'].get('outcome') in {'win','draw'}:
             (out/log_name).write_text(cached['log'],encoding='utf8')
@@ -305,8 +318,14 @@ def _run_battle(config,deck_dir,order,seed,clock_seconds,out,log_name):
             return value
         except WorkerUnavailable as e:
             fallback=str(e) # Startup unavailable: the untouched native CLI is the fallback.
-    command=[config['java'],f'-Xmx{config.get("heap_mib",2048)}m',*config.get('jvm_options',[]),'-Dfile.encoding=UTF-8','-Djava.awt.headless=true',
-        '-jar',config['jar'],'sim','-D',str(deck_dir.resolve()),'-d',*[n+'.dck' for n in order],
+    command=[config['java'],f'-Xmx{config.get("heap_mib",2048)}m',*config.get('jvm_options',[]),'-Dfile.encoding=UTF-8','-Djava.awt.headless=true']
+    if config.get('extra_classpath'):
+        # -cp does not apply the JAR's manifest module declarations. Preserve
+        # exactly the reviewed native entry declarations when adding an overlay.
+        command += ['--add-opens='+name+'=ALL-UNNAMED' for name in config.get('native_add_opens',[])]
+        command += ['-cp',os.pathsep.join([*config['extra_classpath'],config['jar']]),config['native_main_class']]
+    else:command += ['-jar',config['jar']]
+    command += ['sim','-D',str(deck_dir.resolve()),'-d',*[n+'.dck' for n in order],
         '-f','Commander','-n','1','-s',str(seed),'-c',str(clock_seconds)]
     home=worker_home(config,out)
     started=time.monotonic();timeout=False
@@ -351,8 +370,10 @@ def simulate(catalog,rows,spec,pods=10,games_per_pod=3,clock_seconds=90,progress
     if type(games_per_pod)!=int or not 3<=games_per_pod<=30 or games_per_pod%3:raise ValueError('每桌对局数需为 3–30 且是 3 的倍数，以轮换座位')
     if type(clock_seconds)!=int or not 15<=clock_seconds<=300:raise ValueError('单局时限需为 15–300 秒')
     resources=campaign_resources(workers);workers=resources['workers']
-    if pod_seeds is not None and (len(pod_seeds)!=pods or any(type(s)!=int for s in pod_seeds)):raise ValueError('每桌随机种子数量无效')
-    if preferred_guilds is not None and len(preferred_guilds)!=pods:raise ValueError('每桌轮抓色组数量无效')
+    if pod_seeds is not None and (not isinstance(pod_seeds,list) or len(pod_seeds)!=pods or any(type(s)!=int for s in pod_seeds)):raise ValueError('每桌随机种子数量无效')
+    if preferred_guilds is not None:
+        from .config import GUILDS
+        if not isinstance(preferred_guilds,list) or len(preferred_guilds)!=pods or any(not isinstance(g,list) or len(g)!=3 or any(n not in GUILDS for n in g) for g in preferred_guilds):raise ValueError('每桌需指定三个有效双色身份')
     if audit(catalog,rows,spec)['hard_errors']:raise ValueError('请先修复牌表中的硬性错误')
     config=configuration();index=card_index(config);support=coverage(rows,config)
     if support['missing']:progress('Forge 尚未支持：'+', '.join(support['missing'][:15])+'；若实际组入牌组，整桌跳过并记录，不换牌')
@@ -405,8 +426,7 @@ def simulate(catalog,rows,spec,pods=10,games_per_pod=3,clock_seconds=90,progress
         workers=max(1,scheduling['peak_active'])
         records.sort(key=lambda r:(r['pod'],r['game']))
         from .brackets import cube_report
-        result=dict(match_id=match_id,path=str(out),engine=dict(version=config['version'],jar_sha256=sha256(config['jar']),
-            java=config['java'],pilot='Forge native AI',rng='Forge -s'),spec=spec.to_dict(),cube_sha256=cube_hash,
+        result=dict(match_id=match_id,path=str(out),engine=engine_description(config),spec=spec.to_dict(),cube_sha256=cube_hash,
             coverage=support,pods=pods,games_per_pod=games_per_pod,clock_seconds=clock_seconds,seed=spec.seed,
             rules=dict(players=3,deck_minimum=60,deck_total_exported=60,commander_in_total=True,starting_life=40,
                 free_basic_lands=True,land_count='按曲线与可用牌决定，不固定 22 张',rounds=spec.rounds,

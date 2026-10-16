@@ -45,18 +45,31 @@ def stage():
     missing=[str(p.name) for p in required if not p.is_file()]
     if not list((CACHE/'wheels').glob('*.whl')):missing.append('wheels/*.whl')
     if missing:raise ValueError('缺少构建缓存：'+', '.join(missing)+'。请按 tools/README.md 准备；未创建构建目录。')
+    from cube_ai.forge_compat import bundle_files,FORGE_SHA
+    native=SOURCE/'cube_ai/native';assets=native/'compatibility/modal-context-1'
+    compatibility=bundle_files(assets) if (assets/'manifest.json').is_file() else {}
+    runtime_source=SOURCE/'cube_ai/runtime'
+    forge_settings=json.loads((runtime_source/'forge.json').read_text(encoding='utf8'))
+    for key in ['home','jar','java']:
+        value=Path(forge_settings[key])
+        if value.is_absolute() or not (runtime_source/value).resolve().is_relative_to(runtime_source.resolve()):
+            raise ValueError('便携引擎设置必须使用包内相对路径')
+    if compatibility and sha(runtime_source/forge_settings['jar'])!=FORGE_SHA:raise ValueError('Forge 引擎与兼容修复不匹配')
     target=RELEASES/'构建目录'/time.strftime('%Y%m%d_%H%M%S')/'Cube助手'
     target.mkdir(parents=True,exist_ok=False)
     app=target/'cube_ai';app.mkdir()
     for p in (SOURCE/'cube_ai').glob('*.py'):shutil.copyfile(p,app/p.name)
     for name in ('web','knowledge','profiles'):copy_tree(SOURCE/'cube_ai'/name,app/name)
-    copy_tree(SOURCE/'cube_ai/native',app/'native')
+    (app/'native').mkdir()
+    for name in ['CubeWorker.java','LICENSE.txt','README.md']:shutil.copyfile(native/name,app/'native'/name)
+    for name,data in compatibility.items():
+        destination=app/'native/compatibility/modal-context-1'/name;destination.parent.mkdir(parents=True,exist_ok=True);destination.write_bytes(data)
     ui=app/'web/app.js'
     ui.write_text(ui.read_text(encoding='utf8').replace('重启 start.ps1','关闭并重新启动助手'),encoding='utf8')
     data=app/'data';data.mkdir()
     for name in ('card_pool.json','cube_studies.json','learning_sources.json'):shutil.copyfile(SOURCE/'cube_ai/data'/name,data/name)
     docs=app/'docs';docs.mkdir()
-    for name in ('BRACKETS.md','AI_CONNECTIONS.md','DEBUG_REPORT.md','PARALLEL_EVALUATION.md','SPEED_REPORT.md','SPEED_SEARCH_REPORT.md','DYNAMIC_RESOURCES.md','TASK_CONTROL.md','DECK_POLICY_STUDY.md','NATIVE_DIAGNOSTICS.md'):shutil.copyfile(SOURCE/'cube_ai/docs'/name,docs/name)
+    for name in ('BRACKETS.md','AI_CONNECTIONS.md','DEBUG_REPORT.md','PARALLEL_EVALUATION.md','SPEED_REPORT.md','SPEED_SEARCH_REPORT.md','DYNAMIC_RESOURCES.md','TASK_CONTROL.md','DECK_POLICY_STUDY.md','NATIVE_DIAGNOSTICS.md','FORGE_COMPATIBILITY.md'):shutil.copyfile(SOURCE/'cube_ai/docs'/name,docs/name)
     for path in (SOURCE/'cube_ai/docs').glob('OPTIMIZATION_*.md'):
         if re.fullmatch(r'OPTIMIZATION_20\d{6}\.md',path.name):shutil.copyfile(path,docs/path.name)
     for name in ('CUBECobra_DESIGN.md','MULTI_SITE_DESIGN.md'):
@@ -70,7 +83,8 @@ def stage():
         shutil.copyfile(SOURCE/'magic-skill'/name,target/'magic-skill'/name)
     runtime=app/'runtime';runtime.mkdir()
     for name in ('forge-2.0.15','java21'):copy_tree(SOURCE/'cube_ai/runtime'/name,runtime/name)
-    shutil.copyfile(SOURCE/'cube_ai/runtime/forge.json',runtime/'forge.json')
+    keys={'home','java','jar','version','archive_sha256','java_archive_sha256','jar_sha256','source','java_source'}
+    (runtime/'forge.json').write_text(json.dumps(dict({k:v for k,v in forge_settings.items() if k in keys},compatibility_mode='auto'),indent=2),encoding='utf8')
     accelerator=runtime/'acceleration';accelerator.mkdir()
     copy_tree(SOURCE/'cube_ai/runtime/acceleration/classes',accelerator/'classes')
     for name in ['nvrtc64_120_0.dll','nvrtc-builtins64_124.dll','License.txt','dependencies.json','native-build.json']:
@@ -188,7 +202,8 @@ NumPy / SciPy 所附 BLAS 等组件的声明随其原有文件保留。
 Forge 2.0.15：cube_ai/runtime/forge-2.0.15/LICENSE.txt（GPLv3）。
 完整对应上游源码：本文件夹中的 forge-2.0.15-sources.tar.gz。
 上游及构建定义：https://github.com/Card-Forge/forge/tree/forge-2.0.15
-未修改 Forge 二进制；安装器 SHA256 和来源见 cube_ai/runtime/forge.json。
+原 Forge JAR 保持不变；安装器 SHA256 和来源见 cube_ai/runtime/forge.json。
+可关闭的模式说明兼容覆盖类及完整构建源码：cube_ai/native/compatibility/modal-context-1，GPL-3.0-or-later；精确版本与实战检查范围见 manifest.json。
 常驻桥接：cube_ai/native/CubeWorker.java，GPL-3.0-or-later；对应编译类随包提供。
 构建来源与校验：cube_ai/runtime/acceleration/native-build.json。ECJ仅为构建依赖，本包不含编译器。
 

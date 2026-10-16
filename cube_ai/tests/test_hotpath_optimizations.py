@@ -50,6 +50,30 @@ def test_bounded_search_matches_exhaustive_order(fixture,query,identity,limit):
     assert catalog.search(query,identity,limit)==expected
 
 
+def test_shared_legality_records_are_immutable_json_and_spawn_compatible(tmp_path):
+    import copy
+    import json
+    import pickle
+    from cube_ai.catalog import _read_catalog_json,ReadOnlyLegalities
+    records=[dict(name=name,legalities={'commander':'legal','modern':'not_legal'}) for name in ['one','two']]
+    source=tmp_path/'cards.json';original=json.dumps(records);source.write_text(original)
+    actual=_read_catalog_json(source)
+    assert json.dumps(actual)==original and actual[0]['legalities'] is actual[1]['legalities']
+    shared=actual[0]['legalities']
+    with pytest.raises(TypeError):shared['commander']='banned'
+    with pytest.raises(TypeError):shared.update(commander='banned')
+    with pytest.raises(TypeError):shared.clear()
+    with pytest.raises(TypeError):shared.__init__({'commander':'banned'})
+    assert copy.deepcopy(shared) is shared
+    restored=pickle.loads(pickle.dumps(actual))
+    assert restored==actual and restored[0]['legalities'] is restored[1]['legalities']
+    assert isinstance(restored[0]['legalities'],ReadOnlyLegalities)
+    independent=dict(shared);independent['commander']='banned';assert shared['commander']=='legal'
+    snapshot=Catalog.from_records(actual,'fixture','fixture')
+    assert snapshot.cards['one']['legalities'] is snapshot.cards['two']['legalities']
+    assert snapshot.cards['one'] is not actual[0] and source.read_text()==original
+
+
 def test_compressed_workspace_is_bounded_and_results_are_not_mutable_aliases(fixture):
     catalog,rows=fixture;spec=BuildSpec.from_dict({'bracket':3});workspace=DraftWorkspace(catalog,spec,max_bytes=28000)
     summarize=lambda pod:_pod_metrics(catalog,pod)

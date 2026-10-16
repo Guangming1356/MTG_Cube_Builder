@@ -65,7 +65,7 @@ def compare_entries(source_type,source_id,game_index,progress=lambda _:None):
         original=dict(outcome=original['outcome'],diagnostics=original_diagnostics,engine=source.get('engine')),
         order=original['order'],seed=original['seed'],clock_seconds=clock,deck_sha256=files,
         original_deck_hashes_verified=all(name in expected for name in files),
-        current_engine=dict(fingerprint=engine_key(config),heap_mib=config.get('heap_mib',2048),jvm_options=config.get('jvm_options',[])),
+        current_engine=dict(fingerprint=engine_key(config),compatibility=config.get('compatibility'),heap_mib=config.get('heap_mib',2048),jvm_options=config.get('jvm_options',[])),
         training_samples_added=0,games=[],limitation='已知个案的入口诊断，不是新的牌力测试；不修改原记录、牌组或 Cube，不自动排除任何卡牌。引擎或机器负载变化可能影响复现。')
     if not result['original_deck_hashes_verified']:
         result['limitation']+=' 原报告缺少部分牌组校验值，仅复制当前保存文件，无法确认它们从未修改。'

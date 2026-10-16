@@ -32,7 +32,10 @@ def engine_key(config):
     from .forge_worker import bridge_signature
     def digest(path):
         p=Path(path);s=p.stat();return _file_hash(str(p.resolve()),s.st_size,s.st_mtime_ns)
-    return [digest(config['jar']),digest(config['java']),config.get('backend','isolated'),bridge_signature()]
+    result=[digest(config['jar']),digest(config['java']),config.get('backend','isolated'),bridge_signature()]
+    from .forge_compat import signature
+    if compat:=signature(config):result.append(compat)
+    return result
 
 
 def profile_for(config):

@@ -13,8 +13,15 @@ from .config import ROOT
 from .acceleration import linear
 
 MODELS=ROOT/'models'
-VERSION='activity-3'
+VERSION='activity-4'
 _training_lock=threading.Lock()
+
+def engine_scope():
+    """Exact engine, Java, native entry, bridge and managed compatibility bytes."""
+    from .forge import configuration
+    from .tuning import engine_key
+    try:return engine_key(configuration())
+    except (OSError,ValueError,KeyError,TypeError):return None
 
 def fingerprint(deck):
     return hashlib.sha256(json.dumps([deck.get('commander'),sorted(deck.get('spells',[])),
@@ -37,11 +44,17 @@ def collect(catalog,progress=lambda _:None):
     from .forge import MATCHES
     from .optimize import game_trace
     x=[];y=[];groups=[];cubes=[];seen=set();games=0;sources=[];censored=0
+    scope=engine_scope();excluded_engine_games=0
     for path in sorted(MATCHES.glob('*/report.json')):
         try:
             r=json.loads(path.read_text(encoding='utf8'));tables={p['pod']:p for p in r['tables']}
+            if scope is None or r.get('engine',{}).get('fingerprint')!=scope:
+                excluded_engine_games+=len(r.get('games',[]));continue
             for game in r['games']:
                 if game['outcome'] not in {'win','draw'} or game.get('cache_hit'):continue
+                actual=game.get('backend','')
+                if not (actual.startswith('resident') if scope[2]=='resident' else actual=='isolated'):
+                    excluded_engine_games+=1;continue
                 decks=tables[game['pod']]['decks']
                 if not all(d.get('buildable') for d in decks):continue
                 identities={d['id']:fingerprint(d) for d in decks}
@@ -60,7 +73,8 @@ def collect(catalog,progress=lambda _:None):
                 groups.extend([group]*3);cubes.extend([r['cube_sha256']]*3)
             sources.append(r['match_id'])
         except (KeyError,ValueError,OSError,TypeError):continue
-    return dict(x=np.asarray(x,dtype=np.float32),y=np.asarray(y,dtype=np.float32),groups=groups,cubes=cubes,games=games,sources=sources,censored_games=censored)
+    return dict(x=np.asarray(x,dtype=np.float32),y=np.asarray(y,dtype=np.float32),groups=groups,cubes=cubes,games=games,sources=sources,censored_games=censored,
+                engine=scope,excluded_engine_games=excluded_engine_games)
 
 def split_groups(groups,cubes):
     """Keep both related decks and entire Cube versions out of training when possible."""
@@ -111,6 +125,7 @@ def _train(catalog,progress=lambda _:None):
     report=dict(id=root.name,version=VERSION,games=data['games'],independent_groups=len(set(groups)),cubes=len(set(data['cubes'])),
         status='insufficient_data',active=False,targets=['前四完整个人周期的主动行动','每回合施放密度','本局施放过终结牌'],
         censored_games=data.get('censored_games',0),
+        engine=data.get('engine'),excluded_engine_games=data.get('excluded_engine_games',0),
         activity_definition='完整个人周期内任意回合的施放、主动异能或宣攻；不计自动触发、下地及最后未完整观察的周期。四周期不足的整局不训练，可能少代表结束很早的牌组。',
         limitation='学习 Forge 原生 AI 的可观测行为，不预测人类娱乐性或认证牌力。没有把一副牌的胜负分摊到单卡。')
     if len(set(groups))<10:
@@ -123,7 +138,7 @@ def _train(catalog,progress=lambda _:None):
     tr,va,te=[indices[k] for k in ['train','validation','test']]
     mean=x[tr].mean(axis=0);scale=x[tr].std(axis=0);scale[scale<.001]=1
     z=(x-mean)/scale;aug=np.column_stack([z,np.ones(len(z),dtype=np.float32)])
-    base=dict(version=VERSION,mean=mean.tolist(),scale=scale.tolist(),catalog=catalog.signature)
+    base=dict(version=VERSION,mean=mean.tolist(),scale=scale.tolist(),catalog=catalog.signature,engine=data.get('engine'))
     candidates=[]
     for alpha in [.1,1.,10.]:
         penalty=np.eye(aug.shape[1])*alpha;penalty[-1,-1]=0
@@ -170,7 +185,7 @@ def _train(catalog,progress=lambda _:None):
     improvement=1-float(candidate_loss.mean())/max(1e-9,float(losses[baseline_name].mean()))
     activity_candidate=float(np.mean((prediction[:,0]-y[te,0])**2))
     activity_baseline=min(float(np.mean((intercept[:,0]-y[te,0])**2)),float(np.mean((rule[:,0]-y[te,0])**2)))
-    accepted=bool(enough and interval[1]<0 and improvement>=.03 and activity_candidate<activity_baseline)
+    accepted=bool(data.get('engine') and enough and interval[1]<0 and improvement>=.03 and activity_candidate<activity_baseline)
     chosen.update(id=root.name,active=accepted,source_games=data['games'],training_dataset=hashlib.sha256(x.tobytes()+y.tobytes()).hexdigest())
     report.update(status='accepted' if accepted else 'diagnostic',active=accepted,model_kind=chosen['kind'],split=method,
         split_groups={k:len({groups[i] for i in ix}) for k,ix in indices.items()},
@@ -192,6 +207,8 @@ def active_model(catalog):
         model=json.loads((MODELS/'active.json').read_text(encoding='utf8'))
         if not isinstance(model,dict):return None
         if not model.get('active') or model.get('version')!=VERSION or model.get('catalog')!=catalog.signature:return None
+        scope=engine_scope()
+        if scope is None or model.get('engine')!=scope:return None
         if model.get('kind') not in {'ridge','mlp'}:return None
         shapes=dict(mean=(54,),scale=(54,))
         shapes.update(dict(weights=(55,3)) if model.get('kind')=='ridge' else dict(w1=(54,32),b1=(32,),w2=(32,3),b2=(3,)))
@@ -203,7 +220,7 @@ def active_model(catalog):
     except (OSError,ValueError,TypeError,KeyError):return None
 
 def status(catalog):
-    reports=sorted(MODELS.glob('*/report.json'),reverse=True)
+    reports=sorted(MODELS.glob('*/report.json'),reverse=True);scope=engine_scope()
     latest=None;historical=None
     # A task started before an update can finish afterwards. Its legacy report
     # must not hide a current-version report or imply the active model is stale.
@@ -212,8 +229,8 @@ def status(catalog):
         except (OSError,ValueError):continue
         if not isinstance(record,dict):continue
         if historical is None:historical=record
-        if record.get('version')==VERSION:latest=record;break
+        if record.get('version')==VERSION and scope is not None and record.get('engine')==scope:latest=record;break
     latest=latest or historical
     model=active_model(catalog)
     return dict(version=VERSION,active=bool(model),active_id=model.get('id') if model else None,latest=latest,
-                latest_compatible=bool(latest and latest.get('version')==VERSION))
+                engine=scope,latest_compatible=bool(latest and latest.get('version')==VERSION and scope is not None and latest.get('engine')==scope))

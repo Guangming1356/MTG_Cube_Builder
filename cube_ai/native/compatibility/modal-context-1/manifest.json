@@ -1,0 +1,82 @@
+{
+  "id": "modal-context-1",
+  "forge_sha256": "85a4c31e07d4d5621a84bb03b6d75fd08e9f4ba289e575c870579b49c0033766",
+  "original_class_sha256": "ad0677919155403fc56117eef0438316a78c4132d41aa984720a3becdbce5b4c",
+  "patched_class_sha256": "e0b5bda6dae6fab57e1a062d8e1731056d54c997d9629b01e0f0d3bc1ea4c8dd",
+  "transformer_sha256": "ad190364f60d20c88743b9d1cd44803fccfa262cc568bc9863ad94883c3de0ce",
+  "identity_byte_equal": true,
+  "other_methods_byte_equal": true,
+  "changed_methods": [
+    [
+      "makeFormatedDescription",
+      "(Lforge/game/spellability/SpellAbility;Z)Ljava/lang/String;"
+    ]
+  ],
+  "native_main_class": "forge.view.Main",
+  "native_add_opens": [
+    "java.desktop/java.beans",
+    "java.desktop/javax.swing.border",
+    "java.desktop/javax.swing.event",
+    "java.desktop/sun.swing",
+    "java.desktop/java.awt.image",
+    "java.desktop/java.awt.color",
+    "java.desktop/sun.awt.image",
+    "java.desktop/javax.swing",
+    "java.desktop/java.awt",
+    "java.base/java.util",
+    "java.base/java.lang",
+    "java.base/java.lang.reflect",
+    "java.base/java.text",
+    "java.desktop/java.awt.font",
+    "java.base/jdk.internal.misc",
+    "java.base/sun.nio.ch",
+    "java.base/java.nio",
+    "java.base/java.math",
+    "java.base/java.util.concurrent",
+    "java.base/java.net"
+  ],
+  "validated": true,
+  "validation": {
+    "development": {
+      "games": 24,
+      "normal_cases": 5,
+      "known_failure_cases": 1,
+      "passed": true,
+      "order": "original/patched/patched/original"
+    },
+    "resident_holdout": {
+      "games": 52,
+      "normal_cases": 20,
+      "known_failure_cases": 6,
+      "passed": true
+    },
+    "first_entry_assay": {
+      "games": 20,
+      "passed": false,
+      "passed_checks": 9,
+      "total_checks": 10,
+      "failed_assumption": "One CLI original did not reproduce a resident failure. It and its patched pair both completed normally with identical event traces. This failed original assay was retained, not rerolled."
+    },
+    "prospective_cli": {
+      "games": 12,
+      "normal_cases": 3,
+      "known_failure_cases": 3,
+      "passed": true,
+      "protocol": "Six previously untested CLI cases frozen after the first assay; require >=1 known original failure, all patched games normal, no new original symptom, exact trace for every normal original."
+    },
+    "training_samples_added": 0,
+    "original_jar_unchanged": true,
+    "limitation": "Fixed local AI/deck/seed cases; not all cards, all engines or human play. Normal event parity is checked within each native entry, not assumed across entries. These timings are not a patch speed benchmark."
+  },
+  "source_sha256": {
+    "LICENSE.txt": "8ceb4b9ee5adedde47b31e975c1d90c73ad27b6b165a1dcd80c7c545eb65b903",
+    "README.md": "29554af9d68a28f46a58620837df50dede8288e6c76184bda84dd140e9a296de",
+    "build/ModalDescriptionPatch.java": "ad190364f60d20c88743b9d1cd44803fccfa262cc568bc9863ad94883c3de0ce",
+    "build/build.py": "9a02a6a1fba5cd947704456dc276c5504624878888bcc73171e219c03fa9d5f4",
+    "build/classfile.py": "32c013fb2753d2481c1162b6427011540eb6f58cfab07309e81fcbac8ca0f131",
+    "build/dependencies.json": "3bd2f83f6dfaa5d234d0e602b3a6093b0e049ccb5de5288c8ad531e1055ce5bf"
+  },
+  "scope": "Conditional early source-controller context initialization in the two-argument modal-description formatter only; existing actor is not overwritten",
+  "license": "GPL-3.0-or-later",
+  "upstream": "https://github.com/Card-Forge/forge/tree/forge-2.0.15"
+}

@@ -1,2 +1,5 @@
 * -text
 *.py diff=python
+# Reviewed compatibility bytes include their original CRLF/terminal blank line.
+# Do not normalize these byte-pinned build inputs to satisfy formatting checks.
+cube_ai/native/compatibility/** whitespace=cr-at-eol,-blank-at-eof

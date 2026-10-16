@@ -40,7 +40,7 @@ def find_server():
     return older
 
 def load_env():
-    allowed={'OPENAI_API_KEY','OPENAI_MODEL','OPENAI_BASE_URL','CUBE_API_STYLE','CUBE_CARD_POOL','CUBE_FORGE_HOME','CUBE_FORGE_JAVA'}
+    allowed={'OPENAI_API_KEY','OPENAI_MODEL','OPENAI_BASE_URL','CUBE_API_STYLE','CUBE_CARD_POOL','CUBE_FORGE_HOME','CUBE_FORGE_JAVA','CUBE_FORGE_COMPAT'}
     path=ROOT/'.env'
     if path.is_file():
         for line in path.read_text(encoding='utf-8-sig').splitlines():

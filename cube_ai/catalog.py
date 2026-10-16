@@ -15,6 +15,42 @@ FETCHES = dict(zip(
     ["Flooded Strand", "Polluted Delta", "Bloodstained Mire", "Wooded Foothills", "Windswept Heath", "Marsh Flats", "Scalding Tarn", "Verdant Catacombs", "Arid Mesa", "Misty Rainforest"],
     ["UW", "BU", "BR", "GR", "GW", "BW", "RU", "BG", "RW", "GU"]))
 
+
+class ReadOnlyLegalities(dict):
+    """JSON/pickle-compatible immutable values shared across card records."""
+    __slots__=('_sealed',)
+    def __init__(self,values=()):
+        if hasattr(self,'_sealed'):self._readonly()
+        value=dict(values)
+        if not all(isinstance(k,str) and isinstance(v,str) for k,v in value.items()):raise TypeError('合法性记录只接受字符串')
+        dict.__init__(self,value);object.__setattr__(self,'_sealed',True)
+    def _readonly(self,*args,**kwargs):raise TypeError('牌库合法性只读；请用 dict(legalities) 创建独立副本')
+    __setitem__=__delitem__=__setattr__=clear=pop=popitem=setdefault=update=__ior__=_readonly
+    def __copy__(self):return self
+    def __deepcopy__(self,memo):return self
+    def __reduce__(self):return (type(self),(dict(self),))
+
+
+def _legality_pool():
+    values={}
+    def compact(record):
+        legalities=record.get('legalities')
+        if isinstance(legalities,dict) and all(isinstance(k,str) and isinstance(v,str) for k,v in legalities.items()):
+            # Keep the original key order as well as values; public JSON output
+            # remains identical while repeated per-card maps become shared.
+            token=tuple(legalities.items())
+            existing=values.get(token)
+            if existing is None:existing=values[token]=ReadOnlyLegalities(legalities)
+            record['legalities']=existing
+        return record
+    return compact
+
+
+def _read_catalog_json(path):
+    # Intern during decoding rather than retaining thousands of full maps until
+    # after construction; reduces steady memory without duplicating their peak.
+    return json.loads(path.read_text(encoding='utf8'),object_hook=_legality_pool())
+
 class Catalog:
     def __init__(self, source=None, use_cache=True):
         self.source = Path(source or card_pool_path())
@@ -25,12 +61,12 @@ class Catalog:
         j = None
         if use_cache and cache.exists():
             try:
-                cached = json.loads(cache.read_text(encoding="utf-8"))
+                cached = _read_catalog_json(cache)
                 if isinstance(cached,dict) and cached.get('signature')==signature and isinstance(cached.get('cards'),list) and cached['cards'] and 'snapshot' in cached:
                     if all(isinstance(c,dict) and all(k in c for k in ['name','text','identity','quality','kind']) for c in cached['cards']):j=cached
             except (OSError,ValueError):pass
         if j is None:
-            raw = json.loads(self.source.read_text(encoding="utf-8"))
+            raw = _read_catalog_json(self.source)
             cards = list(raw["cards"].values())
             tribes = tribes_from_cards(cards)
             records = []
@@ -81,7 +117,8 @@ class Catalog:
         Construction/search/AI operations still receive the complete catalog.
         """
         value=cls.__new__(cls);value.source=None;value.snapshot=snapshot;value.signature=signature
-        value.cards={card['name']:card for card in records};value.reference=set()
+        compact=_legality_pool()
+        value.cards={card['name']:compact(dict(card)) for card in records};value.reference=set()
         value.aliases={name.casefold():name for name in value.cards};value._search_cache=OrderedDict()
         for name in value.cards:
             if ' // ' in name:value.aliases.setdefault(name.split(' // ')[0].casefold(),name)

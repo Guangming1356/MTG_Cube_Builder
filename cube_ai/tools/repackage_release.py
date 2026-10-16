@@ -1,6 +1,7 @@
 """Build a clean portable update from a verified previous release.
 
-Only application Python, web assets and selected public docs are overlaid. The
+Application Python, web assets, selected public docs and reviewed compatibility
+bytes with their complete build sources are overlaid. The
 existing embedded Python, wheels, Forge, Java, licenses and corresponding source
 archives are retained. A changed Java bridge requires a full rebuild instead.
 """
@@ -17,7 +18,7 @@ import zipfile
 
 REPOSITORY='Guangming1356/MTG_Cube_Builder'
 DOCS={'BRACKETS.md','AI_CONNECTIONS.md','DEBUG_REPORT.md','PARALLEL_EVALUATION.md',
-      'SPEED_REPORT.md','SPEED_SEARCH_REPORT.md','DYNAMIC_RESOURCES.md','TASK_CONTROL.md','DECK_POLICY_STUDY.md','NATIVE_DIAGNOSTICS.md'}
+      'SPEED_REPORT.md','SPEED_SEARCH_REPORT.md','DYNAMIC_RESOURCES.md','TASK_CONTROL.md','DECK_POLICY_STUDY.md','NATIVE_DIAGNOSTICS.md','FORGE_COMPATIBILITY.md'}
 SECRET=re.compile(rb'(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{25,}|gh[pousr]_[A-Za-z0-9]{25,})')
 LOCAL_PROFILE=re.compile(rb'[A-Za-z]:[/\\]+Users[/\\]+[^/\\\s"\']+',re.I)
 PRIVATE_NAMES={'.env','.git','__pycache__','.pytest_cache','preferences.sqlite','catalog.json','ai-settings.bin','entrance.json','launcher.log','forge.profile.properties'}
@@ -61,6 +62,10 @@ def overlay_files(source):
         if path.is_file():
             text=path.read_text(encoding='utf-8-sig').replace('D:\\MTG\\Cube助手','本项目文件夹').replace('D:/MTG/Cube助手','本项目文件夹')
             files['cube_ai/docs/'+name]=text.encode('utf8')
+    assets=app/'native/compatibility/modal-context-1'
+    if (assets/'manifest.json').is_file():
+        from cube_ai.forge_compat import bundle_files
+        for name,data in bundle_files(assets).items():files['cube_ai/native/compatibility/modal-context-1/'+name]=data
     for name,data in files.items():scan_overlay(name,data)
     return files
 
@@ -86,6 +91,12 @@ def repackage(base,source,output,version,expected_sha256,commit='unknown'):
         for path in (source/'cube_ai/native').glob('*.java'):
             name='Cube助手/cube_ai/native/'+path.name
             if name not in names or archive.read(name)!=path.read_bytes():raise ValueError('Java 桥接源码已改变，需要完整编译并验证，不能复用旧二进制')
+        if 'cube_ai/native/compatibility/modal-context-1/manifest.json' in replacements:
+            from cube_ai.forge_compat import FORGE_SHA
+            jars=[name for name in names if name.endswith('/forge-gui-desktop-2.0.15-jar-with-dependencies.jar')]
+            if len(jars)!=1:raise ValueError('基包缺少兼容修复对应的唯一 Forge 引擎')
+            with archive.open(jars[0]) as stream:
+                if hashlib.file_digest(stream,'sha256').hexdigest()!=FORGE_SHA:raise ValueError('基包 Forge 引擎与兼容修复不匹配')
         manifest=json.loads(archive.read('Cube助手/发布说明.json'))
         application_version='unknown'
         for node in ast.parse(replacements.get('cube_ai/__init__.py',b'').decode('utf-8-sig')).body:
