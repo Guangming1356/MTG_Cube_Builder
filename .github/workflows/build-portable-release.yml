@@ -74,7 +74,14 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Tag push failed' }
           gh release create $cubeInfo.tag (Join-Path $cubeOutput $cubeInfo.asset) (Join-Path $cubeOutput 'release-info.json') (Join-Path $cubeOutput 'SHA256SUMS.txt') --repo $env:GITHUB_REPOSITORY --verify-tag --draft --title ("Cube 助手 " + $env:CUBE_VERSION) --notes-file distribution/notes.md
           if ($LASTEXITCODE -ne 0) { throw 'Draft release upload failed' }
-          $cubeRemote = gh api ("repos/" + $env:GITHUB_REPOSITORY + "/releases/tags/" + $cubeInfo.tag) | ConvertFrom-Json
+          # Resolve drafts from the release collection: lookup by tag can return
+          # 404 before publication even after a successful draft upload.
+          $cubeReleases = gh api ("repos/" + $env:GITHUB_REPOSITORY + "/releases?per_page=100") | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Release listing failed' }
+          $cubeDraft = @($cubeReleases | Where-Object tag_name -eq $cubeInfo.tag)
+          if ($cubeDraft.Count -ne 1) { throw 'Uploaded draft is not uniquely visible; publishing stopped' }
+          $cubeRemote = gh api ("repos/" + $env:GITHUB_REPOSITORY + "/releases/" + $cubeDraft[0].id) | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0) { throw 'Draft lookup failed' }
           $cubeZip = @($cubeRemote.assets | Where-Object name -eq $cubeInfo.asset)
           if ($cubeZip.Count -ne 1 -or $cubeZip[0].state -ne 'uploaded' -or $cubeZip[0].size -ne $cubeInfo.bytes -or $cubeZip[0].digest -ne ("sha256:" + $cubeInfo.sha256) -or $cubeRemote.assets.Count -ne 3) { throw 'Remote asset verification failed' }
           gh release edit $cubeInfo.tag --repo $env:GITHUB_REPOSITORY --draft=false --latest
