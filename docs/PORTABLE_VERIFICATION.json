@@ -1,0 +1,11 @@
+{
+  "passed": true,
+  "application_version": "0.2.0",
+  "cards": 31070,
+  "offline_ai": true,
+  "forge_available": true,
+  "embedded_runtime": true,
+  "task_pause_resume": true,
+  "shutdown_blocks_live_tasks": true,
+  "restart_recovers_result": true
+}
