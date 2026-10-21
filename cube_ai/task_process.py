@@ -15,6 +15,31 @@ JOBS=ROOT/'private/jobs'
 ACTIVE={'queued','running','pausing','paused','cancelling'}
 
 
+def process_identity(pid):
+    """Read-only PID creation identity; PID reuse cannot impersonate an owner."""
+    if type(pid)!=int or pid<=0:return None
+    try:
+        if os.name=='nt':
+            from ctypes import wintypes as w
+            api=ctypes.WinDLL('kernel32',use_last_error=True)
+            api.OpenProcess.argtypes=[w.DWORD,w.BOOL,w.DWORD];api.OpenProcess.restype=w.HANDLE
+            api.GetExitCodeProcess.argtypes=[w.HANDLE,ctypes.POINTER(w.DWORD)]
+            api.GetProcessTimes.argtypes=[w.HANDLE,*([ctypes.POINTER(w.FILETIME)]*4)]
+            api.CloseHandle.argtypes=[w.HANDLE]
+            handle=api.OpenProcess(0x1000,False,pid)
+            if not handle:return None
+            try:
+                code=w.DWORD();times=[w.FILETIME() for _ in range(4)]
+                if not api.GetExitCodeProcess(handle,ctypes.byref(code)) or code.value!=259:return None
+                if not api.GetProcessTimes(handle,*[ctypes.byref(value) for value in times]):return None
+                started=times[0].dwLowDateTime+(times[0].dwHighDateTime<<32)
+                return dict(pid=pid,started=started)
+            finally:api.CloseHandle(handle)
+        fields=Path(f'/proc/{pid}/stat').read_text().rpartition(')')[2].split()
+        return dict(pid=pid,started=int(fields[19])) if fields[0]!='Z' else None
+    except (OSError,ValueError,IndexError,AttributeError):return None
+
+
 class ProcessTree:
     def __init__(self):
         self.handle=None

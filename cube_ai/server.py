@@ -97,12 +97,12 @@ def execute_operation(app,operation,spec,rows,data,progress):
 DEFAULT_ISOLATED_JOBS=True
 
 class Application:
-    def __init__(self,catalog=None,ai_store=None,isolated_jobs=None):
+    def __init__(self,catalog=None,ai_store=None,isolated_jobs=None,restore_history=True):
         self.catalog=catalog or Catalog();self._knowledge=None;self._feedback=None;self._service_lock=threading.Lock()
         self.ai_store=ai_store or SettingsStore();self.auth=ChatGPTAuth(self.ai_store)
         self.jobs={};self.lock=threading.Lock();self.executor=ThreadPoolExecutor(max_workers=2);self.closing=False
         self.isolated_jobs=DEFAULT_ISOLATED_JOBS if isolated_jobs is None else isolated_jobs;self.controls={};self.job_paths={}
-        self.restore_jobs()
+        if restore_history:self.restore_jobs()
         example_root = LIBRARY if LIBRARY.is_dir() else WORKSPACE
         self.examples={p.parent.name:p for p in example_root.glob("commander_cube_600*/cube_600.csv")}
         ref=WORKSPACE/"ref_thecommandercube.csv"
@@ -122,14 +122,47 @@ class Application:
 
     def restore_jobs(self):
         from . import task_process
-        paths=sorted(task_process.JOBS.glob('*/summary.json'),key=lambda p:p.stat().st_mtime,reverse=True)[:30]
-        for path in reversed(paths):
+        folders=sorted((p for p in task_process.JOBS.glob('*') if p.is_dir() and re.fullmatch(r'[a-f0-9]{16}',p.name)),key=lambda p:p.stat().st_mtime,reverse=True)[:30]
+        for folder in reversed(folders):
             try:
-                job=json.loads(path.read_text(encoding='utf8'));id_=path.parent.name
-                if not re.fullmatch(r'[a-f0-9]{16}',id_) or job.get('id')!=id_ or job.get('state') not in {'done','failed','cancelled'}:continue
+                path=folder/'summary.json';id_=folder.name
+                job=json.loads(path.read_text(encoding='utf8')) if path.exists() else None
+                if job is not None and (not isinstance(job,dict) or job.get('id')!=id_):continue
+                if job is None or job.get('state') in ACTIVE:
+                    owner=(job or {}).get('owner_identity')
+                    if owner and task_process.process_identity(owner.get('pid'))==owner:continue
+                    # Never persist stale active state after a power loss. Legacy
+                    # inputs are read only when their small summary is absent.
+                    if job is None:
+                        request=json.loads((folder/'input.json').read_text(encoding='utf8'))['request']
+                        stamp=(folder/'input.json').stat().st_mtime
+                        job=dict(id=id_,operation=request.get('operation','build'),cube_name=request.get('spec',{}).get('name',''),created_at=stamp,updated_at=stamp)
+                    metadata=folder/'completion.json'
+                    if metadata.exists():
+                        completion=json.loads(metadata.read_text(encoding='utf8'))
+                        if completion.get('state') not in {'done','failed','cancelled'}:continue
+                        job.update(completion,updated_at=metadata.stat().st_mtime)
+                    elif (folder/'result.json').exists():
+                        saved=json.loads((folder/'result.json').read_text(encoding='utf8'))
+                        if saved.get('state') not in {'done','failed','cancelled'}:continue
+                        job.update({k:v for k,v in saved.items() if k!='result'})
+                        job['updated_at']=(folder/'result.json').stat().st_mtime
+                        del saved
+                    else:
+                        job.update(state='failed',interrupted=True,progress='上次运行中断',
+                            error='助手或电脑在任务完成前退出；已保存的对局和文件保留，可下载已有记录。')
+                        try:
+                            progress_path=folder/'progress.json';previous=json.loads(progress_path.read_text(encoding='utf8'))
+                            job.update(updated_at=progress_path.stat().st_mtime,note='上次进度：'+str(previous.get('progress','未记录')))
+                        except (OSError,ValueError,AttributeError):pass
+                    runner=TaskProcess.__new__(TaskProcess);runner.folder=folder
+                    job.update(checkpoint=runner.checkpoint_summary(),finished_at=job.get('updated_at',time.time()),recovered_at=time.time())
+                    from .task_control import atomic_json
+                    atomic_json(path,{k:v for k,v in job.items() if k not in {'result','worker_pid'}})
+                if job.get('state') not in {'done','failed','cancelled'}:continue
                 job.pop('result',None);job.pop('worker_pid',None)
-                self.jobs[id_]=job;self.job_paths[id_]=path.parent
-            except (OSError,ValueError,AttributeError):continue
+                self.jobs[id_]=job;self.job_paths[id_]=folder
+            except (OSError,ValueError,AttributeError,KeyError,TypeError):continue
 
     def get_job(self,id_):
         with self.lock:
@@ -267,8 +300,20 @@ class Application:
                               cards=[self.catalog.cards[name] for name in sorted({row['name'] for row in rows})])
             elif operation=='diagnose-game':
                 request['cards']=[];snapshot=dict(snapshot=self.catalog.snapshot,signature=self.catalog.signature,cards=[])
-            self.controls[job_id]=TaskProcess(job_id,request,getattr(self.ai_store,'path',None),catalog_data=snapshot)
-            self.job_paths[job_id]=self.controls[job_id].folder
+            try:
+                self.controls[job_id]=TaskProcess(job_id,request,getattr(self.ai_store,'path',None),catalog_data=snapshot)
+                self.job_paths[job_id]=self.controls[job_id].folder
+                from .task_control import atomic_json
+                from .task_process import process_identity
+                with self.lock:
+                    self.jobs[job_id]['owner_identity']=process_identity(os.getpid())
+                    atomic_json(self.job_paths[job_id]/'summary.json',dict(self.jobs[job_id]))
+            except OSError:
+                message='无法保存任务文件，尚未开始计算；请检查磁盘空间和文件夹写入权限。'
+                with self.lock:
+                    self.jobs[job_id].update(state='failed',progress='任务未能开始',error=message,finished_at=time.time())
+                    self.controls.pop(job_id,None)
+                raise ValueError(message) from None
         def progress(message):
             with self.lock:self.jobs[job_id].update(progress=message,updated_at=time.time())
         def execute():

@@ -1,5 +1,6 @@
 """Small optional CUDA backend; NumPy remains the measured fallback."""
 import ctypes as C
+import atexit
 import os
 import threading
 import time
@@ -39,6 +40,12 @@ def driver_info():
 
 class CUDALinear:
     def __init__(self):
+        self.context=None;self.buffers=[];self.dll_dir=None;self.closed=False
+        try:self._initialize()
+        except BaseException:
+            self.close();raise
+
+    def _initialize(self):
         folder=(RUNTIME/'acceleration').resolve()
         nvrtcs=list(folder.glob('nvrtc64_*.dll'))
         if not nvrtcs:raise CUDAError('尚未安装 NVRTC 评分组件')
@@ -62,16 +69,19 @@ class CUDALinear:
         rtc.nvrtcGetPTXSize.argtypes=[P,C.POINTER(S)];rtc.nvrtcGetPTX.argtypes=[P,P]
         rtc.nvrtcGetProgramLogSize.argtypes=[P,C.POINTER(S)];rtc.nvrtcGetProgramLog.argtypes=[P,P]
         rtc.nvrtcDestroyProgram.argtypes=[C.POINTER(P)]
-        self.check(rtc.nvrtcCreateProgram(C.byref(program),KERNEL.encode(),b'cube_linear.cu',0,None,None))
-        # Forward-compatible PTX; the installed driver JIT targets the actual GPU.
-        options=(C.c_char_p*2)(b'--gpu-architecture=compute_75',b'--fmad=false')
-        code=rtc.nvrtcCompileProgram(program,2,options)
-        if code:
-            size=S();rtc.nvrtcGetProgramLogSize(program,C.byref(size));log=C.create_string_buffer(size.value)
-            rtc.nvrtcGetProgramLog(program,log);rtc.nvrtcDestroyProgram(C.byref(program))
-            raise CUDAError(log.value.decode('utf8',errors='replace'))
-        size=S();self.check(rtc.nvrtcGetPTXSize(program,C.byref(size)));ptx=C.create_string_buffer(size.value)
-        self.check(rtc.nvrtcGetPTX(program,ptx));rtc.nvrtcDestroyProgram(C.byref(program))
+        try:
+            self.check(rtc.nvrtcCreateProgram(C.byref(program),KERNEL.encode(),b'cube_linear.cu',0,None,None))
+            # Forward-compatible PTX; the installed driver JIT targets the GPU.
+            options=(C.c_char_p*2)(b'--gpu-architecture=compute_75',b'--fmad=false')
+            code=rtc.nvrtcCompileProgram(program,2,options)
+            if code:
+                size=S();rtc.nvrtcGetProgramLogSize(program,C.byref(size));log=C.create_string_buffer(size.value)
+                rtc.nvrtcGetProgramLog(program,log)
+                raise CUDAError(log.value.decode('utf8',errors='replace'))
+            size=S();self.check(rtc.nvrtcGetPTXSize(program,C.byref(size)));ptx=C.create_string_buffer(size.value)
+            self.check(rtc.nvrtcGetPTX(program,ptx))
+        finally:
+            if program.value:rtc.nvrtcDestroyProgram(C.byref(program))
         self.module=P();self.check(self.module_load(C.byref(self.module),C.cast(ptx,P)))
         self.function=P();self.check(self.get_function(C.byref(self.function),self.module,b'linear'))
 
@@ -79,7 +89,20 @@ class CUDALinear:
     def check(code):
         if code:raise CUDAError(f'CUDA/NVRTC 调用失败，代码 {code}')
 
+    def close(self):
+        if self.closed:return
+        self.closed=True
+        # Destroying our own context releases its module and all device buffers.
+        if self.context is not None and self.context.value:
+            try:self.destroy(self.context)
+            except (OSError,AttributeError):pass
+            self.context=None
+        self.buffers=[]
+        if self.dll_dir is not None:
+            self.dll_dir.close();self.dll_dir=None
+
     def linear(self,x,w):
+        if self.closed:raise CUDAError('GPU 评分上下文已释放')
         x=np.ascontiguousarray(x,dtype=np.float32);w=np.ascontiguousarray(w.T,dtype=np.float32)
         n,f=x.shape;m=w.shape[0]
         if w.shape[1]!=f:raise ValueError('评分矩阵维度不一致')
@@ -102,6 +125,16 @@ class CUDALinear:
 
 _lock=threading.RLock();_cuda=None;_failure=None;_choices={}
 
+
+def release():
+    global _cuda
+    with _lock:
+        value=_cuda;_cuda=None
+        if value is not None and hasattr(value,'close'):value.close()
+
+
+atexit.register(release)
+
 def linear(x,w,backend='auto'):
     """Choose on end-to-end timings, including copies; disclose fallback."""
     global _cuda,_failure
@@ -114,11 +147,16 @@ def linear(x,w,backend='auto'):
             try:
                 started=time.perf_counter();value=_cuda.linear(x,w)
                 return value,dict(backend='gpu',gpu_seconds=time.perf_counter()-started,rows=len(x),requested=backend,calibrated=True)
-            except (CUDAError,OSError,AttributeError) as e:_failure=str(e)
+            except (CUDAError,OSError,AttributeError) as e:_failure=str(e);release()
         started=time.perf_counter();cpu=x@w;cpu_seconds=time.perf_counter()-started
         meta=dict(backend='cpu',cpu_seconds=cpu_seconds,rows=len(x),requested=backend)
-        if backend=='cpu' or backend=='auto' and x.size*w.shape[1]<2_000_000:return cpu,meta
+        if backend=='cpu' or backend=='auto' and x.size*w.shape[1]<2_000_000:
+            if backend=='auto' and 'gpu' not in _choices.values():release()
+            return cpu,meta
         if _failure:return cpu,dict(meta,fallback=_failure)
+        if backend=='auto' and _choices.get(key)=='cpu':
+            if 'gpu' not in _choices.values():release()
+            return cpu,dict(meta,calibrated=True)
         try:
             if key not in _choices:
                 timings=[]
@@ -126,7 +164,6 @@ def linear(x,w,backend='auto'):
                     started=time.perf_counter();cpu=x@w;timings.append(time.perf_counter()-started)
                 cpu_seconds=float(np.median(timings));meta['cpu_seconds']=cpu_seconds
             if _cuda is None:_cuda=CUDALinear()
-            if backend=='auto' and _choices.get(key)=='cpu':return cpu,meta
             timings=[]
             for _ in range(3):
                 started=time.perf_counter();gpu=_cuda.linear(x,w);timings.append(time.perf_counter()-started)
@@ -135,9 +172,10 @@ def linear(x,w,backend='auto'):
             if not np.allclose(gpu,cpu,rtol=2e-4,atol=2e-4):raise CUDAError('GPU 与 CPU 评分超出容差')
             selected='gpu' if backend=='gpu' or gpu_seconds<cpu_seconds*.9 else 'cpu'
             _choices[key]='gpu' if gpu_seconds<cpu_seconds*.9 else 'cpu'
+            if backend=='auto' and selected=='cpu' and 'gpu' not in _choices.values():release()
             return (gpu if selected=='gpu' else cpu),dict(meta,backend=selected,gpu_seconds=gpu_seconds,max_error=error)
         except (CUDAError,OSError,AttributeError) as e:
-            _failure=str(e);return cpu,dict(meta,fallback=_failure)
+            _failure=str(e);release();return cpu,dict(meta,fallback=_failure)
 
 def status():
     return dict(driver_info(),selected_shapes=len(_choices),failure=_failure)

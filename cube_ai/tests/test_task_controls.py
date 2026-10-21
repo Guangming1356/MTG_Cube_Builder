@@ -20,6 +20,51 @@ def until(predicate,seconds=15):
     raise AssertionError('等待状态超时')
 
 
+def test_restart_recovers_interrupted_checkpoints_and_unindexed_completion_without_touching_live_owner(tmp_path,monkeypatch):
+    from types import SimpleNamespace
+    from cube_ai import task_process
+    monkeypatch.setattr(task_process,'JOBS',tmp_path)
+    live=dict(pid=734,started=991)
+    monkeypatch.setattr(task_process,'process_identity',lambda pid:live if pid==734 else None)
+    ids=['1'*16,'2'*16,'3'*16,'4'*16]
+    for id_ in ids:(tmp_path/id_).mkdir()
+    first=tmp_path/ids[0]
+    atomic_json(first/'input.json',dict(request=dict(operation='forge',spec=dict(name='未完成对局'))))
+    (first/'completed-games.jsonl').write_text(json.dumps(dict(path='saved-match',record=dict(outcome='win')))+'\n{truncated',encoding='utf8')
+    stale=dict(id=ids[1],operation='optimize',state='paused',created_at=2,updated_at=3,owner_identity=dict(pid=735,started=991))
+    atomic_json(tmp_path/ids[1]/'summary.json',stale)
+    third=tmp_path/ids[2]
+    atomic_json(third/'input.json',dict(request=dict(operation='stress',spec=dict(name='已完成但未登记'))))
+    atomic_json(third/'result.json',dict(state='done',progress='完成',result=dict(proof='saved-result')))
+    atomic_json(third/'completion.json',dict(state='done',progress='完成'))
+    owned=dict(id=ids[3],operation='forge',state='running',owner_identity=live)
+    atomic_json(tmp_path/ids[3]/'summary.json',owned)
+    before=(tmp_path/ids[3]/'summary.json').read_bytes()
+    app=SimpleNamespace(jobs={},job_paths={},lock=threading.Lock())
+    Application.restore_jobs(app)
+    assert app.jobs[ids[0]]['interrupted'] and app.jobs[ids[0]]['state']=='failed'
+    assert app.jobs[ids[0]]['checkpoint']['completed_game_records']==1
+    assert app.jobs[ids[1]]['state']=='failed'
+    assert app.jobs[ids[2]]['state']=='done' and 'result' not in app.jobs[ids[2]]
+    assert Application.get_job(app,ids[2])['result']==dict(proof='saved-result')
+    assert ids[3] not in app.jobs and (tmp_path/ids[3]/'summary.json').read_bytes()==before
+    assert json.loads((first/'summary.json').read_text())['interrupted']
+
+
+def test_unwritable_task_storage_fails_without_leaving_a_permanent_queued_slot(monkeypatch):
+    from cube_ai import server
+    from cube_ai.catalog import Catalog
+    from cube_ai.ai_settings import SettingsStore
+    def fail(*args,**kwargs):raise OSError('fixture disk full')
+    monkeypatch.setattr(server,'TaskProcess',fail)
+    app=Application(catalog=Catalog(),ai_store=SettingsStore(),isolated_jobs=True)
+    try:
+        with pytest.raises(ValueError,match='尚未开始计算'):app.submit(dict(operation='build'))
+        assert len(app.jobs)==1 and next(iter(app.jobs.values()))['state']=='failed'
+        assert not app.controls
+    finally:app.executor.shutdown(wait=True)
+
+
 def test_pause_drains_current_native_and_blocks_new_work(tmp_path,monkeypatch):
     from cube_ai import forge_worker
     trims=[]

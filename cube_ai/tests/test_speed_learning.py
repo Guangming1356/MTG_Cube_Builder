@@ -70,6 +70,46 @@ def test_cuda_validation_cannot_return_wrong_results(monkeypatch):
     actual,meta=acceleration.linear(x,w,'gpu')
     assert meta['backend']=='cpu' and '容差' in meta['fallback'];np.testing.assert_array_equal(actual,x@w)
 
+
+def test_partial_cuda_initialization_releases_its_own_context_and_search_directory(monkeypatch):
+    import ctypes
+    calls=[]
+    def initialize(self):
+        self.context=ctypes.c_void_p(17)
+        self.destroy=lambda context:calls.append(('destroy',context.value))
+        self.dll_dir=SimpleNamespace(close=lambda:calls.append(('directory',None)))
+        raise acceleration.CUDAError('compiler failed')
+    monkeypatch.setattr(acceleration.CUDALinear,'_initialize',initialize)
+    with pytest.raises(acceleration.CUDAError,match='compiler failed'):acceleration.CUDALinear()
+    assert calls==[('destroy',17),('directory',None)]
+
+
+def test_cached_auto_cpu_choice_releases_old_gpu_and_does_not_reinitialize(monkeypatch):
+    calls=[]
+    monkeypatch.setattr(acceleration,'_cuda',SimpleNamespace(close=lambda:calls.append('closed')))
+    monkeypatch.setattr(acceleration,'_failure',None)
+    x=np.ones((512,64),dtype=np.float32);w=np.ones((64,64),dtype=np.float32)
+    monkeypatch.setattr(acceleration,'_choices',{(len(x).bit_length(),64,64):'cpu'})
+    def forbidden():raise AssertionError('Cached CPU choice must not compile GPU')
+    monkeypatch.setattr(acceleration,'CUDALinear',forbidden)
+    actual,meta=acceleration.linear(x,w,'auto')
+    assert meta['backend']=='cpu' and meta['calibrated'] and acceleration._cuda is None
+    np.testing.assert_array_equal(actual,x@w)
+    acceleration.release();assert calls==['closed']
+
+
+def test_small_auto_cpu_operation_releases_unused_context_but_keeps_useful_gpu_shape(monkeypatch):
+    calls=[];gpu=SimpleNamespace(close=lambda:calls.append('closed'))
+    monkeypatch.setattr(acceleration,'_cuda',gpu);monkeypatch.setattr(acceleration,'_failure',None)
+    monkeypatch.setattr(acceleration,'_choices',{(15,48,32):'gpu'})
+    x=np.ones((4,3),dtype=np.float32);w=np.ones((3,2),dtype=np.float32)
+    actual,meta=acceleration.linear(x,w,'auto')
+    assert calls==[] and acceleration._cuda is gpu and meta['backend']=='cpu'
+    monkeypatch.setattr(acceleration,'_choices',{})
+    actual,meta=acceleration.linear(x,w,'auto')
+    assert calls==['closed'] and acceleration._cuda is None
+    np.testing.assert_array_equal(actual,x@w)
+
 def test_game_cache_reuses_only_same_seed_decks_and_backend(tmp_path,monkeypatch):
     out=tmp_path/'out';out.mkdir();decks=tmp_path/'decks';decks.mkdir()
     for n in ['a','b','c']:(decks/(n+'.dck')).write_text(n)

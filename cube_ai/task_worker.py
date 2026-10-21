@@ -23,7 +23,7 @@ def main():
             from .catalog import Catalog
             snapshot=source['catalog']
             catalog=Catalog.from_records(snapshot['cards'],snapshot['snapshot'],snapshot['signature'])
-        app=Application(catalog=catalog,ai_store=SettingsStore(Path(source['settings_path'])) if source.get('settings_path') else None,isolated_jobs=False)
+        app=Application(catalog=catalog,ai_store=SettingsStore(Path(source['settings_path'])) if source.get('settings_path') else None,isolated_jobs=False,restore_history=False)
         try:
             rows,unknown=app.rows(data)
             if unknown:raise ValueError('任务包含未确认的牌名')
