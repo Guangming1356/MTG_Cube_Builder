@@ -184,6 +184,7 @@ class Application:
                 job['progress']=state['progress'];return
             if state.get('state')=='paused' and self.controls[id_].action!='pause':return
             job.update(state);job['updated_at']=time.time()
+            if state.get('state')=='paused':job['checkpoint']=self.controls[id_].checkpoint_summary()
 
     def public_jobs(self):
         with self.lock:

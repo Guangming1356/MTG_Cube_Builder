@@ -18,6 +18,8 @@
 - `repackage_release.py`：核验旧便携包 SHA256 后，仅更新应用代码、网页和公共文档。保留独立运行环境、许可证及对应源码；桥接 Java 或依赖改变时拒绝复用，改用完整构建。
 - `verify_portable_release.py`：在 Windows 的全新解压副本中，使用内置 Python 验证启动、离线模式、轮抓、暂停/继续、退出保护和重启后恢复。验收副本不会再次打包。
 
+在项目根目录用模块方式运行，例如 `python -m cube_ai.tools.repackage_release`、`python -m cube_ai.tools.verify_portable_release`；这样能找到同项目的应用模块，不依赖电脑额外设置的 Python 搜索路径。
+
 GitHub 中的“Build verified Windows release”工作流可按需生成完整便携版，验收并核对远端附件后才正式发布；本机不需要长期保留发布包。
 
 完整构建须显式传入 `--version YYYYMMDD`；先运行 build_portable.py 生成暂存目录，再用 compile_portable.ps1 编译入口，最后以同一版本号传入 `--package <目录>`。缺缓存时会在复制运行环境前停止。

@@ -98,7 +98,9 @@ function configureExperiments(){
   const r=statusInfo.experiments.resources;
   for(const id of ['forge-workers','optimization-workers','deck-study-workers']){
     if(!$(id))continue;
-    $(id).innerHTML=`<option value="0">自动（${r.dynamic?'起始':'当前最多'} ${r.automatic} 局${r.dynamic?'，随剩余内存调整':''}）</option>`+[1,2,3,4,6,8].filter(n=>n<=r.maximum).map(n=>`<option value="${n}">最多同时 ${n} 局</option>`).join('');
+    const selected=Number($(id).value)||0;
+    $(id).innerHTML=`<option value="0">自动（${r.dynamic?'起始':'当前最多'} ${r.automatic} 局${r.dynamic?'，随剩余内存调整':''}）</option>`+[1,2,3,4,6,8].filter(n=>n<=r.maximum||n===selected).map(n=>`<option value="${n}">最多同时 ${n} 局${n>r.maximum?'（当前资源不足）':''}</option>`).join('');
+    $(id).value=String(selected);
   }
   $('execution-hint').textContent=r.dynamic?`自动模式会检查剩余内存，逐步增加同时对局数（本机上限 ${r.ceiling} 局）；内存紧张时减少新开局，正在进行的对局正常完成。增加不同轮抓桌通常比同桌反复打更有帮助；每桌至少3局换座。`:'当前后台仍使用固定并行数；本轮任务结束后关闭并重新打开助手，可启用动态安排。';
   function updateBudget(){
@@ -120,8 +122,10 @@ async function refreshPerformance(){
  const compat=p.forge.compatibility;
  if(!$('forge-compat-panel'))$('performance-summary').insertAdjacentHTML('afterend',`<div id="forge-compat-panel"><p id="forge-compat-status"></p><div class="actions"><label>对局兼容修复<select id="forge-compat-mode"><option value="auto">自动启用已验证修复（推荐）</option><option value="off">使用原始 Forge</option></select></label><button id="forge-compat-save">保存引擎设置</button></div><p class="sub">修复部分模式咒语在 AI 检查牌面时的崩溃，原引擎文件保留。切换后，比赛缓存、测速和实战模型按引擎版本分开；任务运行或暂停时需先完成或结束。</p></div>`);
  $('forge-compat-status').textContent=compat?.active?'兼容修复已启用：模式咒语检查的控制者上下文。':compat?.reason==='disabled'?'当前使用原始 Forge，兼容修复已关闭。':compat?.reason==='different_engine'?'当前 Forge 版本与修复不匹配，使用原引擎。':compat?.reason==='asset_verification_failed'?'兼容组件校验未通过，已安全停用；请重新安装完整版本。':'兼容组件尚未安装或完成验证，使用原引擎。';
- $('forge-compat-mode').value=compat?.mode||'auto';
- $('forge-compat-save').onclick=()=>guard(async()=>{await api('/api/forge/compatibility',{mode:$('forge-compat-mode').value});await refreshPerformance();notice('引擎设置已保存，后续任务使用新设置。');});
+ const compatSelect=$('forge-compat-mode');
+ if(compatSelect.dataset.edited!=='true')compatSelect.value=compat?.mode||'auto';
+ compatSelect.onchange=()=>{compatSelect.dataset.edited='true';};
+ $('forge-compat-save').onclick=()=>guard(async()=>{await api('/api/forge/compatibility',{mode:compatSelect.value});delete compatSelect.dataset.edited;await refreshPerformance();notice('引擎设置已保存，后续任务使用新设置。');});
 }
 function renderLearning(r){
  const improvement=Number(r.relative_improvement),testGroups=r.split_groups?.test;
@@ -136,7 +140,7 @@ function renderSpeedDetails(o){
 }
 function renderCalibration(r){
  const profile=name=>({default:'默认内存设置',bounded_gc:'限制后台回收线程',parallel_gc:'吞吐量优先回收',compact_heap:'较小内存占用'})[name]||name;
- $('calibration-result').innerHTML=`<h3>这次测速${r.adopted?'找到了可用设置':'没有足够有效对照'}</h3><p>${r.adopted?`选择同时 ${esc(r.workers)} 局，${esc(profile(r.jvm_profile))}。`:'保留原设置。'}当前是否采用以本页自动测速状态为准。</p><p class="sub">${r.profile_specific_concurrency?"已按每种内存配置重新检查可容纳的并行数。":"这是历史测速，沿用当时的并行数设置。"}表中耗时针对同一批固定比赛；内存为观测值，未测到的峰值可能更高。正常完成和完整事件一致是采用前提。</p><details><summary>查看各配置对照（${r.phases.length} 项）</summary><div class="table-wrap"><table><thead><tr><th>同时对局</th><th>配置</th><th>中位耗时</th><th>观测引擎内存</th><th>每轮正常完成</th><th>事件一致</th></tr></thead><tbody>${r.phases.map(p=>`<tr><td>${esc(p.workers)}</td><td>${esc(profile(p.jvm_profile))}</td><td>${Number(p.median_seconds).toFixed(1)} 秒</td><td>${p.peak_engine_private_bytes?(p.peak_engine_private_bytes/2**20).toFixed(0)+' MiB':'未采集'}</td><td>${esc(p.normal_games)} / ${esc(p.attempted_games??r.fixture_games)}</td><td>${p.compatible?'是':'否'}</td></tr>`).join('')}</tbody></table></div></details>${r.skipped_configurations?.length?`<p>有 ${r.skipped_configurations.length} 项配置因当前内存不足而跳过。</p>`:''}`;
+ $('calibration-result').innerHTML=`<h3>这次测速${r.adopted?'找到了可用设置':'没有足够有效对照'}</h3><p>${r.adopted?`选择同时 ${esc(r.workers)} 局，${esc(profile(r.jvm_profile))}。`:'保留原设置。'}当前是否采用以本页自动测速状态为准。</p><p class="sub">${r.profile_specific_concurrency?"已按每种内存配置重新检查可容纳的并行数。":"这是历史测速，沿用当时的并行数设置。"}表中耗时针对同一批固定比赛；内存为观测值，未测到的峰值可能更高。正常完成和完整事件一致是采用前提。含暂停的重复只保存记录，不参加配置计时。</p><details><summary>查看各配置对照（${r.phases.length} 项）</summary><div class="table-wrap"><table><thead><tr><th>同时对局</th><th>配置</th><th>中位耗时</th><th>观测引擎内存</th><th>每轮正常完成</th><th>事件一致</th></tr></thead><tbody>${r.phases.map(p=>`<tr><td>${esc(p.workers)}</td><td>${esc(profile(p.jvm_profile))}</td><td>${p.median_seconds==null?'未形成有效计时':Number(p.median_seconds).toFixed(1)+' 秒'}</td><td>${p.peak_engine_private_bytes?(p.peak_engine_private_bytes/2**20).toFixed(0)+' MiB':'未采集'}</td><td>${esc(p.normal_games)} / ${esc(p.attempted_games??r.fixture_games)}</td><td>${p.compatible?'是':'否'}</td></tr>`).join('')}</tbody></table></div></details>${r.skipped_configurations?.length?`<p>有 ${r.skipped_configurations.length} 项配置因当前内存不足而跳过。</p>`:''}`;
 }
 $('calibrate-speed').onclick=()=>guard(async()=>{
  if(!current)throw Error('请先载入一套三人 Commander Cube');

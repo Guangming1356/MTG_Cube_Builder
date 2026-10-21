@@ -25,6 +25,10 @@ jobs:
       CUBE_VERSION: ${{ inputs.version }}
       CUBE_BASE_TAG: ${{ inputs.base_tag }}
     steps:
+      - name: Select packaging Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: '3.13'
       - name: Fetch exact source revision
         shell: pwsh
         run: |
@@ -41,13 +45,13 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $cubeOutput = Join-Path $env:RUNNER_TEMP 'cube-release-output'
-          python cube_ai/tools/repackage_release.py --version $env:CUBE_VERSION --base-tag $env:CUBE_BASE_TAG --out $cubeOutput --commit $env:GITHUB_SHA
+          python -m cube_ai.tools.repackage_release --version $env:CUBE_VERSION --base-tag $env:CUBE_BASE_TAG --out $cubeOutput --commit $env:GITHUB_SHA
           if ($LASTEXITCODE -ne 0) { throw 'Packaging failed' }
           $cubeInfo = Get-Content -LiteralPath (Join-Path $cubeOutput 'release-info.json') -Raw | ConvertFrom-Json
           $cubeExtract = Join-Path $env:RUNNER_TEMP 'cube-release-verification'
           Expand-Archive -LiteralPath (Join-Path $cubeOutput $cubeInfo.asset) -DestinationPath $cubeExtract
           $cubeApp = Join-Path $cubeExtract 'Cube助手'
-          python cube_ai/tools/verify_portable_release.py --root $cubeApp --fixture cube_ai/tests/fixtures/forge_cube.csv --out (Join-Path $cubeOutput 'portable-verification.json')
+          python -m cube_ai.tools.verify_portable_release --root $cubeApp --fixture cube_ai/tests/fixtures/forge_cube.csv --out (Join-Path $cubeOutput 'portable-verification.json')
           if ($LASTEXITCODE -ne 0) { throw 'Portable acceptance failed' }
       - name: Record verified dependency metadata and publish
         shell: pwsh

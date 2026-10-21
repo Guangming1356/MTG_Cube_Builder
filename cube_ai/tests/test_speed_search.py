@@ -164,8 +164,12 @@ def test_calibration_can_test_more_games_only_when_actual_heap_fits_memory(monke
     assert tuning.profile_choices([2,4],2,'compact_heap',{})[0]==[]
 
 
-def test_calibration_runs_repeats_and_saves_only_validated_profile(fixture,tmp_path,monkeypatch):
-    from cube_ai import forge,experiment
+@pytest.mark.parametrize('paused',[False,True])
+def test_calibration_runs_repeats_and_saves_only_validated_profile(fixture,tmp_path,monkeypatch,paused):
+    from cube_ai import forge,experiment,task_control
+    from types import SimpleNamespace
+    control=SimpleNamespace(paused_seconds=0.,pause_started=None)
+    monkeypatch.setattr(task_control,'_current',control)
     c,rows,spec=fixture;decks=tmp_path/'decks';decks.mkdir()
     for name in ['a','b','c']:(decks/(name+'.dck')).write_text(name)
     monkeypatch.setattr(experiment,'execution_resources',lambda:dict(maximum=1))
@@ -176,10 +180,16 @@ def test_calibration_runs_repeats_and_saves_only_validated_profile(fixture,tmp_p
     def battle(config,folder,order,seed,clock,out,log):
         assert config['cache'] is False
         calls.append(seed);(out/log).write_text('Turn: Turn 1\nGame Outcome: Ai(1)-a has won!\n')
+        if paused and seed==0:control.paused_seconds+=10
         return dict(outcome='win',winner=order[0],log=log)
     monkeypatch.setattr(forge,'run_battle',battle)
     result=tuning.calibrate(c,rows,spec,worker_choices=[1],jvm_choices=['default'],fixtures=(decks,[dict(order=['a','b','c'],seed=n) for n in range(6)]))
-    assert len(calls)==12 and result['adopted'] and tuning.profile_for({})['workers']==1
+    assert len(calls)==12 and result['adopted']==(not paused)
+    if paused:
+        assert not result['phases'][0]['seconds'] and result['phases'][0]['median_seconds'] is None
+        assert all(not m['used_for_timing'] for m in result['phases'][0]['measurements'])
+        assert not tuning.PROFILE.exists()
+    else:assert tuning.profile_for({})['workers']==1
     assert not any((tmp_path/'matches').glob('*'))
 
 

@@ -18,13 +18,22 @@ def memory_available():
     return system_memory().get('available')
 
 
+def configured_heap_mib():
+    from .forge import configuration
+    try:
+        value=configuration().get('heap_mib',2048)
+        return value if type(value) is int and value>0 else 2048
+    except (OSError,ValueError,KeyError,TypeError):return 2048
+
+
 def execution_resources(workers=0):
     if type(workers) is not int or not 0 <= workers <= MAX_WORKERS:
         raise ValueError('同时对局数需为 0（自动）至 8')
     cpu = os.cpu_count() or 1
     available = memory_available()
+    heap_mib = configured_heap_mib()
     from .resources import capacity
-    memory_cap = capacity(dict(available=available))['capacity']
+    memory_cap = capacity(dict(available=available),heap_mib=heap_mib)['capacity']
     ceiling = min(MAX_WORKERS, max(1, cpu // 2))
     maximum = min(ceiling, memory_cap)
     automatic = min(4, max(1, cpu // 4), maximum)
@@ -35,7 +44,7 @@ def execution_resources(workers=0):
         raise ValueError(f'当前空闲资源建议最多同时 {maximum} 局；请选择自动或减少同时对局数')
     return dict(requested=workers, workers=workers or automatic, automatic=automatic,
                 maximum=maximum, cpu_count=cpu, available_memory_bytes=available,
-                heap_mib_per_game=2048, pipeline=True,calibrated=bool(calibrated),
+                heap_mib_per_game=heap_mib, pipeline=True,calibrated=bool(calibrated),
                 dynamic=True, ceiling=workers or (calibrated if calibrated else ceiling),
                 resource_policy='full-heap-live-memory-1')
 

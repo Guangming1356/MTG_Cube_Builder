@@ -178,13 +178,16 @@ def calibrate(catalog,rows,spec,progress=print,mode='quick',worker_choices=None,
             eligible,memory=profile_choices([workers],workers,jvm)
             if not eligible:
                 report['skipped_configurations'].append(dict(workers=workers,jvm_profile=jvm,reason='当前空闲内存不足',memory=memory));save();return
-            phase=dict(workers=workers,jvm_profile=jvm,seconds=[],runs=[],compatible=True,normal_games=0,attempted_games=len(tasks),peak_engine_private_bytes=0,memory_budget_at_start=memory)
+            phase=dict(workers=workers,jvm_profile=jvm,seconds=[],runs=[],measurements=[],compatible=True,normal_games=0,attempted_games=len(tasks),peak_engine_private_bytes=0,memory_budget_at_start=memory)
             report['phases'].append(phase)
             # Never reuse a JVM across different parameter sets or measurements.
             for repeat in range(repetitions):
                 close_all();folder=out/f'{jvm}_{workers}_{repeat}';folder.mkdir()
                 c=dict(config,cache=False,heap_mib=settings['heap_mib'],jvm_options=settings['options'])
                 progress(f'速度校准：同时 {workers} 局，配置 {jvm}，第 {repeat+1}/{repetitions} 轮')
+                from . import task_control
+                control=task_control._current
+                paused_before=control.paused_seconds if control else 0
                 start=time.perf_counter()
                 with ThreadPoolExecutor(max_workers=workers) as pool:
                     futures=[pool.submit(run_battle,c,deck_dir,t['order'],t['seed'],90,folder,f'game_{i}.log') for i,t in enumerate(tasks)]
@@ -197,11 +200,16 @@ def calibrate(catalog,rows,spec,progress=print,mode='quick',worker_choices=None,
                         memory=memory_snapshot()
                         phase['peak_engine_private_bytes']=max(phase['peak_engine_private_bytes'],sum(m.get('private_bytes',0) for m in memory))
                 elapsed=time.perf_counter()-start
+                paused=max(0,control.paused_seconds-paused_before) if control else 0
+                interrupted=bool(paused or control and control.pause_started is not None)
                 if reference is None:reference=records
-                phase['seconds'].append(elapsed);phase['runs'].append(records)
+                phase['measurements'].append(dict(repeat=repeat,wall_seconds=elapsed,paused_seconds=paused,used_for_timing=not interrupted))
+                if not interrupted:phase['seconds'].append(elapsed)
+                phase['runs'].append(records)
                 phase['compatible'] &= compatible(reference,records)
                 phase['normal_games']=sum(r['outcome'] in {'win','draw'} for r in records)
-                phase['median_seconds']=statistics.median(phase['seconds']);close_all();save()
+                phase['median_seconds']=statistics.median(phase['seconds']) if phase['seconds'] else None
+                close_all();save()
         try:
             for workers in choices:phase(workers,'default')
             best=choose(report['phases'],goal=goal)

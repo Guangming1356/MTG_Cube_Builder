@@ -1,5 +1,6 @@
 // One adaptive monitor: no overlapping requests and quiet while the tab is hidden.
 let taskMonitorTimer,taskMonitorLoading=false,taskPanelSignature='',taskMonitorActive=false;
+let taskObservedStates=new Map(),taskRuntimeStatusDirty=false;
 const taskLabels={build:'生成 Cube',repair:'修订 Cube',stress:'轮抓检查',forge:'Forge 实战',optimize:'实战改进',calibrate:'机器测速','deck-study':'组牌方式对照','diagnose-game':'对局异常诊断','learn-games':'更新实战评分',chat:'AI 分析',plan:'构筑规划',legacy:'旧后台任务'};
 const taskStateLabels={queued:'排队中',running:'运行中',pausing:'等待安全暂停',paused:'已暂停',cancelling:'正在结束',cancelled:'已结束',done:'已完成',failed:'未完成'};
 const liveTaskStates=new Set(['queued','running','pausing','paused','cancelling']);
@@ -44,6 +45,15 @@ async function refreshTaskMonitor(){
   taskMonitorLoading=true;
   try{
     const jobs=await api('/api/jobs'),panel=$('task-monitor');
+    const completed=jobs.some(job=>liveTaskStates.has(taskObservedStates.get(job.id))&&!liveTaskStates.has(job.state));
+    taskObservedStates=new Map(jobs.map(job=>[job.id,job.state]));
+    if(completed)taskRuntimeStatusDirty=true;
+    if(taskRuntimeStatusDirty){
+      try{
+        const [freshStatus]=await Promise.all([api('/api/status'),refreshPerformance()]);
+        statusInfo=freshStatus;configureExperiments();refreshActions();taskRuntimeStatusDirty=false;
+      }catch{/* Keep the last display and retry with the next successful monitor poll. */}
+    }
     const active=jobs.filter(job=>liveTaskStates.has(job.state));
     const finished=jobs.filter(job=>!liveTaskStates.has(job.state));
     const recent=finished.slice(-5).reverse(),older=finished.slice(0,-5).reverse();

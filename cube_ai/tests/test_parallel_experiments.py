@@ -18,12 +18,31 @@ from cube_ai.experiment import experiment_budget, execution_resources
 def test_resource_budget_reserves_memory_and_rejects_overcommit(monkeypatch):
     import cube_ai.experiment as e
     monkeypatch.setattr(e.os, 'cpu_count', lambda: 24)
+    monkeypatch.setattr(e, 'configured_heap_mib', lambda: 2048)
     monkeypatch.setattr(e, 'memory_available', lambda: 32 * 2**30)
     assert execution_resources()['workers'] == 4
     assert execution_resources(8)['workers'] == 8
     monkeypatch.setattr(e, 'memory_available', lambda: 6 * 2**30)
     assert execution_resources()['workers'] == 1
     with pytest.raises(ValueError, match='空闲资源'): execution_resources(2)
+
+
+def test_manual_resources_use_the_same_verified_heap_as_the_actual_queue(monkeypatch):
+    import cube_ai.experiment as e
+    monkeypatch.setattr(e.os,'cpu_count',lambda:24)
+    monkeypatch.setattr(e,'memory_available',lambda:12*2**30)
+    monkeypatch.setattr(forge,'configuration',lambda:dict(heap_mib=2048))
+    assert execution_resources()['maximum']==3
+    with pytest.raises(ValueError,match='空闲资源'):execution_resources(4)
+    monkeypatch.setattr(forge,'configuration',lambda:dict(heap_mib=1536))
+    resources=execution_resources(4)
+    assert resources['workers']==resources['maximum']==4 and resources['heap_mib_per_game']==1536
+    assert resources['ceiling']==4 # Preserve the user's cap.
+    monkeypatch.setattr(e,'memory_available',lambda:None)
+    assert execution_resources()['maximum']==1
+    def unavailable():raise ValueError('No runtime installed')
+    monkeypatch.setattr(forge,'configuration',unavailable)
+    assert e.configured_heap_mib()==2048
 
 
 @pytest.mark.parametrize('workers', [True, -1, 9, 2.5, '3'])
