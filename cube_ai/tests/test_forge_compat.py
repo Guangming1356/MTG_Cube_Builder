@@ -85,7 +85,7 @@ def test_patch_is_part_of_worker_calibration_and_game_cache_identities(tmp_path,
     assert forge_worker.worker_key(original)!=forge_worker.worker_key(fixed)
     calls=[]
     def battle(config,decks,order,seed,clock,out,log):
-        calls.append(bool(config.get('extra_classpath')));(out/log).write_text('native trace')
+        calls.append(bool(config.get('extra_classpath')));(out/log).write_text('Game Result: Game 1 ended in 1000 ms. Ai(1)-a has won!')
         return dict(outcome='win',winner='a',wall_seconds=1,log=log)
     monkeypatch.setattr(forge,'_run_battle',battle)
     for config in [original,fixed,original,fixed]:forge.run_battle(config,tmp_path,['a'],42,30,tmp_path,'test.log')

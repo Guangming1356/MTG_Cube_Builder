@@ -116,14 +116,14 @@ def test_game_cache_reuses_only_same_seed_decks_and_backend(tmp_path,monkeypatch
     jar=tmp_path/'forge.jar';jar.write_bytes(b'jar');java=tmp_path/'java';java.write_bytes(b'java')
     calls=[]
     def battle(config,deck_dir,order,seed,clock,out,log_name):
-        calls.append(seed);(out/log_name).write_text('native trace')
+        calls.append(seed);(out/log_name).write_text('Game Result: Game 1 ended in 1000 ms. Ai(1)-a has won!')
         return dict(outcome='win',winner='a',order=order,seed=seed,log=log_name,wall_seconds=1,turns=12)
     monkeypatch.setattr(forge,'_run_battle',battle)
     c=dict(jar=str(jar),java=str(java))
     first=forge.run_battle(c,decks,['a','b','c'],42,90,out,'first.log')
     second=forge.run_battle(c,decks,['a','b','c'],42,90,out,'second.log')
     assert not first['cache_hit'] and second['cache_hit'] and len(calls)==1
-    assert (out/'second.log').read_text()=='native trace'
+    assert (out/'second.log').read_text()=='Game Result: Game 1 ended in 1000 ms. Ai(1)-a has won!'
     forge.run_battle(c,decks,['a','b','c'],43,90,out,'third.log');assert len(calls)==2
     (decks/'a.dck').write_text('changed')
     forge.run_battle(c,decks,['a','b','c'],42,90,out,'fourth.log');assert len(calls)==3
@@ -194,7 +194,7 @@ def test_current_model_report_is_not_hidden_by_late_finishing_legacy_task(monkey
     monkeypatch.setattr(surrogate,'engine_scope',lambda:['jar','java','resident','bridge'])
     for name,version in [('20260101_current',surrogate.VERSION),('20260102_legacy','activity-2')]:
         folder=surrogate.MODELS/name;folder.mkdir(parents=True)
-        (folder/'report.json').write_text(json.dumps(dict(id=name,version=version,engine=['jar','java','resident','bridge'])),encoding='utf8')
+        (folder/'report.json').write_text(json.dumps(dict(id=name,version=version,catalog='fixture',engine=['jar','java','resident','bridge'])),encoding='utf8')
     status=surrogate.status(SimpleNamespace(signature='fixture'))
     assert status['latest']['id']=='20260101_current' and status['latest_compatible']
 
@@ -212,9 +212,10 @@ def test_activity_training_counts_offturn_actions_censors_short_games_and_dedupl
                 lines.append('Add To Stack: Ai(1)-a cast Counterspell')
                 lines.append('Add To Stack: Ai(1)-b triggered Talrand, Sky Summoner')
             if name=='c':lines.append('Combat: Ai(1)-c assigned Drake (1) to attack Ai(1)-a.')
-    (folder/'full.log').write_text('\n'.join(lines),encoding='utf8')
-    (folder/'short.log').write_text('\n'.join(lines[:5]),encoding='utf8')
-    game=dict(pod=0,outcome='win',order=['a','b','c'],seed=1,log='short.log',backend='resident-1')
+    end='\nGame Result: Game 1 ended in 10 ms. Ai(1)-a has won!'
+    (folder/'full.log').write_text('\n'.join(lines)+end,encoding='utf8')
+    (folder/'short.log').write_text('\n'.join(lines[:5])+end,encoding='utf8')
+    game=dict(pod=0,outcome='win',winner='a',order=['a','b','c'],seed=1,log='short.log',backend='resident-1')
     report=dict(match_id='fixture',cube_sha256='fixture',engine={'jar_sha256':'fixture','fingerprint':['jar','java','resident','bridge']},tables=[dict(pod=0,decks=[dict(d,buildable=True) for d in decks])],
                 games=[game,dict(game,seed=2,log='full.log'),dict(game,seed=2,log='full.log'),dict(game,seed=3,log='full.log',cache_hit=True)])
     (folder/'report.json').write_text(json.dumps(report),encoding='utf8')

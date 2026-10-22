@@ -233,7 +233,7 @@ def diagnose_log(log):
             '这是引擎内部异常，不能当作正常胜负，也不能仅凭同桌出现就认定某张牌有问题。降低并行数不一定能修复；保留日志供复现。')
     if 'OutOfMemoryError' in log or 'Could not reserve enough space' in log:
         add('engine_memory','引擎无法分配所需内存','先减少同时进行的对局，再检查剩余内存；此局不纳入正常胜负。')
-    if 'TimeoutException' in log and 'Stopping slow match as draw' not in log:
+    if 'TimeoutException' in log.split('Stopping slow match as draw',1)[0]:
         add('ai_choice_timeout','Forge AI 的单次行动选择超时',
             '这与整局时限不同。可能是复杂决策或异常循环，不能把日志最后的胜者直接视为可靠实战证据。')
     apis=sorted(set(re.findall(r'No AI assigned for API: (\w+)',log)))
@@ -250,18 +250,32 @@ def parse_log(log,returncode=0,process_timeout=False):
     base=dict(engine_ms=int(duration.group(1)) if duration else None,diagnostics=diagnose_log(log),
               turns=max(turn_numbers) if turn_numbers else None)
     if process_timeout:return dict(base,outcome='process_timeout',winner=None)
-    pattern=r'(?:Exception in thread|\w+(?:Exception|Error):|^\s+at forge\.|Could not load deck|No deck found|[Cc]ould not find card|[Cc]ard not found)'
+    # Java also prints exception headers without a message/colon. Match the
+    # header itself before falling back to stack/deck symptoms, so a trailing
+    # winner cannot turn a failed decision into training evidence.
+    header=r'^[ \t]*(?:(?:Caused by:|Suppressed:|Exception in thread "[^"\r\n]+")[ \t]+)?(?:[\w$]+\.)*[\w$]*(?:Exception|Error)(?::[^\r\n]*|[ \t]*\r?$)'
+    pattern=header+r'|(?:Exception in thread|\w+(?:Exception|Error):|^[ \t]+at forge\.|Could not load deck|No deck found|[Cc]ould not find card|[Cc]ard not found)'
     # Forge cancels its AI future on an announced time limit, which can print an
     # InterruptedException stack. Preserve real errors preceding the time limit.
     if not returncode and 'Stopping slow match as draw' in log and not re.search(pattern,log.split('Stopping slow match as draw',1)[0],re.M):
         return dict(base,outcome='engine_timeout',winner=None)
     errors=re.search(pattern,log,re.M)
-    if returncode or errors:return dict(base,outcome='engine_error',winner=None,error=errors.group(0) if errors else f'exit {returncode}')
+    if returncode or errors:return dict(base,outcome='engine_error',winner=None,error=errors.group(0).strip() if errors else f'exit {returncode}')
     if 'Stopping slow match as draw' in log:return dict(base,outcome='engine_timeout',winner=None)
     winner=re.search(r'Game Result: Game \d+ ended in \d+ ms\. Ai\((\d+)\)-(.+) has won!',log)
     if winner:return dict(base,outcome='win',winner=winner.group(2).strip(),engine_seat=int(winner.group(1))-1)
     if re.search(r'Game Result: Game \d+ ended in a Draw!',log):return dict(base,outcome='draw',winner=None)
     return dict(base,outcome='unrecognized',winner=None,error='未找到 Forge 正式比赛结果')
+
+def verified_game_result(log,record,order):
+    """Revalidate saved normal labels against raw evidence and submitted seats."""
+    parsed=parse_log(log,record.get('returncode',0))
+    if (parsed['outcome'] in {'win','draw'} and parsed['outcome']==record.get('outcome')
+        and parsed.get('winner')==record.get('winner')
+        and (parsed['outcome']!='win' or parsed['winner'] in order)):
+        return parsed
+    return None
+
 
 def wilson(wins,n):
     if not n:return None
@@ -295,9 +309,14 @@ def _cached_battle(config,deck_dir,order,seed,clock_seconds,out,log_name):
         cache_key=key('game',identity)
         cached=get(cache_key)
         if cached and isinstance(cached.get('record'),dict) and isinstance(cached.get('log'),str) and cached['record'].get('outcome') in {'win','draw'}:
-            (out/log_name).write_text(cached['log'],encoding='utf8')
-            return dict(cached['record'],log=log_name,wall_seconds=0.0,cache_hit=True,
-                original_wall_seconds=cached['record']['wall_seconds'],diagnostics=diagnose_log(cached['log']))
+            stored=cached['record'];parsed=verified_game_result(cached['log'],stored,order)
+            # Cached labels may predate a parser fix. Recheck the raw evidence;
+            # keep historical cache bytes, but never reuse an invalid result.
+            if parsed is not None:
+                (out/log_name).write_text(cached['log'],encoding='utf8')
+                value=dict(stored,**parsed)
+                value.update(log=log_name,wall_seconds=0.0,cache_hit=True,original_wall_seconds=stored.get('wall_seconds'))
+                return value
     record=_run_battle(config,deck_dir,order,seed,clock_seconds,out,log_name)
     record['cache_hit']=False
     if cache_key and record['outcome'] in {'win','draw'}:

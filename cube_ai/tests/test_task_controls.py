@@ -89,7 +89,7 @@ def test_pause_drains_current_native_and_blocks_new_work(tmp_path,monkeypatch):
 
 def test_process_tree_termination_kills_descendants_and_preserves_other_process(tmp_path):
     tree=ProcessTree();start=tmp_path/'start';pidfile=tmp_path/'child'
-    script="import pathlib,sys,time,subprocess; p=pathlib.Path(sys.argv[1]);\nwhile not p.exists(): time.sleep(.02)\nc=subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)']);pathlib.Path(sys.argv[2]).write_text(str(c.pid));time.sleep(60)"
+    script="import pathlib,sys,time,subprocess; p=pathlib.Path(sys.argv[1]);\nwhile not p.exists(): time.sleep(.02)\nc=subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)']);ready=pathlib.Path(sys.argv[2]+'.tmp');ready.write_text(str(c.pid));ready.replace(sys.argv[2]);time.sleep(60)"
     sentinel=subprocess.Popen([sys.executable,'-c','import time;time.sleep(60)'],creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
     process=subprocess.Popen([sys.executable,'-c',script,str(start),str(pidfile)],creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0),start_new_session=os.name!='nt')
     try:

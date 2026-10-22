@@ -51,9 +51,13 @@ def main():
             with urllib.request.urlopen(url+asset,timeout=10) as response:assert response.status==200
         names_code='''import json
 from cube_ai.catalog import Catalog
-from cube_ai.forge import configuration,card_index,engine_name
+from cube_ai.forge import configuration,card_index,engine_name,parse_log,verified_game_result
 from cube_ai.forge_card_names import name_pairs,trace_name_pairs,ASSET,bundle_alias_asset
 c=Catalog();pairs=name_pairs();index=card_index(configuration())
+winner='Game Result: Game 1 ended in 10 ms. Ai(1)-a has won!'
+for header in ('java.util.concurrent.TimeoutException','java.lang.OutOfMemoryError'):
+    assert parse_log(header+'\\r\\n'+winner)['outcome']=='engine_error'
+    assert verified_game_result(header+'\\n'+winner,dict(outcome='win',winner='a'),['a']) is None
 assert len(pairs)==182 and len(trace_name_pairs())==189
 assert all(engine_name(requested,index)==requested for requested,native in pairs)
 assert c.resolve('Chief Jim Hopper')=='Sophina, Spearsage Deserter'
@@ -79,7 +83,8 @@ print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs(
         assert restored['state']=='done' and restored['result']==result['result']
         report=dict(passed=True,application_version=expected,cards=status['cards'],offline_ai=True,forge_available=True,
                     embedded_runtime=True,task_pause_resume=True,shutdown_blocks_live_tasks=True,restart_recovers_result=True,
-                    native_name_compatibility=names,clean_preference_state=True,preference_scope_validation=True)
+                    native_name_compatibility=names,clean_preference_state=True,preference_scope_validation=True,
+                    native_evidence_validation=True)
         args.out.write_text(json.dumps(report,indent=2),encoding='utf8');print(json.dumps(report),flush=True)
     finally:
         if url:
