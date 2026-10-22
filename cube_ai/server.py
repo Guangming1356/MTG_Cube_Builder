@@ -377,15 +377,19 @@ def handler_for(app):
                 if path.path=='/api/library':return self.json(200,library(app))
                 if path.path=='/api/design-guide':return self.json(200,public_guide())
                 if path.path=='/api/brackets':return self.json(200,public_profiles())
+                if path.path=='/api/feedback/status':
+                    context=q('context','commander:commander')
+                    if len(context)>128:raise ValueError('偏好玩法标识过长')
+                    return self.json(200,app.feedback.status(context,app.catalog))
                 if path.path=='/api/performance':return self.json(200,dict(gpu=acceleration.status(),cache=sim_cache.status(),learning=surrogate.status(app.catalog),forge=forge_status(),tuning=tuning.status()))
                 if path.path=="/api/status":
                     with app.lock:active_jobs=sum(j['state'] in ACTIVE for j in app.jobs.values())
                     return self.json(200,dict(version=__version__,workspace_id=WORKSPACE_ID,cards=len(app.catalog.cards),snapshot=app.catalog.snapshot,
-                        active_jobs=active_jobs,speed_version=2,task_controls=True,features=dict(deck_study=True,protected_deck_study=True,calibration_preview=True,native_diagnostic=True,persistent_job_history=True,workspace_restore=True),
+                        active_jobs=active_jobs,speed_version=2,task_controls=True,features=dict(deck_study=True,protected_deck_study=True,calibration_preview=True,native_diagnostic=True,persistent_job_history=True,workspace_restore=True,feedback_scope=True),
                         experiments=dict(profiles={k:experiment_budget(k) for k in PROFILES},resources=execution_resources()),
                         knowledge_chunks=len(app.knowledge.chunks),gpt=app.ai_status(),themes=THEME_NAMES,
                         presets={"commander":BuildSpec.from_dict({'bracket':3}).to_dict(),"classic":BuildSpec.from_dict({"mode":"classic"}).to_dict()},brackets=public_profiles(),
-                        feedback=app.feedback.status("commander:commander"),forge=forge_status()))
+                        feedback=app.feedback.status("commander:commander",app.catalog),forge=forge_status()))
                 if path.path=="/api/forge/status":return self.json(200,forge_status())
                 if path.path=='/api/deck-studies':
                     from .deck_study import STUDIES
@@ -549,7 +553,7 @@ def handler_for(app):
                 if path=="/api/feedback":
                     a=app.catalog.resolve(data.get("winner",""));b=app.catalog.resolve(data.get("loser",""))
                     if not a or not b:raise ValueError("比较中的卡名未确认")
-                    return self.json(200,app.feedback.add(a,b,app.feedback.context(spec),data.get("note","")))
+                    return self.json(200,app.feedback.add(a,b,app.feedback.context(spec),data.get("note",""),app.catalog))
                 if path=="/api/train":return self.json(200,app.feedback.train(app.catalog,app.feedback.context(spec)))
                 return self.json(404,{"error":"没有该接口"})
             except (ValueError,TypeError,KeyError) as e:self.json(400,{"error":str(e)})

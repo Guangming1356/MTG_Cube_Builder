@@ -69,7 +69,7 @@ def stage():
     data=app/'data';data.mkdir()
     for name in ('card_pool.json','cube_studies.json','learning_sources.json','forge_name_aliases.json'):shutil.copyfile(SOURCE/'cube_ai/data'/name,data/name)
     docs=app/'docs';docs.mkdir()
-    for name in ('BRACKETS.md','AI_CONNECTIONS.md','DEBUG_REPORT.md','PARALLEL_EVALUATION.md','SPEED_REPORT.md','SPEED_SEARCH_REPORT.md','DYNAMIC_RESOURCES.md','TASK_CONTROL.md','DECK_POLICY_STUDY.md','NATIVE_DIAGNOSTICS.md','FORGE_COMPATIBILITY.md'):shutil.copyfile(SOURCE/'cube_ai/docs'/name,docs/name)
+    for name in ('BRACKETS.md','AI_CONNECTIONS.md','DEBUG_REPORT.md','PARALLEL_EVALUATION.md','SPEED_REPORT.md','SPEED_SEARCH_REPORT.md','DYNAMIC_RESOURCES.md','TASK_CONTROL.md','DECK_POLICY_STUDY.md','NATIVE_DIAGNOSTICS.md','FORGE_COMPATIBILITY.md','ROLE_ONTOLOGY_STUDY.md'):shutil.copyfile(SOURCE/'cube_ai/docs'/name,docs/name)
     for path in (SOURCE/'cube_ai/docs').glob('OPTIMIZATION_*.md'):
         if re.fullmatch(r'OPTIMIZATION_20\d{6}\.md',path.name):shutil.copyfile(path,docs/path.name)
     for name in ('CUBECobra_DESIGN.md','MULTI_SITE_DESIGN.md'):

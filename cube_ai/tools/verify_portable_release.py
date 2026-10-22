@@ -43,6 +43,10 @@ def main():
                       if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='__version__' for t in n.targets))
         assert status['version']==expected and status.get('workspace_id')
         assert not status['gpt']['configured'] and status['forge']['available']
+        assert status['feedback']['comparisons']==0 and status['feedback']['model'] is None
+        assert status['feedback']['model_compatible'] is False and status['feedback']['model_reason']=='not_trained'
+        assert status['features']['feedback_scope'] is True
+        assert request(url+'api/feedback/status?context=legacy%3Aclassic')['comparisons']==0
         for asset in ['workspace.js','tasks-ui.js','deck-study-ui.js','style.css']:
             with urllib.request.urlopen(url+asset,timeout=10) as response:assert response.status==200
         names_code='''import json
@@ -75,7 +79,7 @@ print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs(
         assert restored['state']=='done' and restored['result']==result['result']
         report=dict(passed=True,application_version=expected,cards=status['cards'],offline_ai=True,forge_available=True,
                     embedded_runtime=True,task_pause_resume=True,shutdown_blocks_live_tasks=True,restart_recovers_result=True,
-                    native_name_compatibility=names)
+                    native_name_compatibility=names,clean_preference_state=True,preference_scope_validation=True)
         args.out.write_text(json.dumps(report,indent=2),encoding='utf8');print(json.dumps(report),flush=True)
     finally:
         if url:

@@ -86,7 +86,10 @@ def build(catalog, spec, previous=None, progress=lambda x:None, store=None):
     power=profile(spec)
     start=time.monotonic();progress("检索合法牌并解析依赖")
     main_targets,cmd_targets,curve=quotas(spec)
-    store=store or FeedbackStore();learned,model=store.scorer(spec)
+    store=store or FeedbackStore()
+    # Built-in weights are bound to this exact feature/catalog scope. Keep the
+    # small scorer(spec) interface for independent custom scoring stores.
+    learned,model=store.scorer(spec,catalog=catalog) if isinstance(store,FeedbackStore) else store.scorer(spec)
     pins=[]
     for name in spec.pins:
         n=catalog.resolve(name)

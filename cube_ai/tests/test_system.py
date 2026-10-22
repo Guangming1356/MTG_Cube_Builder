@@ -171,7 +171,9 @@ def test_real_label_learning_is_bounded(catalog,tmp_path):
     for _ in range(8):s.add('Sun Titan','Serra Angel',context,'test-only artificial labels')
     result=s.train(catalog,context)
     assert result['train_rows']==7 and result['holdout_rows']==1
-    score,_=s.scorer(BuildSpec());assert abs(score(catalog.cards['Sun Titan']))<=.5
+    score,model=s.scorer(BuildSpec(),catalog)
+    assert model and abs(score(catalog.cards['Sun Titan']))<=.5
+    assert result['catalog']==catalog.signature and result['feature_version']
 
 def test_http_boundaries(catalog,monkeypatch):
     monkeypatch.delenv('OPENAI_API_KEY',raising=False)

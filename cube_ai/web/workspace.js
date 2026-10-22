@@ -30,8 +30,11 @@ window.restoreWorkspace=async()=>{
     const state=JSON.parse(raw);
     if(state.version!==1||!Array.isArray(state.cards)||!state.spec||state.cards.length>900)return;
     const result=await api('/api/analyze',{spec:state.spec,cards:state.cards});
+    // A late startup response must not replace a Cube explicitly opened since.
+    if(current)return;
     result.run_id=state.run_id;result.provenance=state.provenance;setCube(result);
-    if(['home','cards','report','design','advisor','guide','learning'].includes(state.view))view(state.view);
+    // Preserve navigation made before or during the asynchronous recovery.
+    if(viewChanges===0&&['home','cards','report','design','advisor','guide','learning'].includes(state.view))view(state.view);
     notice('已恢复上次打开的牌表，并按当前牌库重新检查。');
   }catch(error){notice('上次工作区未能恢复。原保存记录和下载备份仍可打开：'+error.message,true);}
 };
