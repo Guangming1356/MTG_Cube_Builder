@@ -1,6 +1,6 @@
 {
   "passed": true,
-  "application_version": "0.2.2",
+  "application_version": "0.2.3",
   "cards": 31070,
   "offline_ai": true,
   "forge_available": true,
@@ -15,5 +15,6 @@
     "catalog_aliases_verified": true
   },
   "clean_preference_state": true,
-  "preference_scope_validation": true
+  "preference_scope_validation": true,
+  "native_evidence_validation": true
 }
