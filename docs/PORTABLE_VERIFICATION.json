@@ -1,6 +1,6 @@
 {
   "passed": true,
-  "application_version": "0.2.3",
+  "application_version": "0.2.4",
   "cards": 31070,
   "offline_ai": true,
   "forge_available": true,
@@ -16,5 +16,7 @@
   },
   "clean_preference_state": true,
   "preference_scope_validation": true,
-  "native_evidence_validation": true
+  "native_evidence_validation": true,
+  "cube_family_validation": true,
+  "native_event_comparison_validation": true
 }
