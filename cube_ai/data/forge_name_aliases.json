@@ -1,0 +1,790 @@
+{
+  "version": "native-name-aliases-1",
+  "forge_sha256": "85a4c31e07d4d5621a84bb03b6d75fd08e9f4ba289e575c870579b49c0033766",
+  "script_archives": [
+    {
+      "name": "res/cardsfolder/cardsfolder.zip",
+      "sha256": "ac26ccbe2a9c015bad4851db61d57d421777e10bf96c32d72add618b258bec07"
+    }
+  ],
+  "editions_sha256": "7fa580baad08531d2f9b4db14f20d0dc2e44865fc27967dc302ca83dd03973f3",
+  "pairs": [
+    {
+      "requested": "A Most Helpful Weaver",
+      "native": "Origin of Spider-Man"
+    },
+    {
+      "requested": "A Trail of Teacups",
+      "native": "Kraven's Last Hunt"
+    },
+    {
+      "requested": "Ademi of the Silkchutes",
+      "native": "Spectacular Spider-Man"
+    },
+    {
+      "requested": "Aggressive Symbiosis",
+      "native": "Alien Symbiosis"
+    },
+    {
+      "requested": "Aisha of Sparks and Smoke",
+      "native": "Ken, Burning Brawler"
+    },
+    {
+      "requested": "Alenni, Brood Recruiter",
+      "native": "Silk, Web Weaver"
+    },
+    {
+      "requested": "Alessos and Pras, Acrobats",
+      "native": "Spider-Man India"
+    },
+    {
+      "requested": "Ancestral Carvings",
+      "native": "Pictures of Spider-Man"
+    },
+    {
+      "requested": "Angler's Shield",
+      "native": "Biorganic Carapace"
+    },
+    {
+      "requested": "Arachnomania",
+      "native": "Spider-Verse"
+    },
+    {
+      "requested": "Arala, Hedron Scaler",
+      "native": "Beetle, Legacy Criminal"
+    },
+    {
+      "requested": "Archangler's Skyrod",
+      "native": "Web-Shooters"
+    },
+    {
+      "requested": "Argyr, Tidal Spinner",
+      "native": "Spider-Byte, Web Warden"
+    },
+    {
+      "requested": "Arvinox, the Mind Flail",
+      "native": "Mind Flayer, the Shadow"
+    },
+    {
+      "requested": "Baldin, Century Herdmaster",
+      "native": "E. Honda, Sumo Champion"
+    },
+    {
+      "requested": "Bane-Marked Leonin",
+      "native": "Venomized Cat"
+    },
+    {
+      "requested": "Basil, Cabaretti Loudmouth",
+      "native": "Flash Thompson, Spider-Fan"
+    },
+    {
+      "requested": "Bayo, Irritable Instructor",
+      "native": "Electro, Assaulting Battery"
+    },
+    {
+      "requested": "Belion, the Parched",
+      "native": "Hydro-Man, Fluid Felon"
+    },
+    {
+      "requested": "Bjorna, Nightfall Alchemist",
+      "native": "Lucas, the Sharpshooter"
+    },
+    {
+      "requested": "Bohn, Beguiling Balladeer",
+      "native": "Edgin, Larcenous Lutenist"
+    },
+    {
+      "requested": "Borys, the Spider Rider",
+      "native": "Scarlet Spider, Ben Reilly"
+    },
+    {
+      "requested": "Brako, Heartless Hunter",
+      "native": "Kraven the Hunter"
+    },
+    {
+      "requested": "Cactarantula Saddle",
+      "native": "Spider-Suit"
+    },
+    {
+      "requested": "Caldaia Brawlers",
+      "native": "Inner Demons Gangsters"
+    },
+    {
+      "requested": "Cam and Farrik, Havoc Duo",
+      "native": "Hobgoblin, Mantled Marauder"
+    },
+    {
+      "requested": "Carlo, Suave Schemer",
+      "native": "Prowler, Clawed Thief"
+    },
+    {
+      "requested": "Carriage of Dreams",
+      "native": "Passenger Ferry"
+    },
+    {
+      "requested": "Casal, Lurkwood Pathfinder",
+      "native": "Doric, Nature's Warden"
+    },
+    {
+      "requested": "Cecily, Haunted Mage",
+      "native": "Eleven, the Mage"
+    },
+    {
+      "requested": "Chizak, Apex Arachnosaur",
+      "native": "Spider-Rex, Daring Dino"
+    },
+    {
+      "requested": "Chosen by Valgavoth",
+      "native": "With Great Power . . ."
+    },
+    {
+      "requested": "Cirina Bargainspinner",
+      "native": "Sun-Spider, Nimble Webber"
+    },
+    {
+      "requested": "Clandestine Work",
+      "native": "Risky Research"
+    },
+    {
+      "requested": "Confessor's Bindings",
+      "native": "Rent Is Due"
+    },
+    {
+      "requested": "Crash, Reckless Endrider",
+      "native": "Shriek, Treblemaker"
+    },
+    {
+      "requested": "Cren, Undercity Dreamer",
+      "native": "Miles Morales"
+    },
+    {
+      "requested": "Crime-Scene Instructor",
+      "native": "Selfless Police Captain"
+    },
+    {
+      "requested": "Cruel Caracals",
+      "native": "Kraven's Cats"
+    },
+    {
+      "requested": "Damning Caress",
+      "native": "Venom's Hunger"
+    },
+    {
+      "requested": "Darval, Whose Web Protects",
+      "native": "Spider-Man, Web-Slinger"
+    },
+    {
+      "requested": "Data Scrubber",
+      "native": "Mechanical Mobster"
+    },
+    {
+      "requested": "Deathflame Burst",
+      "native": "Electro's Bolt"
+    },
+    {
+      "requested": "Demera, Soul of a Spider",
+      "native": "Mary Jane Watson"
+    },
+    {
+      "requested": "Desecrex, Gift of Servitude",
+      "native": "Carnage, Crimson Chaos"
+    },
+    {
+      "requested": "Detect Intrusion",
+      "native": "Spider-Sense"
+    },
+    {
+      "requested": "Diligent Webkeepers",
+      "native": "Web-Warriors"
+    },
+    {
+      "requested": "Dreadfang, Loathed by Fans",
+      "native": "Kraven, Proud Predator"
+    },
+    {
+      "requested": "Drix Interception",
+      "native": "Amazing Acrobatics"
+    },
+    {
+      "requested": "Druneth, Reviver of the Hive",
+      "native": "Jackal, Genius Geneticist"
+    },
+    {
+      "requested": "Duskmourn's Claim",
+      "native": "Parker Luck"
+    },
+    {
+      "requested": "Eccentric Arachnologist",
+      "native": "Guy in the Chair"
+    },
+    {
+      "requested": "Egrix the Bile Bulwark",
+      "native": "Gwenom, Remorseless"
+    },
+    {
+      "requested": "Elmar, Ulvenwald Informant",
+      "native": "Max, the Daredevil"
+    },
+    {
+      "requested": "Enkira, Hostile Scavenger",
+      "native": "Michonne, Ruthless Survivor"
+    },
+    {
+      "requested": "Error-9, Viral Node",
+      "native": "Living Brain, Mechanical Marvel"
+    },
+    {
+      "requested": "Evin, Waterdeep Opportunist",
+      "native": "Forge, Neverwinter Charlatan"
+    },
+    {
+      "requested": "Exclusive Nightclub",
+      "native": "Oscorp Industries"
+    },
+    {
+      "requested": "Eztli of the Thousand Moons",
+      "native": "Starling, Aerial Ally"
+    },
+    {
+      "requested": "Fateweaver",
+      "native": "Radioactive Spider"
+    },
+    {
+      "requested": "Favored Fighter",
+      "native": "Professional Wrestler"
+    },
+    {
+      "requested": "Fearsome Ridgeline",
+      "native": "Daily Bugle Building"
+    },
+    {
+      "requested": "Fire-Brained Scheme",
+      "native": "Heroes' Hangout"
+    },
+    {
+      "requested": "Fizik, Etherium Mechanic",
+      "native": "Iron Spider, Stark Upgrade"
+    },
+    {
+      "requested": "Freestrider Aces",
+      "native": "Wild Pack Squad"
+    },
+    {
+      "requested": "Full-Throttle Fanatic",
+      "native": "Taxi Driver"
+    },
+    {
+      "requested": "Galvanized Workforce",
+      "native": "Angry Rabble"
+    },
+    {
+      "requested": "Generous Betty Wray",
+      "native": "Silver Sable, Mercenary Leader"
+    },
+    {
+      "requested": "Giantcraft Helm",
+      "native": "Doc Ock's Tentacles"
+    },
+    {
+      "requested": "Gisa's Favorite Shovel",
+      "native": "Lucille"
+    },
+    {
+      "requested": "Gloria, the Great Armorer",
+      "native": "Araña, Heart of the Spider"
+    },
+    {
+      "requested": "Goben, Gene-Splice Savant",
+      "native": "Norman Osborn"
+    },
+    {
+      "requested": "Goro Rel, Scourge to Spiders",
+      "native": "Spider-Slayer, Hatred Honed"
+    },
+    {
+      "requested": "Gregor, Shrewd Magistrate",
+      "native": "Glenn, the Voice of Calm"
+    },
+    {
+      "requested": "Greymond, Avacyn's Stalwart",
+      "native": "Rick, Steadfast Leader"
+    },
+    {
+      "requested": "Hansk, Slayer Zealot",
+      "native": "Daryl, Hunter of Walkers"
+    },
+    {
+      "requested": "Hargilde, Kindly Runechanter",
+      "native": "Dustin, Gadget Genius"
+    },
+    {
+      "requested": "Havengul Laboratory",
+      "native": "Hawkins National Laboratory"
+    },
+    {
+      "requested": "Hex of Undeath",
+      "native": "Behold the Sinister Six!"
+    },
+    {
+      "requested": "Hide in Mundanity",
+      "native": "Spider-Man No More"
+    },
+    {
+      "requested": "Immard, the Stormcleaver",
+      "native": "Guile, Sonic Soldier"
+    },
+    {
+      "requested": "Janai and Hoppy, Roofskippers",
+      "native": "Spider-Girl, Legacy Hero"
+    },
+    {
+      "requested": "Jurin, Leading the Charge",
+      "native": "Holga, Relentless Rager"
+    },
+    {
+      "requested": "Kavaero, Mind-Bitten",
+      "native": "Superior Spider-Man"
+    },
+    {
+      "requested": "Kazuo, Ruthless Rival",
+      "native": "Shocker, Unshakable"
+    },
+    {
+      "requested": "Kephon, Rage Incubator",
+      "native": "Stegron the Dinosaur Man"
+    },
+    {
+      "requested": "King of the Coldblood Curse",
+      "native": "Lizard, Connors's Curse"
+    },
+    {
+      "requested": "Kivni, Orb Weaver",
+      "native": "Scarlet Spider, Kaine"
+    },
+    {
+      "requested": "Knife Trick",
+      "native": "Pumpkin Bombardment"
+    },
+    {
+      "requested": "Kraza, the Swarm as One",
+      "native": "Spider-Punk"
+    },
+    {
+      "requested": "Kroble, Envoy of the Bog",
+      "native": "Spider-Man Noir"
+    },
+    {
+      "requested": "Kumonosu, the Watchful",
+      "native": "SP//dr, Piloted by Peni"
+    },
+    {
+      "requested": "Lavaborn Goblins",
+      "native": "Raging Goblinoids"
+    },
+    {
+      "requested": "Lavabrink Repels the Magmaloth",
+      "native": "Maximum Carnage"
+    },
+    {
+      "requested": "Lazlo, Enthusiastic Accuser",
+      "native": "J. Jonah Jameson"
+    },
+    {
+      "requested": "Leyline Weaver",
+      "native": "Spider Manifestation"
+    },
+    {
+      "requested": "Lively Leap",
+      "native": "Thwip!"
+    },
+    {
+      "requested": "Lost in Littjara",
+      "native": "The Clone Saga"
+    },
+    {
+      "requested": "Luis, Pompous Pillager",
+      "native": "Morlun, Devourer of Spiders"
+    },
+    {
+      "requested": "Maarika, Brutal Gladiator",
+      "native": "Zangief, the Red Cyclone"
+    },
+    {
+      "requested": "Makdee and Itla, Skysnarers",
+      "native": "Spider-Woman, Stunning Savior"
+    },
+    {
+      "requested": "Malik, Grim Manipulator",
+      "native": "Negan, the Cold-Blooded"
+    },
+    {
+      "requested": "Margot, On the Case",
+      "native": "Wraith, Vicious Vigilante"
+    },
+    {
+      "requested": "Mathise, Surge Channeler",
+      "native": "Simon, Wild Magic Sorcerer"
+    },
+    {
+      "requested": "Merata, Neuron Hacker",
+      "native": "Lady Octopus, Inspired Inventor"
+    },
+    {
+      "requested": "Miasmic Mist",
+      "native": "Sandman's Quicksand"
+    },
+    {
+      "requested": "Mothwing Shroud",
+      "native": "Web Up"
+    },
+    {
+      "requested": "Neach, Pinnacle Pariah",
+      "native": "Doctor Octopus, Master Planner"
+    },
+    {
+      "requested": "Nia, Skysail Storyteller",
+      "native": "Gwen Stacy"
+    },
+    {
+      "requested": "Nill, Vessel of Valgavoth",
+      "native": "Tombstone, Career Criminal"
+    },
+    {
+      "requested": "Nu and Sumi, Career Criminals",
+      "native": "Green Goblin, Revenant"
+    },
+    {
+      "requested": "Obscura Alleylurkers",
+      "native": "Doc Ock's Henchmen"
+    },
+    {
+      "requested": "Olx, Mouth to Many Eyes",
+      "native": "Madame Web, Clairvoyant"
+    },
+    {
+      "requested": "Opulent Valet",
+      "native": "News Helicopter"
+    },
+    {
+      "requested": "Orris, Last of the Web Lords",
+      "native": "Ezekiel Sims, Spider-Totem"
+    },
+    {
+      "requested": "Othelm, Sigardian Outcast",
+      "native": "Mike, the Dungeon Master"
+    },
+    {
+      "requested": "Outsmart the Amateur",
+      "native": "School Daze"
+    },
+    {
+      "requested": "Ozor, Chronicler of Collapse",
+      "native": "Doc Ock, Sinister Scientist"
+    },
+    {
+      "requested": "Perfected Pastry",
+      "native": "Bagel and Schmear"
+    },
+    {
+      "requested": "Perilous Lunge",
+      "native": "Kapow!"
+    },
+    {
+      "requested": "Phantasmal Vision",
+      "native": "Mysterio's Phantasm"
+    },
+    {
+      "requested": "Phenomena Recorder",
+      "native": "Peter Parker's Camera"
+    },
+    {
+      "requested": "Pinnacle Research Team",
+      "native": "Oscorp Research Team"
+    },
+    {
+      "requested": "Principled Referee",
+      "native": "Daily Bugle Reporters"
+    },
+    {
+      "requested": "Qoneus, Horizon Splicer",
+      "native": "The Spot, Living Portal"
+    },
+    {
+      "requested": "Quint's Insight",
+      "native": "Shadow of the Goblin"
+    },
+    {
+      "requested": "Rashel, Fist of Torm",
+      "native": "Xenk, Paladin Unbroken"
+    },
+    {
+      "requested": "Reality Fulcrum",
+      "native": "Interdimensional Web Watch"
+    },
+    {
+      "requested": "Remarkable Readings",
+      "native": "Friendly Neighborhood"
+    },
+    {
+      "requested": "Remorseless Coup",
+      "native": "The Spot's Portal"
+    },
+    {
+      "requested": "Restless Razorkin",
+      "native": "Superior Foes of Spider-Man"
+    },
+    {
+      "requested": "Rhilex the Accursed",
+      "native": "Agent Venom"
+    },
+    {
+      "requested": "Rishei, Getaway Accomplice",
+      "native": "Vulture, Scheming Scavenger"
+    },
+    {
+      "requested": "Rizna, the Spider-Crowned",
+      "native": "Spinneret and Spiderling"
+    },
+    {
+      "requested": "Rouse the Swarm",
+      "native": "Wall Crawl"
+    },
+    {
+      "requested": "Ruzic, Booed but Victorious",
+      "native": "Ultimate Green Goblin"
+    },
+    {
+      "requested": "Sadistic String-Puller",
+      "native": "Spider-Islanders"
+    },
+    {
+      "requested": "Sarn of the Silken Throne",
+      "native": "Spider-UK"
+    },
+    {
+      "requested": "Scions of the Ur-Spider",
+      "native": "Cosmic Spider-Man"
+    },
+    {
+      "requested": "Scorvus Ames, Crimelord",
+      "native": "Scorpion, Seething Striker"
+    },
+    {
+      "requested": "Scuttling Spidercoach",
+      "native": "Spider-Mobile"
+    },
+    {
+      "requested": "Selesnya Archivist",
+      "native": "Damage Control Crew"
+    },
+    {
+      "requested": "Skittering Kitten",
+      "native": "Masked Meower"
+    },
+    {
+      "requested": "Skv'x the Augmenter",
+      "native": "Symbiote Spider-Man"
+    },
+    {
+      "requested": "Snatch Back",
+      "native": "Whoosh!"
+    },
+    {
+      "requested": "Sophina, Spearsage Deserter",
+      "native": "Chief Jim Hopper"
+    },
+    {
+      "requested": "Spectral Restitching",
+      "native": "Hide on the Ceiling"
+    },
+    {
+      "requested": "Steelweb Surveyor",
+      "native": "Spider-Bot"
+    },
+    {
+      "requested": "Stitcher's Wings",
+      "native": "Rocket-Powered Goblin Glider"
+    },
+    {
+      "requested": "Surris, Spidersilk Innovator",
+      "native": "Peter Parker"
+    },
+    {
+      "requested": "Tadeas, Juniper Ascendant",
+      "native": "Dhalsim, Pliable Pacifist"
+    },
+    {
+      "requested": "Tarantusk, Unwisely Awoken",
+      "native": "Spider-Ham, Peter Porker"
+    },
+    {
+      "requested": "Tearle, Entropic Hunger",
+      "native": "Morbius the Living Vampire"
+    },
+    {
+      "requested": "Temple Trap",
+      "native": "Steel Wrecking Ball"
+    },
+    {
+      "requested": "Tethex, Gift of Malice",
+      "native": "Venom, Evil Unleashed"
+    },
+    {
+      "requested": "The Clutter Cluster",
+      "native": "Spiders-Man, Heroic Horde"
+    },
+    {
+      "requested": "The House Grows Hungry",
+      "native": "The Death of Gwen Stacy"
+    },
+    {
+      "requested": "The Howling Abomination",
+      "native": "Blanka, Ferocious Friend"
+    },
+    {
+      "requested": "The Infernus",
+      "native": "Molten Man, Inferno Incarnate"
+    },
+    {
+      "requested": "The Scouring Stormsoul",
+      "native": "Sandman, Shifting Scoundrel"
+    },
+    {
+      "requested": "The Terminus of Return",
+      "native": "The Soul Stone"
+    },
+    {
+      "requested": "The Watcher on the Road",
+      "native": "Mysterio, Master of Illusion"
+    },
+    {
+      "requested": "Through the Omenpath",
+      "native": "Web of Life and Destiny"
+    },
+    {
+      "requested": "Treat Trolley",
+      "native": "Hot Dog Cart"
+    },
+    {
+      "requested": "Uharis, the Stormspinner",
+      "native": "Spider-Man 2099"
+    },
+    {
+      "requested": "Vazin, Two-Faced Trickster",
+      "native": "Chameleon, Master of Disguise"
+    },
+    {
+      "requested": "Verilax the Havenskin",
+      "native": "Anti-Venom, Horrifying Healer"
+    },
+    {
+      "requested": "Vexed Bots",
+      "native": "Flying Octobot"
+    },
+    {
+      "requested": "Viggo, Enforcer of Ig's Crossing",
+      "native": "Eddie Brock"
+    },
+    {
+      "requested": "Vikya, Scorching Stalwart",
+      "native": "Ryu, World Warrior"
+    },
+    {
+      "requested": "Vinewoven Chariot",
+      "native": "Subway Train"
+    },
+    {
+      "requested": "Wardens of Silverweb Summit",
+      "native": "Spider-Gwen, Free Spirit"
+    },
+    {
+      "requested": "Wekhdu, Midnight Hunter",
+      "native": "Swarm, Being of Bees"
+    },
+    {
+      "requested": "Wernog, Rider's Chaplain",
+      "native": "Will the Wise"
+    },
+    {
+      "requested": "Withar, Cocoon Keeper",
+      "native": "Mister Negative"
+    },
+    {
+      "requested": "Wonderweave Aerialist",
+      "native": "Skyward Spider"
+    },
+    {
+      "requested": "Wrench, Speedway Saboteur",
+      "native": "Black Cat, Cunning Thief"
+    },
+    {
+      "requested": "Xecau, Predation's Shadow",
+      "native": "Rhino, Barreling Brute"
+    },
+    {
+      "requested": "Yera and Oski, Weaver and Guide",
+      "native": "Arachne, Psionic Weaver"
+    },
+    {
+      "requested": "Zan, Tunnelweb Explorer",
+      "native": "Spider-Man, Brooklyn Visionary"
+    },
+    {
+      "requested": "Zethi, Arcane Blademaster",
+      "native": "Chun-Li, Countless Kicks"
+    },
+    {
+      "requested": "Zora, Spider Fancier",
+      "native": "Aunt May"
+    }
+  ],
+  "query": {
+    "requested": 182,
+    "resolved_to_declared_primary": 182,
+    "loaded_under_requested_name": 0,
+    "source_sha256": "dcca30cb6b8270adbf8b5542c777ddb12ce42bac71429bb50a6b5cea4c7b25d5",
+    "compiler_sha256": "74c93172475fee0cd4e6eefb44233516dd40525642da35d009146d97ea598229",
+    "compiler_source": "https://repo.maven.apache.org/maven2/org/eclipse/jdt/ecj/3.46.100/ecj-3.46.100.jar",
+    "method": "Native CardDb.getCard(requested) returned the script-declared primary name and rules. Deck exports preserve requested names. Native logs require reverse mapping.",
+    "strict_name_check": "0/182: native objects use primary names. The initial result is retained; this manifest certifies resolution, not name preservation inside Forge.",
+    "utf8_protocol": true
+  },
+  "source": "Original Forge 2.0.15 scripts and native CardDb. Declared UniversesWithin front names only.",
+  "back_faces": [
+    {
+      "requested": "Casal, Pathbreaker Owlbear",
+      "native": "Doric, Owlbear Avenger",
+      "front": "Casal, Lurkwood Pathfinder"
+    },
+    {
+      "requested": "Cren of the Spider Brood",
+      "native": "Ultimate Spider-Man",
+      "front": "Cren, Undercity Dreamer"
+    },
+    {
+      "requested": "Fleem, Goben's Creation",
+      "native": "Green Goblin",
+      "front": "Goben, Gene-Splice Savant"
+    },
+    {
+      "requested": "Havengul Mystery",
+      "native": "The Upside Down",
+      "front": "Havengul Laboratory"
+    },
+    {
+      "requested": "Nia, Fabled Skyclimber",
+      "native": "Ghost-Spider",
+      "front": "Nia, Skysail Storyteller"
+    },
+    {
+      "requested": "Surris, Silk-Tech Vanguard",
+      "native": "Amazing Spider-Man",
+      "front": "Surris, Spidersilk Innovator"
+    },
+    {
+      "requested": "Viggo, End of Ig's Crossing",
+      "native": "Venom, Lethal Protector",
+      "front": "Viggo, Enforcer of Ig's Crossing"
+    }
+  ]
+}

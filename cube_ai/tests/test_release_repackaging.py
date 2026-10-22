@@ -7,6 +7,17 @@ import pytest
 from cube_ai.tools.repackage_release import repackage,sha
 
 
+def test_name_manifest_is_required_and_pinned_when_module_is_shipped(tmp_path):
+    from cube_ai.tools.repackage_release import overlay_files
+    from cube_ai.forge_card_names import ASSET
+    app=tmp_path/'cube_ai';app.mkdir();(app/'forge_card_names.py').write_bytes(b'# module')
+    with pytest.raises(FileNotFoundError):overlay_files(tmp_path)
+    (app/'data').mkdir();target=app/'data/forge_name_aliases.json';target.write_bytes(ASSET.read_bytes())
+    assert overlay_files(tmp_path)['cube_ai/data/forge_name_aliases.json']==ASSET.read_bytes()
+    target.write_bytes(ASSET.read_bytes()+b' ')
+    with pytest.raises(ValueError,match='modified'):overlay_files(tmp_path)
+
+
 @pytest.fixture
 def source(tmp_path):
     root=tmp_path/'source';(root/'cube_ai/web').mkdir(parents=True)

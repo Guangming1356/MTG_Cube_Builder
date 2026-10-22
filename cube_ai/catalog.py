@@ -98,6 +98,8 @@ class Catalog:
         for n in self.cards:
             if " // " in n:
                 self.aliases.setdefault(n.split(" // ")[0].casefold(), n)
+        from .forge_card_names import add_catalog_aliases
+        add_catalog_aliases(self.aliases)
         self.reference = set()
         reference = WORKSPACE / "ref_thecommandercube.csv"
         if reference.is_file():
@@ -122,6 +124,8 @@ class Catalog:
         value.aliases={name.casefold():name for name in value.cards};value._search_cache=OrderedDict()
         for name in value.cards:
             if ' // ' in name:value.aliases.setdefault(name.split(' // ')[0].casefold(),name)
+        from .forge_card_names import add_catalog_aliases
+        add_catalog_aliases(value.aliases)
         return value
 
     def search(self, query="", identity=None, limit=30):

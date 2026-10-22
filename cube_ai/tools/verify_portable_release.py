@@ -45,6 +45,19 @@ def main():
         assert not status['gpt']['configured'] and status['forge']['available']
         for asset in ['workspace.js','tasks-ui.js','deck-study-ui.js','style.css']:
             with urllib.request.urlopen(url+asset,timeout=10) as response:assert response.status==200
+        names_code='''import json
+from cube_ai.catalog import Catalog
+from cube_ai.forge import configuration,card_index,engine_name
+from cube_ai.forge_card_names import name_pairs,trace_name_pairs,ASSET,bundle_alias_asset
+c=Catalog();pairs=name_pairs();index=card_index(configuration())
+assert len(pairs)==182 and len(trace_name_pairs())==189
+assert all(engine_name(requested,index)==requested for requested,native in pairs)
+assert c.resolve('Chief Jim Hopper')=='Sophina, Spearsage Deserter'
+assert c.resolve('Dustin, Gadget Genius')=='Hargilde, Kindly Runechanter'
+bundle_alias_asset(ASSET)
+print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs()),native_index_verified=True,catalog_aliases_verified=True)))
+'''
+        names=json.loads(subprocess.check_output([str(python),'-X','utf8','-c',names_code],cwd=root,text=True,encoding='utf8',timeout=90))
         code="from pathlib import Path;import json,sys;from cube_ai.catalog import Catalog;from cube_ai.config import BuildSpec;c=Catalog();rows,unknown=c.parse(Path(sys.argv[1]).read_text(encoding='utf-8-sig'));assert not unknown;print(json.dumps(dict(operation='stress',cards=rows,spec=BuildSpec().to_dict(),trials=5)))"
         prepared=subprocess.check_output([str(python),'-X','utf8','-c',code,str(args.fixture.resolve())],cwd=root,text=True,encoding='utf8',timeout=90)
         job=request(url+'api/tasks',json.loads(prepared))['job_id']
@@ -61,7 +74,8 @@ def main():
         restored=request(url+'api/job?id='+job)
         assert restored['state']=='done' and restored['result']==result['result']
         report=dict(passed=True,application_version=expected,cards=status['cards'],offline_ai=True,forge_available=True,
-                    embedded_runtime=True,task_pause_resume=True,shutdown_blocks_live_tasks=True,restart_recovers_result=True)
+                    embedded_runtime=True,task_pause_resume=True,shutdown_blocks_live_tasks=True,restart_recovers_result=True,
+                    native_name_compatibility=names)
         args.out.write_text(json.dumps(report,indent=2),encoding='utf8');print(json.dumps(report),flush=True)
     finally:
         if url:

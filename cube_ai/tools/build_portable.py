@@ -67,7 +67,7 @@ def stage():
     ui=app/'web/app.js'
     ui.write_text(ui.read_text(encoding='utf8').replace('重启 start.ps1','关闭并重新启动助手'),encoding='utf8')
     data=app/'data';data.mkdir()
-    for name in ('card_pool.json','cube_studies.json','learning_sources.json'):shutil.copyfile(SOURCE/'cube_ai/data'/name,data/name)
+    for name in ('card_pool.json','cube_studies.json','learning_sources.json','forge_name_aliases.json'):shutil.copyfile(SOURCE/'cube_ai/data'/name,data/name)
     docs=app/'docs';docs.mkdir()
     for name in ('BRACKETS.md','AI_CONNECTIONS.md','DEBUG_REPORT.md','PARALLEL_EVALUATION.md','SPEED_REPORT.md','SPEED_SEARCH_REPORT.md','DYNAMIC_RESOURCES.md','TASK_CONTROL.md','DECK_POLICY_STUDY.md','NATIVE_DIAGNOSTICS.md','FORGE_COMPATIBILITY.md'):shutil.copyfile(SOURCE/'cube_ai/docs'/name,docs/name)
     for path in (SOURCE/'cube_ai/docs').glob('OPTIMIZATION_*.md'):

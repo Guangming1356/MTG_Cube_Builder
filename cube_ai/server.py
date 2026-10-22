@@ -69,14 +69,17 @@ def execute_operation(app,operation,spec,rows,data,progress):
     elif operation=='calibrate':
         options=dict(mode=data.get('mode','quick'))
         if 'goal' in data:options['goal']=data['goal']
+        for field,argument in [('calibration_workers','worker_choices'),('calibration_profiles','jvm_choices'),('calibration_apply','apply_result')]:
+            if field in data:options[argument]=data[field]
         value=tuning.calibrate(app.catalog,rows,spec,progress,**options)
     elif operation=="forge":
         value=forge_simulate(app.catalog,rows,spec,data.get('pods',10),data.get('games_per_pod',3),data.get('clock_seconds',90),progress,workers=data.get('workers',0),
                              pod_seeds=data.get('pod_seeds'),preferred_guilds=data.get('preferred_guilds'))
     elif operation=='deck-study':
         from .deck_study import compare
+        policy_options=dict(variant=data['deck_variant']) if 'deck_variant' in data else {}
         value=compare(app.catalog,rows,spec,pods=data.get('pods',20),workers=data.get('workers',0),
-                      clock_seconds=data.get('clock_seconds',180),seed=data.get('study_seed'),progress=progress)
+                      clock_seconds=data.get('clock_seconds',180),seed=data.get('study_seed'),progress=progress,**policy_options)
     elif operation=='diagnose-game':
         from .native_diagnostic import compare_entries
         value=compare_entries(data.get('source_type'),data.get('source_id'),data.get('game_index'),progress)
@@ -293,7 +296,7 @@ class Application:
                 self.controls.pop(k,None)
                 self.job_paths.pop(k,None)
         if self.isolated_jobs:
-            allowed={'operation','message','trials','run_id','pods','games_per_pod','clock_seconds','workers','profile','max_swaps','training_pods','scoring_backend','search_mode','mode','goal','study_seed','source_type','source_id','game_index','pod_seeds','preferred_guilds'}
+            allowed={'operation','message','trials','run_id','pods','games_per_pod','clock_seconds','workers','profile','max_swaps','training_pods','scoring_backend','search_mode','mode','goal','study_seed','deck_variant','calibration_workers','calibration_profiles','calibration_apply','source_type','source_id','game_index','pod_seeds','preferred_guilds'}
             request={k:v for k,v in data.items() if k in allowed};request.update(spec=spec.to_dict(),cards=rows)
             snapshot=None
             if operation in {'stress','forge','calibrate','deck-study'}:
@@ -378,7 +381,7 @@ def handler_for(app):
                 if path.path=="/api/status":
                     with app.lock:active_jobs=sum(j['state'] in ACTIVE for j in app.jobs.values())
                     return self.json(200,dict(version=__version__,workspace_id=WORKSPACE_ID,cards=len(app.catalog.cards),snapshot=app.catalog.snapshot,
-                        active_jobs=active_jobs,speed_version=2,task_controls=True,features=dict(deck_study=True,native_diagnostic=True,persistent_job_history=True,workspace_restore=True),
+                        active_jobs=active_jobs,speed_version=2,task_controls=True,features=dict(deck_study=True,protected_deck_study=True,calibration_preview=True,native_diagnostic=True,persistent_job_history=True,workspace_restore=True),
                         experiments=dict(profiles={k:experiment_budget(k) for k in PROFILES},resources=execution_resources()),
                         knowledge_chunks=len(app.knowledge.chunks),gpt=app.ai_status(),themes=THEME_NAMES,
                         presets={"commander":BuildSpec.from_dict({'bracket':3}).to_dict(),"classic":BuildSpec.from_dict({"mode":"classic"}).to_dict()},brackets=public_profiles(),

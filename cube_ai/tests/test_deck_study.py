@@ -42,6 +42,20 @@ def test_spell_selection_preserves_pool_commander_lands_and_valid_deck_size(fixt
 def activity(rate):return dict(no_action_cycle_rate=rate,no_spell_cycle_rate=rate,no_spell_first4_rate=rate,finisher_presence=.5,own_turns=8,complete_first4_coverage=1)
 
 
+def test_protected_policy_keeps_every_selected_finisher_and_can_still_change_spells(fixture):
+    catalog,rows=fixture;spec=BuildSpec();changes=0
+    for seed in [1937,12451,31754]:
+        pod=draft_pod(catalog,rows,spec,random.Random(seed),['UW','BR','GU'],readiness_hands=0)
+        for deck in pod['decks']:
+            after=revise(catalog,deck,spec,'protected')
+            finishers={n for n in deck['spells'] if catalog.cards[n]['finisher']}
+            assert finishers<=set(after['spells'])
+            assert after['commander']==deck['commander'] and after['drafted']==deck['drafted']
+            assert after['lands']==deck['lands'] and after['land_count']==deck['land_count']
+            changes+=len(after['research_changes'])
+    assert changes>0
+
+
 def test_analysis_keeps_failed_attempts_and_excludes_entire_incomplete_paired_table():
     records=[dict(pod=pod,policy=policy,game=game,outcome='win',activity=activity(.6 if policy=='quality' else .4))
              for pod in range(20) for policy in ['quality','balanced'] for game in range(3)]
@@ -96,7 +110,8 @@ def test_cycle_activity_includes_offturn_interaction_but_not_triggers_or_partial
     assert b['complete_early_cycles']==0 and b['no_action_cycle_rate'] is None
 
 
-def test_controlled_pipeline_preserves_both_policies_and_writes_replayable_evidence(fixture,tmp_path,monkeypatch):
+@pytest.mark.parametrize('variant',['balanced','protected'])
+def test_controlled_pipeline_preserves_both_policies_and_writes_replayable_evidence(fixture,tmp_path,monkeypatch,variant):
     from cube_ai import deck_study,tuning
     catalog,rows=fixture;before=copy.deepcopy(rows)
     monkeypatch.setattr(deck_study,'STUDIES',tmp_path/'studies')
@@ -116,7 +131,8 @@ def test_controlled_pipeline_preserves_both_policies_and_writes_replayable_evide
         (out/log).write_text('\n'.join(lines),encoding='utf8')
         return dict(outcome='win',winner=order[0],log=log,turns=12,cache_hit=False)
     monkeypatch.setattr(deck_study,'run_battle',battle)
-    result=compare(catalog,rows,BuildSpec(),pods=2,workers=1,clock_seconds=30,seed=1937)
+    result=compare(catalog,rows,BuildSpec(),pods=2,workers=1,clock_seconds=30,seed=1937,variant=variant)
+    assert result['policy']['name']==variant and result['policy']['preserve_finishers']==(variant=='protected')
     assert rows==before and len(calls)==12 and result['training_samples_added']==0
     assert result['summary']['paired_complete_pods']==2 and not result['summary']['supports_activity_improvement']
     for pod in range(2):
@@ -130,3 +146,18 @@ def test_controlled_pipeline_preserves_both_policies_and_writes_replayable_evide
     assert len(list((out/'tables').glob('*.json')))==2
     assert json.loads((out/'games.json').read_text(encoding='utf8'))==saved['games']
     assert (out/'source/forge.py').is_file() and (out/'source/catalog.json').is_file()
+
+
+def test_http_operation_forwards_the_explicit_research_variant(monkeypatch):
+    import threading
+    from cube_ai import deck_study
+    from cube_ai.server import Application
+    completed=threading.Event();captured={}
+    def fake(catalog,rows,spec,**options):
+        captured.update(options);completed.set();return dict(training_samples_added=0)
+    monkeypatch.setattr(deck_study,'compare',fake)
+    app=Application()
+    try:
+        app.submit(dict(operation='deck-study',cards=[dict(name='Sun Titan',role='Main')],deck_variant='protected',study_seed=93000000))
+        assert completed.wait(5) and captured['variant']=='protected' and captured['seed']==93000000
+    finally:app.shutdown()

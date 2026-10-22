@@ -56,6 +56,9 @@ def overlay_files(source):
     for path in app.glob('*.py'):files['cube_ai/'+path.name]=path.read_bytes()
     for path in (app/'web').rglob('*'):
         if path.is_file() and '__pycache__' not in path.parts:files['cube_ai/web/'+path.relative_to(app/'web').as_posix()]=path.read_bytes()
+    if (app/'forge_card_names.py').is_file():
+        from cube_ai.forge_card_names import bundle_alias_asset
+        files.update(bundle_alias_asset(app/'data/forge_name_aliases.json'))
     public_docs=DOCS|{p.name for p in (app/'docs').glob('OPTIMIZATION_*.md') if re.fullmatch(r'OPTIMIZATION_20\d{6}\.md',p.name)}
     for name in public_docs:
         path=app/'docs'/name

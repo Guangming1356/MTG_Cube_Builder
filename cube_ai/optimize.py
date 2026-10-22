@@ -130,6 +130,8 @@ def log_events(log):
     return list(iter_log_events(log))
 
 def game_trace(catalog,log,decks,*,extended=False):
+    from .forge_card_names import trace_name_pairs
+    native_names=dict(trace_name_pairs())
     cards={};players={};active=None
     for d in decks:
         players[d['id']]=dict(own_turns=0,turn_spells=[],casts=Counter(),activations=Counter(),
@@ -140,6 +142,8 @@ def game_trace(catalog,log,decks,*,extended=False):
             c=catalog.cards[n]
             cards[n.split(' // ')[0]]=n
             if ' // ' in n:cards[n.split(' // ')[1]]=n
+            for face in n.split(' // '):
+                if primary:=native_names.get(face):cards.setdefault(primary,n)
     card_prefixes=sorted(cards.items(),key=lambda x:-len(x[0]))
     def name_of(text):
         if text in cards:return cards[text]

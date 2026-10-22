@@ -90,8 +90,12 @@ def test_compressed_workspace_is_bounded_and_results_are_not_mutable_aliases(fix
     assert not hit and result==cached and tiny.bytes_used==0 and not tiny.entries
 
 
-def test_spawn_workers_do_not_load_the_full_card_pool_and_accept_new_cards(fixture,tmp_path):
+def test_spawn_workers_do_not_load_the_full_card_pool_and_accept_new_cards(fixture,tmp_path,monkeypatch):
     import copy
+    from cube_ai import experiment
+    # Exercise the spawn branch independently of other apps' changing RAM use.
+    # Admission at low memory is covered by resource-policy tests separately.
+    monkeypatch.setattr(experiment,'memory_available',lambda:16*2**30)
     catalog,rows=fixture;spec=BuildSpec.from_dict({'bracket':3});seeds,guilds=schedule(10,11825)
     items=[];present={r['name'] for r in rows}
     for i,row in enumerate(rows):

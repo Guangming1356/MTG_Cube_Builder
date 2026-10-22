@@ -9,6 +9,7 @@ from .draft import opening_test
 VARIANTS={
     'conservative':dict(low=10,high=8,swaps=4),
     'balanced':dict(low=12,high=6,swaps=6),
+    'protected':dict(low=12,high=6,swaps=6,preserve_finishers=True),
     'tempo':dict(low=14,high=4,swaps=8),
 }
 
@@ -46,6 +47,7 @@ def revise(catalog,deck,spec,variant='balanced'):
     changes=[]
     def exchange(incoming,outgoing):
         nonlocal gc
+        if options.get('preserve_finishers') and cards[outgoing]['finisher']:return False
         add=vectors[incoming];remove=vectors[outgoing]
         if cards[incoming]['quality']<cards[outgoing]['quality']-.75:return False
         if any(counts[key]-remove.get(key,0)+add.get(key,0)<floor for key,floor in floors.items()):return False

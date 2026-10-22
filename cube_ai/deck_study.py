@@ -15,7 +15,7 @@ import uuid
 import zipfile
 
 from .config import ROOT
-from .deck_building import revise
+from .deck_building import revise,VARIANTS
 from .draft import draft_pod
 from .engine import audit
 from .forge import (campaign_resources,card_index,configuration,engine_name,
@@ -25,7 +25,7 @@ from .optimize import game_trace,schedule
 from .task_control import atomic_json
 
 STUDIES=ROOT/'private/deck-studies'
-VERSION='deck-policy-study-3'
+VERSION='deck-policy-study-4'
 NORMAL={'win','draw'}
 
 
@@ -33,12 +33,16 @@ def snapshot_sources(catalog,rows,out):
     """Preserve the code and trusted card features used before native outcomes."""
     names=['deck_study','deck_building','optimize','draft','forge','forge_worker','game_queue',
            'task_control','config','brackets','design','catalog','features','sim_cache',
-           'tuning','experiment','resources','acceleration','engine']
+           'tuning','experiment','resources','acceleration','engine','forge_card_names','forge_compat']
     folder=out/'source';folder.mkdir()
     hashes={}
     for name in names:
         path=Path(__file__).with_name(name+'.py');data=path.read_bytes()
         (folder/path.name).write_bytes(data);hashes[path.name]=hashlib.sha256(data).hexdigest()
+    from .forge_card_names import ASSET,bundle_alias_asset
+    for target,data in bundle_alias_asset(ASSET).items():
+        name=Path(target).name
+        (folder/name).write_bytes(data);hashes[name]=hashlib.sha256(data).hexdigest()
     cards=[catalog.cards[name] for name in sorted({row['name'] for row in rows})]
     atomic_json(folder/'catalog.json',dict(cards=cards,snapshot=catalog.snapshot,signature=catalog.signature))
     return dict(files=hashes,card_records=len(cards),stored_before_games=True,
@@ -93,10 +97,11 @@ def summarize(records,pods):
         limitation='整桌配对的描述性自助区间；没有重复开有利的包。未完成局保留并计入完成率。少量 Forge 对照不能证明人类娱乐性、色组均衡或普遍胜率。')
 
 
-def compare(catalog,rows,spec,pods=20,workers=0,clock_seconds=180,seed=None,progress=lambda _:None):
+def compare(catalog,rows,spec,pods=20,workers=0,clock_seconds=180,seed=None,progress=lambda _:None,variant='balanced'):
     if spec.mode!='commander' or spec.players!=3:raise ValueError('组牌方式比较目前需要三人 Commander Cube')
     if type(pods) is not int or not 1<=pods<=100:raise ValueError('组牌对照需为 1–100 桌；少于 15 桌仅供排错')
     if type(clock_seconds) is not int or not 30<=clock_seconds<=300:raise ValueError('单局时限需为 30–300 秒')
+    if not isinstance(variant,str) or variant not in {'balanced','protected'}:raise ValueError('组牌对照方式无效')
     if seed is None:seed=spec.seed+37000000
     if type(seed) is not int or not 0<=seed<2**62:raise ValueError('对照种子无效')
     if audit(catalog,rows,spec,strict=True)['hard_errors']:raise ValueError('请先修复牌表中的构筑错误，再比较组牌方式')
@@ -112,7 +117,8 @@ def compare(catalog,rows,spec,pods=20,workers=0,clock_seconds=180,seed=None,prog
             cube_sha256=hashlib.sha256(json.dumps(rows,sort_keys=True).encode()).hexdigest(),
             engine=engine_description(config),
             fixed=['drafted_pool','commander','identity','nonbasic_lands','land_count','deck_size'],
-            policy=dict(name='balanced',low_target=12,high_target=6,max_spell_swaps=6,experimental=True),
+            policy=dict(name=variant,low_target=VARIANTS[variant]['low'],high_target=VARIANTS[variant]['high'],max_spell_swaps=VARIANTS[variant]['swaps'],
+                        preserve_finishers=bool(VARIANTS[variant].get('preserve_finishers')),experimental=True),
             policy_sha256=hashlib.sha256(Path(__file__).with_name('deck_building.py').read_bytes()).hexdigest(),
             training_samples_added=0,tables=tables,games=records)
         result['activity_definition']='前四个完整的个人回合周期：从自己的回合开始至下一次自己的回合开始，计入期间任意回合施放、主动异能和宣攻；不计自动触发及下地。第五次自己的回合未开始，则不足四个完整周期。'
@@ -145,7 +151,7 @@ def compare(catalog,rows,spec,pods=20,workers=0,clock_seconds=180,seed=None,prog
                 while len(queue)>=queue.ceiling*2:collect(True)
                 progress(f'准备同一桌抓牌的两种组牌：{pod+1}/{pods}')
                 drafted=draft_pod(catalog,rows,spec,random.Random(draft_seed),prefs,readiness_hands=0)
-                before=drafted['decks'];after=[revise(catalog,deck,spec,'balanced') for deck in before]
+                before=drafted['decks'];after=[revise(catalog,deck,spec,variant) for deck in before]
                 table=dict(pod=pod,draft_seed=draft_seed,guilds=prefs,policies={'quality':before,'balanced':after},packs=drafted['packs'])
                 tables.append(table);unsupported=[]
                 for policy,decks in table['policies'].items():
@@ -177,7 +183,7 @@ def compare(catalog,rows,spec,pods=20,workers=0,clock_seconds=180,seed=None,prog
         metadata['state']='done';atomic_json(out/'summary.json',metadata)
         summary=result['summary'];lines=['# 同一抓牌池的组牌方式对照','',f'轮抓桌数：{pods}；每种方式每桌 3 局换座；没有修改 Cube。','',
             '| 组牌方式 | 正常完成 / 计划 | 前四完整周期零行动比例 | 施放过终结牌的玩家比例 |', '|---|---:|---:|---:|']
-        for policy,label in [('quality','单卡质量优先'),('balanced','均衡费用（实验）')]:
+        for policy,label in [('quality','单卡质量优先'),('balanced','保留终结的均衡费用（实验）' if result['policy']['preserve_finishers'] else '均衡费用（实验）')]:
             value=summary['policies'][policy]
             fmt=lambda v:'缺少记录' if v is None else f'{v:.1%}'
             lines.append(f'| {label} | {value["normal"]}/{pods*3} | {fmt(value["no_action_cycle_rate"])} | {fmt(value["finisher_presence"])} |')

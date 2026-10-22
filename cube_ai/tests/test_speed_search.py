@@ -164,8 +164,8 @@ def test_calibration_can_test_more_games_only_when_actual_heap_fits_memory(monke
     assert tuning.profile_choices([2,4],2,'compact_heap',{})[0]==[]
 
 
-@pytest.mark.parametrize('paused',[False,True])
-def test_calibration_runs_repeats_and_saves_only_validated_profile(fixture,tmp_path,monkeypatch,paused):
+@pytest.mark.parametrize('paused,fallback',[(False,False),(True,False),(False,True)])
+def test_calibration_runs_repeats_and_saves_only_validated_profile(fixture,tmp_path,monkeypatch,paused,fallback):
     from cube_ai import forge,experiment,task_control
     from types import SimpleNamespace
     control=SimpleNamespace(paused_seconds=0.,pause_started=None)
@@ -181,14 +181,16 @@ def test_calibration_runs_repeats_and_saves_only_validated_profile(fixture,tmp_p
         assert config['cache'] is False
         calls.append(seed);(out/log).write_text('Turn: Turn 1\nGame Outcome: Ai(1)-a has won!\n')
         if paused and seed==0:control.paused_seconds+=10
-        return dict(outcome='win',winner=order[0],log=log)
+        return dict(outcome='win',winner=order[0],log=log,backend='isolated' if fallback else 'resident-test',resident_fallback=fallback)
     monkeypatch.setattr(forge,'run_battle',battle)
     result=tuning.calibrate(c,rows,spec,worker_choices=[1],jvm_choices=['default'],fixtures=(decks,[dict(order=['a','b','c'],seed=n) for n in range(6)]))
-    assert len(calls)==12 and result['adopted']==(not paused)
+    assert len(calls)==12 and result['adopted']==(not paused and not fallback)
+    assert result['phases'][0]['same_native_backend']==(not fallback)
     if paused:
         assert not result['phases'][0]['seconds'] and result['phases'][0]['median_seconds'] is None
         assert all(not m['used_for_timing'] for m in result['phases'][0]['measurements'])
         assert not tuning.PROFILE.exists()
+    elif fallback:assert not tuning.PROFILE.exists()
     else:assert tuning.profile_for({})['workers']==1
     assert not any((tmp_path/'matches').glob('*'))
 
@@ -203,3 +205,49 @@ def test_calibration_http_job_reaches_native_tuner(monkeypatch):
         job=app.submit(dict(operation='calibrate',mode='full',cards=[dict(name='Sun Titan',role='Main')]))
         assert done.wait(5) and captured['mode']=='full'
     finally:app.executor.shutdown(wait=True)
+
+
+def test_experimental_heap_profile_is_not_an_active_runtime_setting(monkeypatch):
+    monkeypatch.setitem(tuning.JVM_PROFILES,'unapproved',dict(tuning.JVM_PROFILES['parallel_small'],experimental=True))
+    monkeypatch.setattr(tuning,'engine_key',lambda c:['fixture'])
+    tuning.PROFILE.write_text(json.dumps(dict(version=tuning.VERSION,machine=tuning.machine_key(),engine=['fixture'],adopted=True,workers=2,jvm_profile='unapproved')))
+    assert tuning.profile_for({}) is None and tuning.apply({})=={}
+
+
+@pytest.mark.parametrize('apply_result',[False,True])
+def test_experimental_heap_calibration_only_runs_as_a_preview(fixture,tmp_path,monkeypatch,apply_result):
+    from cube_ai import forge,experiment
+    monkeypatch.setitem(tuning.JVM_PROFILES,'unapproved',dict(tuning.JVM_PROFILES['parallel_small'],experimental=True))
+    c,rows,spec=fixture;decks=tmp_path/'decks';decks.mkdir()
+    for n in ['a','b','c']:(decks/(n+'.dck')).write_text(n)
+    monkeypatch.setattr(experiment,'execution_resources',lambda:dict(maximum=1))
+    monkeypatch.setattr(forge,'configuration',lambda:dict(backend='resident'))
+    monkeypatch.setattr(forge,'card_index',lambda config:{})
+    monkeypatch.setattr(tuning,'engine_key',lambda config:['fixed-engine'])
+    calls=[]
+    def battle(config,folder,order,seed,clock,out,log):
+        calls.append(config['heap_mib']);(out/log).write_text('Turn: Turn 1\nGame Outcome: Ai(1)-a has won!\n')
+        return dict(outcome='win',winner=order[0],log=log,backend='resident-test')
+    monkeypatch.setattr(forge,'run_battle',battle)
+    options=dict(worker_choices=[1],jvm_choices=['unapproved'],apply_result=apply_result,fixtures=(decks,[dict(order=['a','b','c'],seed=n) for n in range(6)]))
+    if apply_result:
+        with pytest.raises(ValueError,match='只允许预览'):tuning.calibrate(c,rows,spec,**options)
+        assert not calls
+    else:
+        report=tuning.calibrate(c,rows,spec,**options)
+        assert len(calls)==24 and set(calls)=={1536,2048}
+        assert not report['adopted'] and report['recommendation'] and report['apply_requested'] is False
+    assert not tuning.PROFILE.exists()
+
+
+def test_calibration_api_forwards_restricted_preview_options(monkeypatch):
+    from cube_ai.server import Application
+    app=Application();done=threading.Event();captured={}
+    def calibrate(catalog,rows,spec,progress,**options):
+        captured.update(options);done.set();return dict(adopted=False)
+    monkeypatch.setattr(tuning,'calibrate',calibrate)
+    try:
+        app.submit(dict(operation='calibrate',cards=[dict(name='Sun Titan',role='Main')],calibration_workers=[2,4],calibration_profiles=['parallel_gc','parallel_small'],calibration_apply=False))
+        assert done.wait(5)
+        assert captured==dict(mode='quick',worker_choices=[2,4],jvm_choices=['parallel_gc','parallel_small'],apply_result=False)
+    finally:app.shutdown()

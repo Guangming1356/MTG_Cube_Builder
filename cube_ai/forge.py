@@ -135,11 +135,15 @@ def engine_description(config):
                 pilot='Forge native AI',rng='Forge -s',fingerprint=engine_key(config),compatibility=config.get('compatibility'))
 
 def card_index(config):
+    from .forge_card_names import INDEX_VERSION,ASSET_SHA,script_names,verified_runtime_aliases,manifest_available
     home=Path(config['home']);folder=home/'res'/'cardsfolder'
     loose=list(folder.rglob('*.txt')) if folder.is_dir() else []
     archives=[p for p in (home/'res').rglob('*.zip') if 'card' in p.name.lower()]
-    sources=[(str(p.relative_to(home)),p.stat().st_size,p.stat().st_mtime_ns) for p in loose+archives]
-    key=hashlib.sha256(json.dumps(['forge-card-index-1',str(home.resolve()),config.get('jar_sha256'),sources]).encode()).hexdigest()
+    editions=list((home/'res/editions').rglob('*.txt'))
+    sources=sorted((str(p.relative_to(home)),p.stat().st_size,p.stat().st_mtime_ns) for p in loose+archives+editions)
+    # Cached aliases must also stop working when their pinned manifest is gone
+    # or modified, even if all native script metadata is unchanged.
+    key=hashlib.sha256(json.dumps([INDEX_VERSION,ASSET_SHA,manifest_available(),str(home.resolve()),config.get('jar_sha256'),sources]).encode()).hexdigest()
     if key in _indices:return _indices[key]
     cache=INDEX_CACHE/(key+'.json')
     try:
@@ -152,13 +156,15 @@ def card_index(config):
             return names
     except (OSError,ValueError,AttributeError):pass
     names={}
+    verified=verified_runtime_aliases(config,archives,loose,editions)
     def add(raw):
-        text=raw.decode('utf-8-sig',errors='replace')
-        found=re.findall(r'^Name:(.+)$',text,re.M)
+        found=script_names(raw)
         if not found:return
-        first=found[0].strip()
+        first=found[0]
         names[first.casefold()]=first
         names.setdefault(first.split(' // ')[0].casefold(),first)
+        for alias in found[1:]:
+            if alias in verified:names.setdefault(alias.casefold(),alias)
     for p in loose:add(p.read_bytes())
     for p in archives:
         with zipfile.ZipFile(p) as archive:

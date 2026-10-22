@@ -20,6 +20,7 @@ JVM_PROFILES={
     'bounded_gc':dict(heap_mib=2048,options=['-XX:ActiveProcessorCount=2','-XX:ParallelGCThreads=1','-XX:ConcGCThreads=1']),
     'parallel_gc':dict(heap_mib=2048,options=['-XX:+UseParallelGC','-XX:ActiveProcessorCount=2','-XX:ParallelGCThreads=1']),
     'compact_heap':dict(heap_mib=1536,options=['-XX:ActiveProcessorCount=2','-XX:ParallelGCThreads=1','-XX:ConcGCThreads=1']),
+    'parallel_small':dict(heap_mib=1536,options=['-XX:+UseParallelGC','-XX:ActiveProcessorCount=2','-XX:ParallelGCThreads=1']),
 }
 
 
@@ -43,7 +44,8 @@ def profile_for(config):
         value=json.loads(PROFILE.read_text(encoding='utf8'))
         if (value.get('version')==VERSION and value.get('machine')==machine_key()
             and value.get('engine')==engine_key(config) and value.get('adopted')
-            and value.get('jvm_profile') in JVM_PROFILES and type(value.get('workers')) is int and 1<=value['workers']<=8):return value
+            and value.get('jvm_profile') in JVM_PROFILES and not JVM_PROFILES[value['jvm_profile']].get('experimental')
+            and type(value.get('workers')) is int and 1<=value['workers']<=8):return value
     except (OSError,ValueError,KeyError,TypeError):pass
     return None
 
@@ -138,6 +140,9 @@ def calibrate(catalog,rows,spec,progress=print,mode='quick',worker_choices=None,
     if goal not in {'balanced','speed','memory'}:raise ValueError('测速目标无效')
     if spec.mode!='commander' or spec.players!=3:raise ValueError('速度校准需要三人 Commander Cube')
     if type(repetitions)!=int or not 1<=repetitions<=3:raise ValueError('校准重复数需为 1–3')
+    if type(apply_result) is not bool:raise ValueError('是否应用测速结果需为布尔值')
+    if worker_choices is not None and not isinstance(worker_choices,(list,tuple)):raise ValueError('并行数范围需为列表')
+    if jvm_choices is not None and not isinstance(jvm_choices,(list,tuple)):raise ValueError('引擎配置范围需为列表')
     with forge_session():
         resources=execution_resources();config=configuration()
         if config.get('backend')!='resident':raise ValueError('先安装并验证常驻 Forge，才能校准')
@@ -146,8 +151,9 @@ def calibrate(catalog,rows,spec,progress=print,mode='quick',worker_choices=None,
         if not requested or any(type(n)!=int or not 1<=n<=8 for n in requested):raise ValueError('无效并行数')
         choices=sorted({n for n in requested if n<=maximum})
         if not choices:raise ValueError('当前资源不足以运行所选并行数')
-        variants=jvm_choices if jvm_choices is not None else list(JVM_PROFILES)
-        if not variants or any(n not in JVM_PROFILES for n in variants):raise ValueError('无效引擎配置')
+        variants=jvm_choices if jvm_choices is not None else [name for name,settings in JVM_PROFILES.items() if not settings.get('experimental')]
+        if not variants or any(not isinstance(n,str) or n not in JVM_PROFILES for n in variants):raise ValueError('无效引擎配置')
+        if apply_result and any(JVM_PROFILES[n].get('experimental') for n in variants):raise ValueError('试验引擎配置只允许预览测速，不可自动应用')
         out=RUNS/(datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')+'_'+uuid.uuid4().hex[:8]);out.mkdir(parents=True)
         deck_dir=out/'decks';deck_dir.mkdir();index=card_index(config)
         tasks=[]
@@ -167,7 +173,7 @@ def calibrate(catalog,rows,spec,progress=print,mode='quick',worker_choices=None,
                     d['id']=f'calibration_{p}_{d["seat"]}';ids.append(d['id']);write_deck(d,deck_dir/(d['id']+'.dck'),index,catalog,spec)
                 tasks.extend(dict(order=ids[r:]+ids[:r],seed=seed+r) for r in range(3))
         report=dict(version=VERSION,path=str(out),machine=machine_key(),engine=engine_key(config),phases=[],
-            resources=resources,cache=False,fixture_games=len(tasks),adopted=False,goal=goal,profile_specific_concurrency=True,skipped_configurations=[],
+            resources=resources,cache=False,fixture_games=len(tasks),adopted=False,goal=goal,profile_specific_concurrency=True,skipped_configurations=[],apply_requested=apply_result,
             note='同一批固定牌组与种子重复测速，不进入学习或独立强度样本。均衡模式在最快耗时15%以内优先低内存，内存相差10%以内再选更快设置；缺少内存数据时沿用速度对照。')
         def save():
             tmp=out/'report.tmp';tmp.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf8');tmp.replace(out/'report.json')
@@ -178,7 +184,7 @@ def calibrate(catalog,rows,spec,progress=print,mode='quick',worker_choices=None,
             eligible,memory=profile_choices([workers],workers,jvm)
             if not eligible:
                 report['skipped_configurations'].append(dict(workers=workers,jvm_profile=jvm,reason='当前空闲内存不足',memory=memory));save();return
-            phase=dict(workers=workers,jvm_profile=jvm,seconds=[],runs=[],measurements=[],compatible=True,normal_games=0,attempted_games=len(tasks),peak_engine_private_bytes=0,memory_budget_at_start=memory)
+            phase=dict(workers=workers,jvm_profile=jvm,seconds=[],runs=[],measurements=[],compatible=True,same_native_backend=True,normal_games=0,attempted_games=len(tasks),peak_engine_private_bytes=0,memory_budget_at_start=memory)
             report['phases'].append(phase)
             # Never reuse a JVM across different parameter sets or measurements.
             for repeat in range(repetitions):
@@ -206,7 +212,9 @@ def calibrate(catalog,rows,spec,progress=print,mode='quick',worker_choices=None,
                 phase['measurements'].append(dict(repeat=repeat,wall_seconds=elapsed,paused_seconds=paused,used_for_timing=not interrupted))
                 if not interrupted:phase['seconds'].append(elapsed)
                 phase['runs'].append(records)
-                phase['compatible'] &= compatible(reference,records)
+                same_backend=all(isinstance(r.get('backend'),str) and r['backend'].startswith('resident') and not r.get('resident_fallback') for r in records)
+                phase['same_native_backend'] &= same_backend
+                phase['compatible'] &= compatible(reference,records) and same_backend
                 phase['normal_games']=sum(r['outcome'] in {'win','draw'} for r in records)
                 phase['median_seconds']=statistics.median(phase['seconds']) if phase['seconds'] else None
                 close_all();save()
