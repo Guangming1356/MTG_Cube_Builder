@@ -1,11 +1,17 @@
 {
   "passed": true,
-  "application_version": "0.2.0",
+  "application_version": "0.2.1",
   "cards": 31070,
   "offline_ai": true,
   "forge_available": true,
   "embedded_runtime": true,
   "task_pause_resume": true,
   "shutdown_blocks_live_tasks": true,
-  "restart_recovers_result": true
+  "restart_recovers_result": true,
+  "native_name_compatibility": {
+    "front_aliases": 182,
+    "trace_names": 189,
+    "native_index_verified": true,
+    "catalog_aliases_verified": true
+  }
 }
