@@ -13,7 +13,7 @@ from .config import ROOT
 from .acceleration import linear
 
 MODELS=ROOT/'models'
-VERSION='activity-5'
+VERSION='activity-6'
 _training_lock=threading.Lock()
 
 def engine_scope():
@@ -42,14 +42,30 @@ def contexts(vectors):
 
 def collect(catalog,progress=lambda _:None):
     from .forge import MATCHES,verified_game_result
+    from .cube_family import pool_counts,group_cubes
     from .optimize import game_trace
     x=[];y=[];groups=[];cubes=[];seen=set();games=0;sources=[];censored=0
     scope=engine_scope();excluded_engine_games=0;excluded_evidence_games=0
+    pools={};pool_conflicts=set();deck_entities={};excluded_pool_games=0;unverified_pool_sources=set()
     for path in sorted(MATCHES.glob('*/report.json')):
         try:
             r=json.loads(path.read_text(encoding='utf8'));tables={p['pod']:p for p in r['tables']}
             if scope is None or r.get('engine',{}).get('fingerprint')!=scope:
                 excluded_engine_games+=len(r.get('games',[]));continue
+            try:
+                rows=json.loads((path.parent/'cube.json').read_text(encoding='utf8'))['cards']
+                cube=r['cube_sha256']
+                if hashlib.sha256(json.dumps(rows,sort_keys=True).encode()).hexdigest()!=cube:
+                    raise ValueError('原始牌池身份与对局记录不匹配')
+                counts=pool_counts(rows,catalog)
+                if cube in pools and pools[cube]!=counts:pool_conflicts.add(cube)
+                pools[cube]=counts
+            except (OSError,ValueError,KeyError,TypeError):
+                # One damaged legacy source must not permanently block learning
+                # from other verified pools. Keep raw files and count exclusions.
+                excluded_pool_games+=len(r.get('games',[]))
+                unverified_pool_sources.add(str(r.get('cube_sha256') or path.parent.name))
+                continue
             for game in r['games']:
                 if game['outcome'] not in {'win','draw'} or game.get('cache_hit'):continue
                 actual=game.get('backend','')
@@ -74,25 +90,51 @@ def collect(catalog,progress=lambda _:None):
                     labels.append([1-p['no_action_cycle_rate'],min(1,p['spellcasts']/max(1,p['own_turns']*1.5)),float(p['finisher_casts']>0)])
                 seen.add(unique);games+=1;x.extend(features);y.extend(labels)
                 groups.extend([group]*3);cubes.extend([r['cube_sha256']]*3)
+                deck_entities[group]=sorted(identities.values())
             sources.append(r['match_id'])
         except (KeyError,ValueError,OSError,TypeError):continue
+    used=set(cubes);known={c:pools[c] for c in used if c in pools and c not in pool_conflicts}
+    families,family_report=group_cubes(known)
+    missing=sorted(used-set(known))
     return dict(x=np.asarray(x,dtype=np.float32),y=np.asarray(y,dtype=np.float32),groups=groups,cubes=cubes,games=games,sources=sources,censored_games=censored,
-                engine=scope,excluded_engine_games=excluded_engine_games,excluded_evidence_games=excluded_evidence_games)
+                engine=scope,excluded_engine_games=excluded_engine_games,excluded_evidence_games=excluded_evidence_games,
+                families=[families.get(c,c) for c in cubes],deck_entities=deck_entities,
+                family_scope_complete=not missing,family_report=family_report,
+                excluded_pool_games=excluded_pool_games,unverified_pool_sources=sorted(unverified_pool_sources),
+                missing_cube_sources=missing)
 
-def split_groups(groups,cubes):
-    """Keep both related decks and entire Cube versions out of training when possible."""
-    parent={c:c for c in cubes};owners={}
+def split_units(groups,cubes,families=None,deck_entities=None):
+    """Join whole pools, near-pool families and any repeated individual deck."""
+    if len(groups)!=len(cubes) or families is not None and len(families)!=len(cubes):
+        raise ValueError('训练分组元数据长度不一致')
+    parent={c:c for c in cubes};owners={};family_owners={};deck_owners={}
     def find(c):
         while parent[c]!=c:parent[c]=parent[parent[c]];c=parent[c]
         return c
-    for group,cube in zip(groups,cubes):
-        if group in owners:parent[find(cube)]=find(owners[group])
+    def join(a,b):
+        x,y=find(a),find(b)
+        if x!=y:parent[max(x,y)]=min(x,y)
+    for index,(group,cube) in enumerate(zip(groups,cubes)):
+        if group in owners:join(cube,owners[group])
         else:owners[group]=cube
-    components=[find(c) for c in cubes]
+        if families is not None:
+            family=families[index]
+            if family in family_owners:join(cube,family_owners[family])
+            else:family_owners[family]=cube
+        for deck in (deck_entities or {}).get(group,()):
+            if deck in deck_owners:join(cube,deck_owners[deck])
+            else:deck_owners[deck]=cube
+    return [find(c) for c in cubes]
+
+
+def split_groups(groups,cubes,families=None,deck_entities=None):
+    """Never split a supplied pool family just to manufacture a holdout."""
+    components=split_units(groups,cubes,families,deck_entities)
     rng=np.random.default_rng(193);unique=sorted(set(components))
     if len(unique)>=5:
         rng.shuffle(unique);a=max(1,len(unique)//5);test=set(unique[:a]);val=set(unique[a:2*a])
-        return ['test' if c in test else 'validation' if c in val else 'train' for c in components],'cube_and_deck_group'
+        return ['test' if c in test else 'validation' if c in val else 'train' for c in components],('cube_family_and_deck_group' if families is not None else 'cube_and_deck_group')
+    if families is not None:return ['train']*len(groups),'insufficient_cube_families'
     unique=sorted(set(groups));rng.shuffle(unique);a=max(1,len(unique)//5)
     test=set(unique[:a]);val=set(unique[a:2*a])
     return ['test' if g in test else 'validation' if g in val else 'train' for g in groups],'deck_group_only'
@@ -130,15 +172,24 @@ def _train(catalog,progress=lambda _:None):
         censored_games=data.get('censored_games',0),
         engine=data.get('engine'),catalog=catalog.signature,excluded_engine_games=data.get('excluded_engine_games',0),
         excluded_evidence_games=data.get('excluded_evidence_games',0),
+        excluded_pool_games=data.get('excluded_pool_games',0),
+        independent_cube_families=len(set(data.get('families',[]))),
         activity_definition='完整个人周期内任意回合的施放、主动异能或宣攻；不计自动触发、下地及最后未完整观察的周期。四周期不足的整局不训练，可能少代表结束很早的牌组。',
         limitation='学习 Forge 原生 AI 的可观测行为，不预测人类娱乐性或认证牌力。没有把一副牌的胜负分摊到单卡。')
+    (root/'families.json').write_text(json.dumps(data.get('family_report',{}),ensure_ascii=False,indent=2),encoding='utf8')
     if len(set(groups))<10:
         report['reason']='独立轮抓牌组不足10组；保留固定评分，继续积累实战'
         (root/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf8')
         return report
-    labels,method=split_groups(groups,data['cubes']);indices={k:np.where(np.array(labels)==k)[0] for k in ['train','validation','test']}
+    if not data.get('family_scope_complete'):
+        report['reason']='缺少可核对的原始 Cube 牌池，无法隔离相近改版；保留固定评分并保留历史数据'
+        (root/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf8');return report
+    labels,method=split_groups(groups,data['cubes'],data['families'],data.get('deck_entities'))
+    units=split_units(groups,data['cubes'],data['families'],data.get('deck_entities'))
+    report['independent_split_sources']=len(set(units))
+    indices={k:np.where(np.array(labels)==k)[0] for k in ['train','validation','test']}
     if any(len(v)<3 for v in indices.values()):
-        report['reason']='分组后训练或保留数据不足';(root/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf8');return report
+        report['reason']='相近牌池与重复牌组合并后，训练或保留来源不足；不会拆开同一来源凑测试集';(root/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf8');return report
     tr,va,te=[indices[k] for k in ['train','validation','test']]
     mean=x[tr].mean(axis=0);scale=x[tr].std(axis=0);scale[scale<.001]=1
     z=(x-mean)/scale;aug=np.column_stack([z,np.ones(len(z),dtype=np.float32)])
@@ -181,26 +232,32 @@ def _train(catalog,progress=lambda _:None):
     losses={'mean_baseline':np.mean((intercept-y[te])**2,axis=1),'rule_baseline':np.mean((rule-y[te])**2,axis=1)}
     prediction=predict(chosen,x[te],'cpu');candidate_loss=np.mean((prediction-y[te])**2,axis=1)
     baseline_name=min(losses,key=lambda k:float(losses[k].mean()));delta=candidate_loss-losses[baseline_name]
-    clustered=defaultdict(list)
-    for i,diff in zip(te,delta):clustered[groups[i]].append(float(diff))
-    values=np.array([np.mean(v) for v in clustered.values()]);rng=np.random.default_rng(195)
-    boot=np.mean(rng.choice(values,size=(2000,len(values)),replace=True),axis=1);interval=np.quantile(boot,[.025,.975]).tolist()
-    enough=data['games']>=500 and len(set(groups))>=100 and len(clustered)>=20 and method=='cube_and_deck_group'
+    clustered=defaultdict(list);source_losses=defaultdict(list)
+    for i,diff in zip(te,delta):
+        clustered[groups[i]].append(float(diff));source_losses[units[i]].append(float(diff))
+    # Tables from one related pool family are not independent test sources.
+    # Do not print a zero-width "confidence" interval for a single source.
+    interval=None
+    if len(source_losses)>=3:
+        values=np.array([np.mean(v) for v in source_losses.values()]);rng=np.random.default_rng(195)
+        boot=np.mean(rng.choice(values,size=(2000,len(values)),replace=True),axis=1);interval=np.quantile(boot,[.025,.975]).tolist()
+    test_sources=len({units[i] for i in te});report['test_independent_sources']=test_sources
+    enough=data['games']>=500 and len(set(groups))>=100 and len(clustered)>=20 and method=='cube_family_and_deck_group' and test_sources>=3
     improvement=1-float(candidate_loss.mean())/max(1e-9,float(losses[baseline_name].mean()))
     activity_candidate=float(np.mean((prediction[:,0]-y[te,0])**2))
     activity_baseline=min(float(np.mean((intercept[:,0]-y[te,0])**2)),float(np.mean((rule[:,0]-y[te,0])**2)))
-    accepted=bool(data.get('engine') and enough and interval[1]<0 and improvement>=.03 and activity_candidate<activity_baseline)
+    accepted=bool(data.get('engine') and enough and interval is not None and interval[1]<0 and improvement>=.03 and activity_candidate<activity_baseline)
     chosen.update(id=root.name,active=accepted,source_games=data['games'],training_dataset=hashlib.sha256(x.tobytes()+y.tobytes()).hexdigest())
     report.update(status='accepted' if accepted else 'diagnostic',active=accepted,model_kind=chosen['kind'],split=method,
         split_groups={k:len({groups[i] for i in ix}) for k,ix in indices.items()},
         validation_candidates=[dict(kind=m['kind'],alpha=m.get('alpha'),ablation=m.get('ablation'),mse=loss) for loss,m in candidates],
         test_mse=dict({k:float(v.mean()) for k,v in losses.items()},candidate=float(candidate_loss.mean())),
-        relative_improvement=improvement,pod_bootstrap95_loss_difference=interval,enough_data=enough,
+        relative_improvement=improvement,source_bootstrap95_loss_difference=interval,enough_data=enough,
         activity_mse=dict(candidate=activity_candidate,baseline=activity_baseline),
-        adoption='至少500局、100组独立牌组、20组测试牌组，整Cube及牌组分组保留；优于最强简单基准至少3%，损失差95%区间上限小于0',
+        adoption='至少500局、100组独立牌组、20组测试牌组及3个独立测试来源；相近Cube和重复单副牌不跨拆分；优于最强简单基准至少3%，按来源重抽样的损失差95%区间上限小于0',
         seconds=time.perf_counter()-started)
     (root/'model.json').write_text(json.dumps(chosen,ensure_ascii=False),encoding='utf8')
-    (root/'split.json').write_text(json.dumps(dict(groups=groups,cubes=data['cubes'],assignment=labels,sources=data['sources']),ensure_ascii=False),encoding='utf8')
+    (root/'split.json').write_text(json.dumps(dict(groups=groups,cubes=data['cubes'],families=data['families'],units=units,assignment=labels,sources=data['sources']),ensure_ascii=False),encoding='utf8')
     (root/'report.json').write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf8')
     if accepted:
         temp=MODELS/'active.tmp';temp.write_text(json.dumps(chosen,ensure_ascii=False),encoding='utf8');temp.replace(MODELS/'active.json')

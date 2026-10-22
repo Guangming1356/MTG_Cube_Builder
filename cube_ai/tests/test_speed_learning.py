@@ -159,9 +159,11 @@ def test_split_has_no_cross_cube_or_deck_group_leakage():
 def test_weak_or_small_learned_model_is_saved_but_not_enabled(monkeypatch):
     rng=np.random.default_rng(42);x=rng.normal(size=(180,54)).astype('float32');y=np.full((180,3),.5,dtype='float32')
     data=dict(x=x,y=y,groups=[f'g{i//3}' for i in range(180)],cubes=[f'c{i//36}' for i in range(180)],games=60,sources=['synthetic-test'])
+    data.update(families=list(data['cubes']),family_scope_complete=True,deck_entities={})
     monkeypatch.setattr(surrogate,'collect',lambda *a:data)
     report=surrogate.train(SimpleNamespace(signature='fixture'))
     assert not report['active'] and not report['enough_data']
+    assert report['test_independent_sources']==1 and report['source_bootstrap95_loss_difference'] is None
     assert (surrogate.MODELS/report['id']/'model.json').is_file()
     assert not (surrogate.MODELS/'active.json').exists()
 
@@ -200,7 +202,10 @@ def test_current_model_report_is_not_hidden_by_late_finishing_legacy_task(monkey
 
 
 def test_activity_training_counts_offturn_actions_censors_short_games_and_deduplicates(fixture,tmp_path,monkeypatch):
-    catalog,_,_=fixture;matches=tmp_path/'matches';folder=matches/'fixture';folder.mkdir(parents=True)
+    import hashlib
+    catalog,rows,_=fixture;matches=tmp_path/'matches';folder=matches/'fixture';folder.mkdir(parents=True)
+    (folder/'cube.json').write_text(json.dumps(dict(cards=rows)),encoding='utf8')
+    cube_hash=hashlib.sha256(json.dumps(rows,sort_keys=True).encode()).hexdigest()
     monkeypatch.setattr(forge,'MATCHES',matches)
     monkeypatch.setattr(surrogate,'engine_scope',lambda:['jar','java','resident','bridge'])
     decks=[dict(id=name,commander='Talrand, Sky Summoner',spells=['Counterspell'],lands=[],basics={'U':24},land_count=24) for name in ['a','b','c']]
@@ -216,12 +221,18 @@ def test_activity_training_counts_offturn_actions_censors_short_games_and_dedupl
     (folder/'full.log').write_text('\n'.join(lines)+end,encoding='utf8')
     (folder/'short.log').write_text('\n'.join(lines[:5])+end,encoding='utf8')
     game=dict(pod=0,outcome='win',winner='a',order=['a','b','c'],seed=1,log='short.log',backend='resident-1')
-    report=dict(match_id='fixture',cube_sha256='fixture',engine={'jar_sha256':'fixture','fingerprint':['jar','java','resident','bridge']},tables=[dict(pod=0,decks=[dict(d,buildable=True) for d in decks])],
+    report=dict(match_id='fixture',cube_sha256=cube_hash,engine={'jar_sha256':'fixture','fingerprint':['jar','java','resident','bridge']},tables=[dict(pod=0,decks=[dict(d,buildable=True) for d in decks])],
                 games=[game,dict(game,seed=2,log='full.log'),dict(game,seed=2,log='full.log'),dict(game,seed=3,log='full.log',cache_hit=True)])
     (folder/'report.json').write_text(json.dumps(report),encoding='utf8')
     data=surrogate.collect(catalog)
     assert data['games']==1 and data['censored_games']==1 and data['x'].shape==(3,54)
     assert data['y'][:,0].tolist()==[1,0,1]
+    assert data['family_scope_complete'] and data['family_report']['families']==1
+    # Raw files remain, but unverified source rows cannot manufacture families.
+    (folder/'cube.json').write_text(json.dumps(dict(cards=rows[:-1])),encoding='utf8')
+    changed=surrogate.collect(catalog)
+    assert changed['games']==0 and changed['excluded_pool_games']==4
+    assert changed['unverified_pool_sources']==[cube_hash]
 
 
 def test_feedback_uses_observed_cycle_metric_when_coverage_is_sufficient(fixture):

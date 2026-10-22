@@ -207,6 +207,32 @@ def test_calibration_http_job_reaches_native_tuner(monkeypatch):
     finally:app.executor.shutdown(wait=True)
 
 
+def test_calibration_rechecks_memory_between_repeats_and_keeps_old_profile(fixture,tmp_path,monkeypatch):
+    from cube_ai import forge,experiment
+    c,rows,spec=fixture;decks=tmp_path/'decks';decks.mkdir()
+    for name in ['a','b','c']:(decks/(name+'.dck')).write_text(name)
+    monkeypatch.setattr(experiment,'execution_resources',lambda:dict(maximum=1))
+    monkeypatch.setattr(forge,'configuration',lambda:dict(backend='resident'))
+    monkeypatch.setattr(forge,'card_index',lambda config:{})
+    monkeypatch.setattr(tuning,'engine_key',lambda config:['fixture'])
+    calls=[]
+    def choices(requested,best,jvm,snapshot=None):
+        return ([1] if len(calls)<6 else []),dict(capacity=1 if len(calls)<6 else 0)
+    monkeypatch.setattr(tuning,'profile_choices',choices)
+    def battle(config,folder,order,seed,clock,out,log):
+        calls.append(seed);(out/log).write_text('Turn: Turn 1\nGame Outcome: Ai(1)-a has won!\n')
+        return dict(outcome='win',winner='a',log=log,backend='resident-test')
+    monkeypatch.setattr(forge,'run_battle',battle)
+    saved='{"original":"measured-setting"}';tuning.PROFILE.write_text(saved)
+    result=tuning.calibrate(c,rows,spec,worker_choices=[1],jvm_choices=['default'],
+        fixtures=(decks,[dict(order=['a','b','c'],seed=i) for i in range(6)]))
+    phase=result['phases'][0]
+    assert len(calls)==6 and len(phase['runs'])==len(phase['seconds'])==1
+    assert phase['resource_interrupted'] and not phase['compatible'] and not result['adopted']
+    assert result['skipped_configurations'][0]['repeat']==1
+    assert tuning.PROFILE.read_text()==saved
+
+
 def test_experimental_heap_profile_is_not_an_active_runtime_setting(monkeypatch):
     monkeypatch.setitem(tuning.JVM_PROFILES,'unapproved',dict(tuning.JVM_PROFILES['parallel_small'],experimental=True))
     monkeypatch.setattr(tuning,'engine_key',lambda c:['fixture'])

@@ -4,6 +4,7 @@ import json
 import os
 import platform
 import random
+import re
 import statistics
 import time
 import uuid
@@ -15,6 +16,7 @@ from .config import ROOT
 PROFILE=ROOT/'private/performance-profile.json'
 RUNS=ROOT/'private/tuning'
 VERSION='native-tuning-2'
+EVENT_COMPARISON='native-events-2-attacker-order'
 JVM_PROFILES={
     'default':dict(heap_mib=2048,options=[]),
     'bounded_gc':dict(heap_mib=2048,options=['-XX:ActiveProcessorCount=2','-XX:ParallelGCThreads=1','-XX:ConcGCThreads=1']),
@@ -78,9 +80,31 @@ def apply(config):
     return config
 
 
+def canonical_attackers(event):
+    """Normalize only one target's unordered printed attacker collection.
+
+    Forge's GameEventAttackersDeclared converts its collection to HashMultimap.
+    Keep full names, instance IDs and multiplicities. Never reorder events,
+    blocker assignments, damage or declarations with an unrecognized layout.
+    """
+    if not event.startswith('Combat: ') or event.count(' to attack ')!=1:return event
+    prefix,separator,rest=event.partition(' assigned ')
+    if not separator or ' assigned ' in rest:return event
+    body,separator,target=rest.partition(' to attack ')
+    if not separator or not target.endswith('.') or not body.endswith(')'):return event
+    markers=list(re.finditer(r'(?P<id>\(\d+\))(?P<separator>, | and |$)',body))
+    if len(markers)<2 or markers[-1].end()!=len(body) or markers[-1]['separator']:return event
+    cards=[];position=0
+    for marker in markers:
+        name=body[position:marker.start()]
+        if not name.strip():return event
+        cards.append(name+marker['id']);position=marker.end()
+    return prefix+' assigned '+', '.join(sorted(cards))+' to attack '+target
+
+
 def _canonical(log):
     from .optimize import log_events
-    return [event for event in log_events(log) if not event.startswith('Game Outcome: Match Duration')]
+    return [canonical_attackers(event) for event in log_events(log) if not event.startswith('Game Outcome: Match Duration')]
 
 
 def compatible(reference,records):
@@ -173,7 +197,7 @@ def calibrate(catalog,rows,spec,progress=print,mode='quick',worker_choices=None,
                     d['id']=f'calibration_{p}_{d["seat"]}';ids.append(d['id']);write_deck(d,deck_dir/(d['id']+'.dck'),index,catalog,spec)
                 tasks.extend(dict(order=ids[r:]+ids[:r],seed=seed+r) for r in range(3))
         report=dict(version=VERSION,path=str(out),machine=machine_key(),engine=engine_key(config),phases=[],
-            resources=resources,cache=False,fixture_games=len(tasks),adopted=False,goal=goal,profile_specific_concurrency=True,skipped_configurations=[],apply_requested=apply_result,
+            resources=resources,cache=False,fixture_games=len(tasks),adopted=False,goal=goal,profile_specific_concurrency=True,skipped_configurations=[],apply_requested=apply_result,event_comparison=EVENT_COMPARISON,
             note='同一批固定牌组与种子重复测速，不进入学习或独立强度样本。均衡模式在最快耗时15%以内优先低内存，内存相差10%以内再选更快设置；缺少内存数据时沿用速度对照。')
         def save():
             tmp=out/'report.tmp';tmp.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf8');tmp.replace(out/'report.json')
@@ -188,7 +212,15 @@ def calibrate(catalog,rows,spec,progress=print,mode='quick',worker_choices=None,
             report['phases'].append(phase)
             # Never reuse a JVM across different parameter sets or measurements.
             for repeat in range(repetitions):
-                close_all();folder=out/f'{jvm}_{workers}_{repeat}';folder.mkdir()
+                close_all()
+                eligible,memory=profile_choices([workers],workers,jvm)
+                if not eligible:
+                    phase.update(resource_interrupted=True,compatible=False)
+                    report['skipped_configurations'].append(dict(workers=workers,jvm_profile=jvm,repeat=repeat,
+                        reason='重复测量前内存余量变化，当前配置已不满足预算；已完成记录保留',memory=memory))
+                    progress(f'跳过未满足内存预算的后续测量：同时 {workers} 局，配置 {jvm}')
+                    save();break
+                folder=out/f'{jvm}_{workers}_{repeat}';folder.mkdir()
                 c=dict(config,cache=False,heap_mib=settings['heap_mib'],jvm_options=settings['options'])
                 progress(f'速度校准：同时 {workers} 局，配置 {jvm}，第 {repeat+1}/{repetitions} 轮')
                 from . import task_control
@@ -231,7 +263,7 @@ def calibrate(catalog,rows,spec,progress=print,mode='quick',worker_choices=None,
                 by_profile={name:sorted({p['workers'] for p in report['phases'] if p['jvm_profile']==name}) for name in JVM_PROFILES}
                 report.update(adopted=True,workers=selected['workers'],jvm_profile=selected['jvm_profile'],measured=datetime.now(timezone.utc).isoformat(),
                               tested_workers=by_profile[selected['jvm_profile']],tested_workers_by_profile=by_profile)
-                value={k:report[k] for k in ['version','machine','engine','adopted','workers','jvm_profile','measured','tested_workers']}
+                value={k:report[k] for k in ['version','machine','engine','adopted','workers','jvm_profile','measured','tested_workers','event_comparison']}
                 value['evidence']=out.name;value['goal']=goal;PROFILE.parent.mkdir(parents=True,exist_ok=True)
                 tmp=PROFILE.with_suffix('.tmp');tmp.write_text(json.dumps(value,ensure_ascii=False,indent=2),encoding='utf8');tmp.replace(PROFILE)
             elif selected:report['recommendation']=dict(workers=selected['workers'],jvm_profile=selected['jvm_profile'])

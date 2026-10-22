@@ -53,7 +53,20 @@ def main():
 from cube_ai.catalog import Catalog
 from cube_ai.forge import configuration,card_index,engine_name,parse_log,verified_game_result
 from cube_ai.forge_card_names import name_pairs,trace_name_pairs,ASSET,bundle_alias_asset
+from cube_ai.cube_family import pool_counts,group_cubes
+from cube_ai.surrogate import split_groups,VERSION as ACTIVITY_VERSION
+from cube_ai.tuning import canonical_attackers
 c=Catalog();pairs=name_pairs();index=card_index(configuration())
+assert ACTIVITY_VERSION=='activity-6'
+pool=pool_counts([dict(name='Plains',role='Land')])
+families,_=group_cubes(dict(a=pool,b=pool))
+assert families['a']==families['b']
+labels,method=split_groups(['ga','gb'],['a','b'],['one','one'])
+assert method=='insufficient_cube_families' and set(labels)=={'train'}
+attack='Combat: Ai(1)-a assigned Goblin (1) and Elf (2) to attack Ai(2)-b.'
+swapped='Combat: Ai(1)-a assigned Elf (2) and Goblin (1) to attack Ai(2)-b.'
+assert canonical_attackers(attack)==canonical_attackers(swapped)
+assert canonical_attackers(attack)!=canonical_attackers(swapped.replace('(2)','(3)',1))
 winner='Game Result: Game 1 ended in 10 ms. Ai(1)-a has won!'
 for header in ('java.util.concurrent.TimeoutException','java.lang.OutOfMemoryError'):
     assert parse_log(header+'\\r\\n'+winner)['outcome']=='engine_error'
@@ -84,7 +97,7 @@ print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs(
         report=dict(passed=True,application_version=expected,cards=status['cards'],offline_ai=True,forge_available=True,
                     embedded_runtime=True,task_pause_resume=True,shutdown_blocks_live_tasks=True,restart_recovers_result=True,
                     native_name_compatibility=names,clean_preference_state=True,preference_scope_validation=True,
-                    native_evidence_validation=True)
+                    native_evidence_validation=True,cube_family_validation=True,native_event_comparison_validation=True)
         args.out.write_text(json.dumps(report,indent=2),encoding='utf8');print(json.dumps(report),flush=True)
     finally:
         if url:

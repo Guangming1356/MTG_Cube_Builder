@@ -98,6 +98,10 @@ def test_training_rechecks_saved_labels_before_extracting_any_features(tmp_path,
         records.append(dict(pod=0,order=list('abc'),seed=i,outcome='win',winner='b' if i==3 else 'a',log=name,backend='resident-1'))
     report=dict(match_id='old',cube_sha256='cube',engine=dict(fingerprint=scope,jar_sha256='jar'),
                 tables=[dict(pod=0,decks=decks)],games=records)
+    import hashlib
+    pool=[dict(name='cmd',role='Commander')]
+    report['cube_sha256']=hashlib.sha256(json.dumps(pool,sort_keys=True).encode()).hexdigest()
+    (folder/'cube.json').write_text(json.dumps(dict(cards=pool)))
     raw=json.dumps(report);(folder/'report.json').write_text(raw)
     calls=[]
 
@@ -109,11 +113,18 @@ def test_training_rechecks_saved_labels_before_extracting_any_features(tmp_path,
     from cube_ai import optimize
     monkeypatch.setattr(optimize,'game_trace',trace)
     monkeypatch.setattr(surrogate,'deck_vector',lambda *args:np.zeros(18))
-    result=surrogate.collect(SimpleNamespace(signature='catalog'))
+    result=surrogate.collect(SimpleNamespace(signature='catalog',cards={}))
     assert result['games']==1 and result['excluded_evidence_games']==3
     assert result['x'].shape==(3,54) and result['y'].shape==(3,3)
     assert len(calls)==1
     assert (folder/'report.json').read_text()==raw
+    broken=matches/'broken';broken.mkdir()
+    (broken/'report.json').write_text(raw)
+    # Missing source metadata is excluded and counted, while the intact source
+    # remains usable; one broken legacy folder cannot block all future learning.
+    remaining=surrogate.collect(SimpleNamespace(signature='catalog',cards={}))
+    assert remaining['games']==1 and remaining['excluded_pool_games']==4
+    assert remaining['family_scope_complete']
 
 
 @pytest.mark.parametrize('report_catalog',[None,'different'])
