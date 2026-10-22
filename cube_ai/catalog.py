@@ -203,6 +203,7 @@ def exclusion_reasons(c, spec):
     if (is_gc(c) if spec.bracket is not None else c["game_changer"]) and spec.exclude_game_changers: reasons.append("Game Changer")
     reasons.extend(card_reasons(c,spec))
     if c["tribal"] and spec.avoid_tribal: reasons.append("部族依赖: " + ", ".join(c["tribal"]))
+    if c.get('narrow_subtypes') and spec.avoid_tribal:reasons.append('窄副类别依赖: '+', '.join(c['narrow_subtypes']))
     if c.get('named_dependency') and spec.avoid_tribal:reasons.append('指定牌名配合依赖；默认排除窄组件')
     if c["fast_mana"] and not spec.allow_fast_mana: reasons.append("爆发快法术力")
     if c["mld"] and not spec.allow_mass_land_destruction: reasons.append("大规模炸地/法术力封锁")

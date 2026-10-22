@@ -1,0 +1,606 @@
+{
+  "version": "role-challenge-1",
+  "source": "Scryfall Oracle snapshot 2026-10-08; agent-reviewed labels frozen before candidate code; boundary cases and seeded holdout, not human win-rate labels",
+  "cases": [
+    {
+      "name": "Wyleth, Soul of Steel",
+      "topic": "equipment",
+      "text": "Trample\nWhenever Wyleth attacks, draw a card for each Aura and Equipment attached to it.",
+      "type": "Legendary Creature — Human Warrior",
+      "expected_resource": false,
+      "split": "development"
+    },
+    {
+      "name": "Sram, Senior Edificer",
+      "topic": "equipment",
+      "text": "Whenever you cast an Aura, Equipment, or Vehicle spell, draw a card.",
+      "type": "Legendary Creature — Dwarf Advisor",
+      "expected_resource": false,
+      "split": "development"
+    },
+    {
+      "name": "Puresteel Paladin",
+      "topic": "equipment",
+      "text": "Whenever an Equipment you control enters, you may draw a card.\nMetalcraft — Equipment you control have equip {0} as long as you control three or more artifacts.",
+      "type": "Creature — Human Knight",
+      "expected_resource": false,
+      "split": "development"
+    },
+    {
+      "name": "Sigarda's Aid",
+      "topic": "equipment",
+      "text": "You may cast Aura and Equipment spells as though they had flash.\nWhenever an Equipment you control enters, you may attach it to target creature you control.",
+      "type": "Enchantment",
+      "expected_resource": false,
+      "split": "development"
+    },
+    {
+      "name": "Brass Squire",
+      "topic": "equipment",
+      "text": "{T}: Attach target Equipment you control to target creature you control.",
+      "type": "Artifact Creature — Myr",
+      "expected_resource": false,
+      "split": "development"
+    },
+    {
+      "name": "Kemba, Kha Regent",
+      "topic": "equipment",
+      "text": "At the beginning of your upkeep, create a 2/2 white Cat creature token for each Equipment attached to Kemba.",
+      "type": "Legendary Creature — Cat Cleric",
+      "expected_resource": false,
+      "split": "development"
+    },
+    {
+      "name": "Akiri, Fearless Voyager",
+      "topic": "equipment",
+      "text": "Whenever you attack a player with one or more equipped creatures, draw a card.\n{W}: You may unattach an Equipment from a creature you control. If you do, tap that creature and it gains indestructible until end of turn.",
+      "type": "Legendary Creature — Kor Warrior",
+      "expected_resource": false,
+      "split": "development"
+    },
+    {
+      "name": "Sword of Fire and Ice",
+      "topic": "equipment",
+      "text": "Equipped creature gets +2/+2 and has protection from red and from blue.\nWhenever equipped creature deals combat damage to a player, this Equipment deals 2 damage to any target and you draw a card.\nEquip {2}",
+      "type": "Artifact — Equipment",
+      "expected_resource": true,
+      "split": "development"
+    },
+    {
+      "name": "Cranial Plating",
+      "topic": "equipment",
+      "text": "Equipped creature gets +1/+0 for each artifact you control.\n{B}{B}: Attach this Equipment to target creature you control.\nEquip {1}",
+      "type": "Artifact — Equipment",
+      "expected_resource": true,
+      "split": "development"
+    },
+    {
+      "name": "Lightning Greaves",
+      "topic": "equipment",
+      "text": "Equipped creature has haste and shroud. (It can't be the target of spells or abilities.)\nEquip {0}",
+      "type": "Artifact — Equipment",
+      "expected_resource": true,
+      "split": "development"
+    },
+    {
+      "name": "Skullclamp",
+      "topic": "equipment",
+      "text": "Equipped creature gets +1/-1.\nWhenever equipped creature dies, draw two cards.\nEquip {1}",
+      "type": "Artifact — Equipment",
+      "expected_resource": true,
+      "split": "development"
+    },
+    {
+      "name": "Citizen's Crowbar",
+      "topic": "equipment",
+      "text": "When this Equipment enters, create a 1/1 green and white Citizen creature token, then attach this Equipment to it.\nEquipped creature gets +1/+1 and has \"{W}, {T}, Sacrifice Citizen's Crowbar: Destroy target artifact or enchantment.\"\nEquip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)",
+      "type": "Artifact — Equipment",
+      "expected_resource": true,
+      "split": "development"
+    },
+    {
+      "name": "Glimmer Lens",
+      "topic": "equipment",
+      "text": "For Mirrodin! (When this Equipment enters, create a 2/2 red Rebel creature token, then attach this to it.)\nWhenever equipped creature and at least one other creature attack, draw a card.\nEquip {1}{W}",
+      "type": "Artifact — Equipment",
+      "expected_resource": true,
+      "split": "development"
+    },
+    {
+      "name": "Dowsing Dagger // Lost Vale",
+      "topic": "equipment",
+      "text": "When this Equipment enters, target opponent creates two 0/2 green Plant creature tokens with defender.\nEquipped creature gets +2/+1.\nWhenever equipped creature deals combat damage to a player, you may transform this Equipment.\nEquip {2}\n(Transforms from Dowsing Dagger.)\n{T}: Add three mana of any one color.",
+      "type": "Artifact — Equipment // Land",
+      "expected_resource": true,
+      "split": "development"
+    },
+    {
+      "name": "Arterial Alchemy",
+      "topic": "equipment",
+      "text": "When this enchantment enters, create a Blood token for each opponent you have. (It's an artifact with \"{1}, {T}, Discard a card, Sacrifice this token: Draw a card.\")\nBlood tokens you control are Equipment in addition to their other types and have \"Equipped creature gets +2/+0\" and equip {2}.",
+      "type": "Enchantment",
+      "expected_resource": true,
+      "split": "development"
+    },
+    {
+      "name": "Nahiri, the Lithomancer",
+      "topic": "equipment",
+      "text": "+2: Create a 1/1 white Kor Soldier creature token. You may attach an Equipment you control to it.\n−2: You may put an Equipment card from your hand or graveyard onto the battlefield.\n−10: Create a colorless Equipment artifact token named Stoneforged Blade. It has indestructible, \"Equipped creature gets +5/+5 and has double strike,\" and equip {0}.\nNahiri, the Lithomancer can be your commander.",
+      "type": "Legendary Planeswalker — Nahiri",
+      "expected_resource": true,
+      "split": "development"
+    },
+    {
+      "name": "Stoneforge Mystic",
+      "topic": "equipment",
+      "text": "When this creature enters, you may search your library for an Equipment card, reveal it, put it into your hand, then shuffle.\n{1}{W}, {T}: You may put an Equipment card from your hand onto the battlefield.",
+      "type": "Creature — Kor Artificer",
+      "expected_resource": false,
+      "split": "development"
+    },
+    {
+      "name": "Steelshaper's Gift",
+      "topic": "equipment",
+      "text": "Search your library for an Equipment card, reveal that card, put it into your hand, then shuffle.",
+      "type": "Sorcery",
+      "expected_resource": false,
+      "split": "development"
+    },
+    {
+      "name": "Open the Armory",
+      "topic": "equipment",
+      "text": "Search your library for an Aura or Equipment card, reveal it, put it into your hand, then shuffle.",
+      "type": "Sorcery",
+      "expected_resource": false,
+      "split": "development"
+    },
+    {
+      "name": "Mantle of the Ancients",
+      "topic": "equipment",
+      "text": "Enchant creature you control\nWhen this Aura enters, return any number of target Aura and/or Equipment cards from your graveyard to the battlefield attached to enchanted creature.\nEnchanted creature gets +1/+1 for each Aura and Equipment attached to it.",
+      "type": "Enchantment — Aura",
+      "expected_resource": false,
+      "split": "development"
+    },
+    {
+      "name": "Sheoldred, the Apocalypse",
+      "topic": "draw",
+      "text": "Deathtouch\nWhenever you draw a card, you gain 2 life.\nWhenever an opponent draws a card, they lose 2 life.",
+      "type": "Legendary Creature — Phyrexian Praetor",
+      "expected_resource": false,
+      "split": "development"
+    },
+    {
+      "name": "Psychosis Crawler",
+      "topic": "draw",
+      "text": "Psychosis Crawler's power and toughness are each equal to the number of cards in your hand.\nWhenever you draw a card, each opponent loses 1 life.",
+      "type": "Artifact Creature — Phyrexian Horror",
+      "expected_resource": false,
+      "split": "development"
+    },
+    {
+      "name": "Underworld Dreams",
+      "topic": "draw",
+      "text": "Whenever an opponent draws a card, this enchantment deals 1 damage to that player.",
+      "type": "Enchantment",
+      "expected_resource": false,
+      "split": "development"
+    },
+    {
+      "name": "Alandra, Sky Dreamer",
+      "topic": "draw",
+      "text": "Whenever you draw your second card each turn, create a 2/2 blue Drake creature token with flying.\nWhenever you draw your fifth card each turn, Alandra and Drakes you control each get +X/+X until end of turn, where X is the number of cards in your hand.",
+      "type": "Legendary Creature — Merfolk Wizard",
+      "expected_resource": false,
+      "split": "development"
+    },
+    {
+      "name": "Chasm Skulker",
+      "topic": "draw",
+      "text": "Whenever you draw a card, put a +1/+1 counter on this creature.\nWhen this creature dies, create X 1/1 blue Squid creature tokens with islandwalk, where X is the number of +1/+1 counters on this creature. (They can't be blocked as long as defending player controls an Island.)",
+      "type": "Creature — Squid Horror",
+      "expected_resource": false,
+      "split": "development"
+    },
+    {
+      "name": "Smothering Tithe",
+      "topic": "draw",
+      "text": "Whenever an opponent draws a card, that player may pay {2}. If the player doesn't, you create a Treasure token. (It's an artifact with \"{T}, Sacrifice this token: Add one mana of any color.\")",
+      "type": "Enchantment",
+      "expected_resource": false,
+      "split": "development"
+    },
+    {
+      "name": "Narset, Parter of Veils",
+      "topic": "draw",
+      "text": "Each opponent can't draw more than one card each turn.\n−2: Look at the top four cards of your library. You may reveal a noncreature, nonland card from among them and put it into your hand. Put the rest on the bottom of your library in a random order.",
+      "type": "Legendary Planeswalker — Narset",
+      "expected_resource": false,
+      "split": "development"
+    },
+    {
+      "name": "Spirit of the Labyrinth",
+      "topic": "draw",
+      "text": "Each player can't draw more than one card each turn.",
+      "type": "Enchantment Creature — Spirit",
+      "expected_resource": false,
+      "split": "development"
+    },
+    {
+      "name": "Alhammarret's Archive",
+      "topic": "draw",
+      "text": "If you would gain life, you gain twice that much life instead.\nIf you would draw a card except the first one you draw in each of your draw steps, draw two cards instead.",
+      "type": "Legendary Artifact",
+      "expected_resource": false,
+      "split": "development"
+    },
+    {
+      "name": "Teferi's Ageless Insight",
+      "topic": "draw",
+      "text": "If you would draw a card except the first one you draw in each of your draw steps, draw two cards instead.",
+      "type": "Legendary Enchantment",
+      "expected_resource": false,
+      "split": "development"
+    },
+    {
+      "name": "Wyleth, Soul of Steel",
+      "topic": "draw",
+      "text": "Trample\nWhenever Wyleth attacks, draw a card for each Aura and Equipment attached to it.",
+      "type": "Legendary Creature — Human Warrior",
+      "expected_resource": true,
+      "split": "development"
+    },
+    {
+      "name": "Sram, Senior Edificer",
+      "topic": "draw",
+      "text": "Whenever you cast an Aura, Equipment, or Vehicle spell, draw a card.",
+      "type": "Legendary Creature — Dwarf Advisor",
+      "expected_resource": true,
+      "split": "development"
+    },
+    {
+      "name": "Consecrated Sphinx",
+      "topic": "draw",
+      "text": "Flying\nWhenever an opponent draws a card, you may draw two cards.",
+      "type": "Creature — Sphinx",
+      "expected_resource": true,
+      "split": "development"
+    },
+    {
+      "name": "Rhystic Study",
+      "topic": "draw",
+      "text": "Whenever an opponent casts a spell, you may draw a card unless that player pays {1}.",
+      "type": "Enchantment",
+      "expected_resource": true,
+      "split": "development"
+    },
+    {
+      "name": "Temple Bell",
+      "topic": "draw",
+      "text": "{T}: Each player draws a card.",
+      "type": "Artifact",
+      "expected_resource": true,
+      "split": "development"
+    },
+    {
+      "name": "Vision Skeins",
+      "topic": "draw",
+      "text": "Each player draws two cards.",
+      "type": "Instant",
+      "expected_resource": true,
+      "split": "development"
+    },
+    {
+      "name": "Howling Mine",
+      "topic": "draw",
+      "text": "At the beginning of each player's draw step, if this artifact is untapped, that player draws an additional card.",
+      "type": "Artifact",
+      "expected_resource": true,
+      "split": "development"
+    },
+    {
+      "name": "Sign in Blood",
+      "topic": "draw",
+      "text": "Target player draws two cards and loses 2 life.",
+      "type": "Sorcery",
+      "expected_resource": true,
+      "split": "development"
+    },
+    {
+      "name": "Secret Rendezvous",
+      "topic": "draw",
+      "text": "You and target opponent each draw three cards.",
+      "type": "Sorcery",
+      "expected_resource": true,
+      "split": "development"
+    },
+    {
+      "name": "Dredge",
+      "topic": "draw",
+      "text": "Sacrifice a creature or land.\nDraw a card.",
+      "type": "Instant",
+      "expected_resource": true,
+      "split": "development"
+    },
+    {
+      "name": "Brainstorm",
+      "topic": "draw",
+      "text": "Draw three cards, then put two cards from your hand on top of your library in any order.",
+      "type": "Instant",
+      "expected_resource": true,
+      "split": "development"
+    },
+    {
+      "name": "Teferi's Tutelage",
+      "topic": "draw",
+      "text": "When this enchantment enters, draw a card, then discard a card.\nWhenever you draw a card, target opponent mills two cards. (They put the top two cards of their library into their graveyard.)",
+      "type": "Enchantment",
+      "expected_resource": true,
+      "split": "development"
+    },
+    {
+      "name": "Notion Thief",
+      "topic": "draw",
+      "text": "Flash\nIf an opponent would draw a card except the first one they draw in each of their draw steps, instead that player skips that draw and you draw a card.",
+      "type": "Creature — Human Rogue",
+      "expected_resource": true,
+      "split": "development"
+    },
+    {
+      "name": "Master the Way",
+      "topic": "draw",
+      "text": "Draw a card. Master the Way deals damage to any target equal to the number of cards in your hand.",
+      "type": "Sorcery",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Hearth Elemental // Stoke Genius",
+      "topic": "draw",
+      "text": "This spell costs {X} less to cast, where X is the number of cards in your graveyard that are instant cards, sorcery cards, and/or have an Adventure.\nDiscard your hand, then draw two cards. (Then exile this card. You may cast the creature later from exile.)",
+      "type": "Creature — Elemental // Sorcery — Adventure",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Astonishing Spider-Man",
+      "topic": "draw",
+      "text": "Reach\nWhenever Astonishing Spider-Man attacks, you may discard your hand. If you do, draw a card for each card you've discarded this turn.",
+      "type": "Legendary Creature — Spider Human Hero",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Pointed Discussion",
+      "topic": "draw",
+      "text": "You draw two cards, lose 2 life, then create a Blood token. (It's an artifact with \"{1}, {T}, Discard a card, Sacrifice this token: Draw a card.\")",
+      "type": "Sorcery",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Beast Whisperer",
+      "topic": "draw",
+      "text": "Whenever you cast a creature spell, draw a card.",
+      "type": "Creature — Elf Druid",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Hawkeye, Avenging Archer",
+      "topic": "draw",
+      "text": "Reach\nWhenever a creature an opponent controls dies, if Hawkeye dealt damage to it this turn, draw a card.\n{T}: Hawkeye deals 1 damage to any target.",
+      "type": "Legendary Creature — Human Archer Hero",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Treasure Map // Treasure Cove",
+      "topic": "draw",
+      "text": "{1}, {T}: Scry 1. Put a landmark counter on this artifact. Then if there are three or more landmark counters on it, remove those counters, transform this artifact, and create three Treasure tokens. (They're artifacts with \"{T}, Sacrifice this token: Add one mana of any color.\")\n(Transforms from Treasure Map.)\n{T}: Add {C}.\n{T}, Sacrifice a Treasure: Draw a card.",
+      "type": "Artifact // Land",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Elminster",
+      "topic": "draw",
+      "text": "Whenever you scry, the next instant or sorcery spell you cast this turn costs {X} less to cast, where X is the number of cards looked at while scrying this way.\n+2: Draw a card, then scry 2.\n−3: Exile the top card of your library. Create a number of 1/1 blue Faerie Dragon creature tokens with flying equal to that card's mana value.\nElminster can be your commander.",
+      "type": "Legendary Planeswalker — Elminster",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "The Legend of Kuruk // Avatar Kuruk",
+      "topic": "draw",
+      "text": "(As this Saga enters and after your draw step, add a lore counter.)\nI, II — Scry 2, then draw a card.\nIII — Exile this Saga, then return it to the battlefield transformed under your control.\nWhenever you cast a spell, create a 1/1 colorless Spirit creature token with \"This token can't block or be blocked by non-Spirit creatures.\"\nExhaust — Waterbend {20}: Take an extra turn after this one. (While paying a waterbend cost, you can tap your artifacts and creatures to help. Each one pays for {1}. Activate each exhaust ability only once.)",
+      "type": "Enchantment — Saga // Legendary Creature — Avatar",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Dr. Eggman",
+      "topic": "draw",
+      "text": "Flying\nAt the beginning of your end step, draw a card. Then each opponent faces a villainous choice — That player discards a card, or you may put a Construct, Robot, or Vehicle card from your hand onto the battlefield.",
+      "type": "Legendary Creature — Human Scientist",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Unexpected Windfall",
+      "topic": "draw",
+      "text": "As an additional cost to cast this spell, discard a card.\nDraw two cards and create two Treasure tokens. (They're artifacts with \"{T}, Sacrifice this token: Add one mana of any color.\")",
+      "type": "Instant",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Prophecy",
+      "topic": "draw",
+      "text": "Reveal the top card of target opponent's library. If it's a land, you gain 1 life. Then that player shuffles.\nDraw a card at the beginning of the next turn's upkeep.",
+      "type": "Sorcery",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Rune of Protection: Black",
+      "topic": "draw",
+      "text": "{W}: The next time a black source of your choice would deal damage to you this turn, prevent that damage.\nCycling {2} ({2}, Discard this card: Draw a card.)",
+      "type": "Enchantment",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Chill of the Grave",
+      "topic": "draw",
+      "text": "This spell costs {1} less to cast if you control a Zombie.\nTap target creature. It doesn't untap during its controller's next untap step.\nDraw a card.",
+      "type": "Instant",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Narci, Fable Singer",
+      "topic": "draw",
+      "text": "Lifelink\nWhenever you sacrifice an enchantment, draw a card.\nWhenever the final chapter ability of a Saga you control resolves, each opponent loses X life and you gain X life, where X is that Saga's mana value.",
+      "type": "Legendary Creature — Human Bard",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Pendrell Drake",
+      "topic": "draw",
+      "text": "Flying\nCycling {2} ({2}, Discard this card: Draw a card.)",
+      "type": "Creature — Drake",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Yuffie, Materia Hunter",
+      "topic": "equipment",
+      "text": "Ninjutsu {1}{R} ({1}{R}, Return an unblocked attacker you control to hand: Put this card onto the battlefield from your hand tapped and attacking.)\nWhen Yuffie enters, gain control of target noncreature artifact for as long as you control Yuffie. Then you may attach an Equipment you control to Yuffie.",
+      "type": "Legendary Creature — Human Ninja",
+      "expected_resource": false,
+      "split": "heldout"
+    },
+    {
+      "name": "Unexpected Request",
+      "topic": "equipment",
+      "text": "Gain control of target creature until end of turn. Untap that creature. It gains haste until end of turn. You may attach an Equipment you control to that creature. If you do, unattach it at the beginning of the next end step.",
+      "type": "Sorcery",
+      "expected_resource": false,
+      "split": "heldout"
+    },
+    {
+      "name": "Spellbinder",
+      "topic": "equipment",
+      "text": "Imprint — When this Equipment enters, you may exile an instant card from your hand.\nWhenever equipped creature deals combat damage to a player, you may copy the exiled card. If you do, you may cast the copy without paying its mana cost.\nEquip {4}",
+      "type": "Artifact — Equipment",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Mirrormind Crown",
+      "topic": "equipment",
+      "text": "As long as this Equipment is attached to a creature, the first time you would create one or more tokens each turn, you may instead create that many tokens that are copies of equipped creature.\nEquip {2}",
+      "type": "Artifact — Equipment",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Phantom Blade",
+      "topic": "equipment",
+      "text": "When this Equipment enters, attach it to up to one target creature you control. Destroy up to one other target creature.\nEquipped creature gets +1/+1 and has menace. (It can't be blocked except by two or more creatures.)\nEquip {2}",
+      "type": "Artifact — Equipment",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Blazing Torch",
+      "topic": "equipment",
+      "text": "Equipped creature can't be blocked by Vampires or Zombies.\nEquipped creature has \"{T}, Sacrifice Blazing Torch: Blazing Torch deals 2 damage to any target.\"\nEquip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)",
+      "type": "Artifact — Equipment",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Strandwalker",
+      "topic": "equipment",
+      "text": "Living weapon (When this Equipment enters, create a 0/0 black Phyrexian Germ creature token, then attach this to it.)\nEquipped creature gets +2/+4 and has reach.\nEquip {4}",
+      "type": "Artifact — Equipment",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Krovod Haunch",
+      "topic": "equipment",
+      "text": "Equipped creature gets +2/+0.\n{2}, {T}, Sacrifice this Equipment: You gain 3 life.\nWhen this Equipment is put into a graveyard from the battlefield, you may pay {1}{W}. If you do, create two 1/1 white Dog creature tokens.\nEquip {2}",
+      "type": "Artifact — Food Equipment",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Sword of Light and Shadow",
+      "topic": "equipment",
+      "text": "Equipped creature gets +2/+2 and has protection from white and from black.\nWhenever equipped creature deals combat damage to a player, you gain 3 life and you may return up to one target creature card from your graveyard to your hand.\nEquip {2}",
+      "type": "Artifact — Equipment",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Expanding Ooze",
+      "topic": "equipment",
+      "text": "{B}{G}: Adapt 1. (If this creature has no +1/+1 counters on it, put a +1/+1 counter on it.)\nWhenever this creature attacks, put a +1/+1 counter on target modified creature you control. (Equipment, Auras you control, and counters are modifications.)",
+      "type": "Creature — Ooze",
+      "expected_resource": false,
+      "split": "heldout"
+    },
+    {
+      "name": "Swashbuckler's Whip",
+      "topic": "equipment",
+      "text": "Equipped creature has reach, \"{2}, {T}: Tap target artifact or creature,\" and \"{8}, {T}: Discover 10.\" (Exile cards from the top of your library until you exile a nonland card with mana value 10 or less. Cast it without paying its mana cost or put it into your hand. Put the rest on the bottom in a random order.)\nEquip {1}",
+      "type": "Artifact — Equipment",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "The Dominion Bracelet",
+      "topic": "equipment",
+      "text": "Equipped creature gets +1/+1 and has \"{15}, Exile The Dominion Bracelet: You control target opponent during their next turn. This ability costs {X} less to activate, where X is this creature's power. Activate only as a sorcery.\" (You see all cards that player could see and make all decisions for them.)\nEquip {1}",
+      "type": "Legendary Artifact — Equipment",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Medic's Kitesail",
+      "topic": "equipment",
+      "text": "Equipped creature gets +1/+0 and has flying and \"Whenever this creature attacks, you gain 1 life.\"\nEquip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)",
+      "type": "Artifact — Equipment",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Chainflail Centipede",
+      "topic": "equipment",
+      "text": "Whenever this creature or equipped creature attacks, it gets +2/+0 until end of turn.\nReconfigure {2} ({2}: Attach to target creature you control; or unattach from a creature. Reconfigure only as a sorcery. While attached, this isn't a creature.)",
+      "type": "Artifact Creature — Equipment Insect",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Stalactite Dagger",
+      "topic": "equipment",
+      "text": "When this Equipment enters, create a 1/1 colorless Shapeshifter creature token with changeling. (It's every creature type.)\nEquipped creature gets +1/+1 and is all creature types.\nEquip {2} ({2}: Attach to target creature you control. Equip only as a sorcery.)",
+      "type": "Artifact — Equipment",
+      "expected_resource": true,
+      "split": "heldout"
+    },
+    {
+      "name": "Barrow-Blade",
+      "topic": "equipment",
+      "text": "Equipped creature gets +1/+1.\nWhenever equipped creature blocks or becomes blocked by a creature, that creature loses all abilities until end of turn.\nEquip {1} ({1}: Attach to target creature you control. Equip only as a sorcery.)",
+      "type": "Artifact — Equipment",
+      "expected_resource": true,
+      "split": "heldout"
+    }
+  ]
+}
