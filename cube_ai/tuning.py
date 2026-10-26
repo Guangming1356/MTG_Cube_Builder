@@ -16,7 +16,7 @@ from .config import ROOT
 PROFILE=ROOT/'private/performance-profile.json'
 RUNS=ROOT/'private/tuning'
 VERSION='native-tuning-2'
-EVENT_COMPARISON='native-events-2-attacker-order'
+EVENT_COMPARISON='native-events-3-block-target-order'
 JVM_PROFILES={
     'default':dict(heap_mib=2048,options=[]),
     'bounded_gc':dict(heap_mib=2048,options=['-XX:ActiveProcessorCount=2','-XX:ParallelGCThreads=1','-XX:ConcGCThreads=1']),
@@ -102,9 +102,42 @@ def canonical_attackers(event):
     return prefix+' assigned '+', '.join(sorted(cards))+' to attack '+target
 
 
+def canonical_blockers(event):
+    """Sort one controller's per-attacker statements inside one printed event.
+
+    Forge copies the declaration to HashMap/HashMultimap. Preserve blocker
+    lists, instances, targets, duplicates and other event order; fail closed
+    on unknown player names, mixed controllers or incomplete layouts.
+    """
+    match=re.match(r"Combat: (Ai\(\d+\)-[A-Za-z0-9_-]+) (?=assigned |didn't block )",event)
+    if not match:return event
+    player=match[1];body=event[len('Combat: '):]
+    ends=list(re.finditer(r"\(\d+\)\.(?="+re.escape(player)+r" (?:assigned |didn't block )|$)",body))
+    if len(ends)<2 or ends[-1].end()!=len(body):return event
+    statements=[];position=0
+    for end in ends:
+        statement=body[position:end.end()];position=end.end()
+        if not statement.startswith(player+' '):return event
+        content=statement[len(player)+1:]
+        if content.startswith("didn't block "):target=content[len("didn't block "):]
+        elif content.startswith('assigned '):
+            if content.count(' to block ')!=1:return event
+            blockers,_,target=content[len('assigned '):].partition(' to block ')
+            markers=list(re.finditer(r'\(\d+\)(?:, | and |$)',blockers))
+            if not markers or markers[-1].end()!=len(blockers):return event
+            start=0
+            for marker in markers:
+                if not blockers[start:marker.start()].strip():return event
+                start=marker.end()
+        else:return event
+        if not re.fullmatch(r'.+ \(\d+\)\.',target) or re.search(r'Ai\(\d+\)-',content):return event
+        statements.append(statement)
+    return 'Combat: '+''.join(sorted(statements))
+
+
 def _canonical(log):
     from .optimize import log_events
-    return [canonical_attackers(event) for event in log_events(log) if not event.startswith('Game Outcome: Match Duration')]
+    return [canonical_blockers(canonical_attackers(event)) for event in log_events(log) if not event.startswith('Game Outcome: Match Duration')]
 
 
 def compatible(reference,records):
@@ -112,6 +145,27 @@ def compatible(reference,records):
     return all((a['outcome'],a.get('winner'))==(b['outcome'],b.get('winner')) and
         (a['outcome'] not in {'win','draw'} or a['events_sha256']==b['events_sha256'])
         for a,b in zip(reference,records))
+
+
+def baseline_check(phase):
+    """Require a repeated unchanged control before comparing configurations."""
+    result=dict(version='native-baseline-1',status='pending',repetitions=0,compared_games=0,unstable_games=[],abnormal_games=[])
+    if not phase or not phase.get('runs'):return result
+    runs=phase['runs'];reference=runs[0]
+    result.update(workers=phase['workers'],jvm_profile=phase['jvm_profile'],repetitions=len(runs),compared_games=len(reference))
+    if not reference:result['status']='incomplete';return result
+    result['abnormal_games']=sorted({i for run in runs for i,r in enumerate(run) if r.get('outcome') not in {'win','draw'}})
+    if result['abnormal_games']:result['status']='abnormal'
+    elif not phase.get('same_native_backend') or any(r.get('cache_hit') for run in runs for r in run):result['status']='backend_mismatch'
+    elif phase.get('resource_interrupted'):result['status']='incomplete'
+    else:
+        changed=set()
+        for run in runs[1:]:
+            for i in range(max(len(reference),len(run))):
+                if i>=len(reference) or i>=len(run) or not compatible([reference[i]],[run[i]]):changed.add(i)
+        result['unstable_games']=sorted(changed)
+        result['status']='unstable' if changed else 'consistent' if len(runs)>=2 else 'insufficient_repetitions'
+    return result
 
 
 def phase_memory(phase):
@@ -201,9 +255,9 @@ def calibrate(catalog,rows,spec,progress=print,mode='quick',worker_choices=None,
             note='同一批固定牌组与种子重复测速，不进入学习或独立强度样本。均衡模式在最快耗时15%以内优先低内存，内存相差10%以内再选更快设置；缺少内存数据时沿用速度对照。')
         def save():
             tmp=out/'report.tmp';tmp.write_text(json.dumps(report,ensure_ascii=False,indent=2),encoding='utf8');tmp.replace(out/'report.json')
-        reference=None
+        reference=None;reference_phase=None
         def phase(workers,jvm):
-            nonlocal reference
+            nonlocal reference,reference_phase
             settings=JVM_PROFILES[jvm]
             eligible,memory=profile_choices([workers],workers,jvm)
             if not eligible:
@@ -240,7 +294,7 @@ def calibrate(catalog,rows,spec,progress=print,mode='quick',worker_choices=None,
                 elapsed=time.perf_counter()-start
                 paused=max(0,control.paused_seconds-paused_before) if control else 0
                 interrupted=bool(paused or control and control.pause_started is not None)
-                if reference is None:reference=records
+                if reference is None:reference=records;reference_phase=phase
                 phase['measurements'].append(dict(repeat=repeat,wall_seconds=elapsed,paused_seconds=paused,used_for_timing=not interrupted))
                 if not interrupted:phase['seconds'].append(elapsed)
                 phase['runs'].append(records)
@@ -249,16 +303,27 @@ def calibrate(catalog,rows,spec,progress=print,mode='quick',worker_choices=None,
                 phase['compatible'] &= compatible(reference,records) and same_backend
                 phase['normal_games']=sum(r['outcome'] in {'win','draw'} for r in records)
                 phase['median_seconds']=statistics.median(phase['seconds']) if phase['seconds'] else None
+                report['reference_check']=baseline_check(reference_phase)
                 close_all();save()
+        def invalid_control():
+            report['reference_check']=baseline_check(reference_phase)
+            if report['reference_check']['status'] not in {'unstable','abnormal','backend_mismatch','incomplete'}:return False
+            report.update(stopped_early=True,stop_reason='invalid_reference')
+            progress('测速参考设置未通过重复检查，已停止后续对照并保留原设置；详情已保存。')
+            save();return True
         try:
-            for workers in choices:phase(workers,'default')
+            for workers in choices:
+                phase(workers,'default')
+                if invalid_control():return report
             best=choose(report['phases'],goal=goal)
             best_workers=best['workers'] if best else choices[0]
             for jvm in variants:
                 if jvm!='default':
                     tested,_=profile_choices(requested,best_workers,jvm)
-                    for workers in tested:phase(workers,jvm)
-            selected=choose(report['phases'],goal=goal)
+                    for workers in tested:
+                        phase(workers,jvm)
+                        if invalid_control():return report
+            selected=choose(report['phases'],goal=goal) if report.get('reference_check',{}).get('status')=='consistent' else None
             if selected and apply_result:
                 by_profile={name:sorted({p['workers'] for p in report['phases'] if p['jvm_profile']==name}) for name in JVM_PROFILES}
                 report.update(adopted=True,workers=selected['workers'],jvm_profile=selected['jvm_profile'],measured=datetime.now(timezone.utc).isoformat(),

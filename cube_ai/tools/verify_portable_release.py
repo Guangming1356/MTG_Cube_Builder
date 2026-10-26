@@ -55,7 +55,7 @@ from cube_ai.forge import configuration,card_index,engine_name,parse_log,verifie
 from cube_ai.forge_card_names import name_pairs,trace_name_pairs,ASSET,bundle_alias_asset
 from cube_ai.cube_family import pool_counts,group_cubes
 from cube_ai.surrogate import split_groups,VERSION as ACTIVITY_VERSION
-from cube_ai.tuning import canonical_attackers
+from cube_ai.tuning import canonical_attackers,canonical_blockers,baseline_check
 assert not any(n=='scipy' or n.startswith('scipy.') for n in sys.modules)
 c=Catalog();pairs=name_pairs();index=card_index(configuration())
 assert ACTIVITY_VERSION=='activity-6'
@@ -68,6 +68,14 @@ attack='Combat: Ai(1)-a assigned Goblin (1) and Elf (2) to attack Ai(2)-b.'
 swapped='Combat: Ai(1)-a assigned Elf (2) and Goblin (1) to attack Ai(2)-b.'
 assert canonical_attackers(attack)==canonical_attackers(swapped)
 assert canonical_attackers(attack)!=canonical_attackers(swapped.replace('(2)','(3)',1))
+block="Ai(1)-a assigned Elf (1) to block Bear (2)."
+unblocked="Ai(1)-a didn't block Goblin (3)."
+assert canonical_blockers('Combat: '+block+unblocked)==canonical_blockers('Combat: '+unblocked+block)
+assert canonical_blockers('Combat: '+block+unblocked)!=canonical_blockers('Combat: '+block.replace('(1)','(4)')+unblocked)
+control=dict(workers=1,jvm_profile='default',same_native_backend=True,runs=[
+    [dict(outcome='win',winner='a',events_sha256='first')],
+    [dict(outcome='win',winner='a',events_sha256='changed')]])
+assert baseline_check(control)['status']=='unstable'
 winner='Game Result: Game 1 ended in 10 ms. Ai(1)-a has won!'
 for header in ('java.util.concurrent.TimeoutException','java.lang.OutOfMemoryError'):
     assert parse_log(header+'\\r\\n'+winner)['outcome']=='engine_error'
@@ -103,7 +111,7 @@ print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs(
                     embedded_runtime=True,task_pause_resume=True,shutdown_blocks_live_tasks=True,restart_recovers_result=True,
                     native_name_compatibility=names,clean_preference_state=True,preference_scope_validation=True,
                     native_evidence_validation=True,cube_family_validation=True,native_event_comparison_validation=True,
-                    lazy_solver_import=True,full_cube_generation=True)
+                    lazy_solver_import=True,full_cube_generation=True,calibration_reference_validation=True,blocker_display_validation=True)
         args.out.write_text(json.dumps(report,indent=2),encoding='utf8');print(json.dumps(report),flush=True)
     finally:
         if url:

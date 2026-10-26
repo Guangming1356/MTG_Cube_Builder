@@ -171,14 +171,27 @@ function renderSpeedDetails(o){
  const search=o.search,timing=o.timings;
  return `${search?`<p>搜索 ${search.proposals} 个候选，${search.full_evaluations} 个完成完整开发轮抓；复用 ${search.reused_tables} 桌，重新轮抓 ${search.redrafted_tables} 桌。${search.approximate?'分轮筛选可能遗漏候选；采用前均已通过完整开发检查。':''}</p>`:''}${timing?`<details><summary>查看各阶段耗时</summary><p class="sub">部分阶段重叠执行，时间不能直接相加。</p><table><thead><tr><th>阶段</th><th>耗时</th><th>状态</th></tr></thead><tbody>${timing.stages.map(s=>`<tr><td>${esc(({development_drafts:'开发轮抓',training_forge:'训练对局',training_trace_analysis:'训练记录分析',candidate_search:'筛选替换',holdout_structure_before:'原版结构验收',holdout_structure_after:'新版结构验收',holdout_forge_before:'原版实战验收',holdout_forge_after:'新版实战验收',holdout_trace_before:'原版记录分析',holdout_trace_after:'新版记录分析',cross_forge:'新旧交叉对局',export_evidence:'保存证据',learning_update:'更新评分模型'})[s.stage]||s.stage)}</td><td>${s.seconds.toFixed(1)} 秒</td><td>${s.status==='completed'?'完成':'异常'}</td></tr>`).join('')}</tbody></table></details>`:''}`;
 }
+function calibrationReferenceText(r){
+ const c=r.reference_check;if(!c)return '';
+ const messages={
+  unstable:'相同参考设置的重复对局出现了事件差异。已提前停止后续测速，原设置已保留。',
+  abnormal:'参考对局未全部正常完成，暂不能用于比较速度。已停止后续测速，原设置已保留。',
+  backend_mismatch:'参考测量未全程使用同一常驻引擎或出现了缓存复用，暂不能比较速度。原设置已保留。',
+  incomplete:'参考测量因内存余量变化而未完成，已停止后续测速，原设置已保留。',
+  insufficient_repetitions:'参考设置的重复次数不足，结果仅作预览，不能自动采用。',
+  pending:'尚未形成参考对照，原设置已保留。'
+ };
+ return c.status==='consistent'?`参考设置已完成 ${c.repetitions} 次重复，${c.compared_games} 个固定比赛的完整事件一致。`:messages[c.status]||'参考对照状态未确认，原设置已保留。';
+}
 function renderCalibration(r){
  const selected=r.adopted?r:r.recommendation;
+ const referenceText=calibrationReferenceText(r);
  const profile=name=>({default:'默认内存设置',bounded_gc:'限制后台回收线程',parallel_gc:'吞吐量优先回收',compact_heap:'较小内存占用',parallel_small:'较小内存的吞吐回收'})[name]||name;
- $('calibration-result').innerHTML=`<h3>这次测速${selected?'找到了可用设置':'没有足够有效对照'}</h3><p>${selected?`选择同时 ${esc(selected.workers)} 局，${esc(profile(selected.jvm_profile))}。${r.adopted?'':'本次只作预览，保留当前设置。'}`:'保留原设置。'}当前是否采用以本页自动测速状态为准。</p><p class="sub">${r.profile_specific_concurrency?"已按每种内存配置重新检查可容纳的并行数。":"这是历史测速，沿用当时的并行数设置。"}表中耗时针对同一批固定比赛；内存为观测值，未测到的峰值可能更高。正常完成和完整事件一致是采用前提。含暂停的重复只保存记录，不参加配置计时。</p><details><summary>查看各配置对照（${r.phases.length} 项）</summary><div class="table-wrap"><table><thead><tr><th>同时对局</th><th>配置</th><th>中位耗时</th><th>观测引擎内存</th><th>每轮正常完成</th><th>事件一致</th></tr></thead><tbody>${r.phases.map(p=>`<tr><td>${esc(p.workers)}</td><td>${esc(profile(p.jvm_profile))}</td><td>${p.median_seconds==null?'未形成有效计时':Number(p.median_seconds).toFixed(1)+' 秒'}</td><td>${p.peak_engine_private_bytes?(p.peak_engine_private_bytes/2**20).toFixed(0)+' MiB':'未采集'}</td><td>${esc(p.normal_games)} / ${esc(p.attempted_games??r.fixture_games)}</td><td>${p.compatible?'是':'否'}</td></tr>`).join('')}</tbody></table></div></details>${r.skipped_configurations?.length?`<p>有 ${r.skipped_configurations.length} 项配置因当前内存不足而跳过。</p>`:''}`;
+ $('calibration-result').innerHTML=`<h3>这次测速${selected?'找到了可用设置':'没有足够有效对照'}</h3><p>${selected?`选择同时 ${esc(selected.workers)} 局，${esc(profile(selected.jvm_profile))}。${r.adopted?'':'本次只作预览，保留当前设置。'}`:'保留原设置。'}当前是否采用以本页自动测速状态为准。</p>${referenceText?`<p class="sub">${esc(referenceText)}</p>`:''}<p class="sub">${r.profile_specific_concurrency?"已按每种内存配置重新检查可容纳的并行数。":"这是历史测速，沿用当时的并行数设置。"}表中耗时针对同一批固定比赛；内存为观测值，未测到的峰值可能更高。正常完成和完整事件一致是采用前提。含暂停的重复只保存记录，不参加配置计时。</p><details><summary>查看各配置对照（${r.phases.length} 项）</summary><div class="table-wrap"><table><thead><tr><th>同时对局</th><th>配置</th><th>中位耗时</th><th>观测引擎内存</th><th>每轮正常完成</th><th>事件一致</th></tr></thead><tbody>${r.phases.map(p=>`<tr><td>${esc(p.workers)}</td><td>${esc(profile(p.jvm_profile))}</td><td>${p.median_seconds==null?'未形成有效计时':Number(p.median_seconds).toFixed(1)+' 秒'}</td><td>${p.peak_engine_private_bytes?(p.peak_engine_private_bytes/2**20).toFixed(0)+' MiB':'未采集'}</td><td>${esc(p.normal_games)} / ${esc(p.attempted_games??r.fixture_games)}</td><td>${p.compatible?'是':'否'}</td></tr>`).join('')}</tbody></table></div></details>${r.skipped_configurations?.length?`<p>有 ${r.skipped_configurations.length} 项配置因当前内存不足而跳过。</p>`:''}`;
 }
 $('calibrate-speed').onclick=()=>guard(async()=>{
  if(!current)throw Error('请先载入一套三人 Commander Cube');
  const r=await job('calibrate',{mode:$('calibration-mode').value,goal:$('calibration-goal').value});
  renderCalibration(r);
- await refreshPerformance();statusInfo=await api('/api/status');configureExperiments();notice(r.adopted?'测速完成，后续任务将使用测得的设置。':r.skipped_configurations?.length?'测速检查完成；部分配置未满足当时的内存预算，已完成记录保留，本轮未更改自动设置。':'测速完成；本轮未更改自动设置。');
+ await refreshPerformance();statusInfo=await api('/api/status');configureExperiments();notice(r.adopted?'测速完成，后续任务将使用测得的设置。':r.stopped_early?calibrationReferenceText(r):r.skipped_configurations?.length?'测速检查完成；部分配置未满足当时的内存预算，已完成记录保留，本轮未更改自动设置。':'测速完成；本轮未更改自动设置。');
 });
