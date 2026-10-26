@@ -48,7 +48,7 @@ def test_restart_recovers_interrupted_checkpoints_and_unindexed_completion_witho
     assert app.jobs[ids[2]]['state']=='done' and 'result' not in app.jobs[ids[2]]
     assert Application.get_job(app,ids[2])['result']==dict(proof='saved-result')
     assert ids[3] not in app.jobs and (tmp_path/ids[3]/'summary.json').read_bytes()==before
-    assert json.loads((first/'summary.json').read_text())['interrupted']
+    assert json.loads((first/'summary.json').read_text(encoding='utf8'))['interrupted']
 
 
 def test_unwritable_task_storage_fails_without_leaving_a_permanent_queued_slot(monkeypatch):

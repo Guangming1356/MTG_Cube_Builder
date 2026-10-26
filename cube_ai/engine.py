@@ -11,8 +11,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import numpy as np
-from scipy.optimize import Bounds, LinearConstraint, milp
-from scipy.sparse import coo_matrix
 
 from .catalog import exclusion_reasons
 from .config import GUILDS, TRIPLES, RUNS, WORKSPACE
@@ -61,6 +59,9 @@ class ConstraintSet:
             raise ValueError(f"候选牌无法满足: {label}")
         self.rows.append(row);self.low.append(lo);self.high.append(hi);self.labels.append(label)
     def solve(self, scores):
+        # Audit/native-only processes do not need the MILP runtime.
+        from scipy.optimize import Bounds, LinearConstraint, milp
+        from scipy.sparse import coo_matrix
         rowidx=[];colidx=[];values=[]
         for r,row in enumerate(self.rows):
             for col,val in row.items():rowidx.append(r);colidx.append(col);values.append(val)
@@ -138,15 +139,21 @@ def build(catalog, spec, previous=None, progress=lambda x:None, store=None):
     land_chosen=[c for c in land_pool if c["name"] in remaining_pins]
     if len(land_chosen)>spec.lands: raise ValueError("锁定地牌超过地牌配额")
     pair_counts=Counter("".join(sorted(set(c["fixing"]) & set("WUBRG"))) for c in land_chosen)
+    # These nonland reservations stay fixed throughout land selection.
+    reserved_gc=sum(is_gc(catalog.cards[n]) for n in seen|remaining_pins if catalog.cards[n]["kind"]!="land") if power else 0
+    land_gc=sum(is_gc(c) for c in land_chosen) if power else 0
     pair_goal=min(spec.lands,round(spec.lands*.72))
     while len(land_chosen)<pair_goal:
-        options=[c for c in land_pool if c not in land_chosen and len(set(c["fixing"]) & set("WUBRG"))==2 and (not power or sum(is_gc(x) for x in land_chosen)+sum(is_gc(catalog.cards[n]) for n in seen|remaining_pins if catalog.cards[n]['kind']!='land')+int(is_gc(c))<=power['gc_limit'])]
+        options=[c for c in land_pool if c not in land_chosen and len(set(c["fixing"]) & set("WUBRG"))==2 and (not power or land_gc+reserved_gc+int(is_gc(c))<=power['gc_limit'])]
         if not options:break
         c=min(options,key=lambda c:(pair_counts["".join(sorted(c["fixing"]))],-land_score(c)))
         land_chosen.append(c);pair_counts["".join(sorted(c["fixing"]))]+=1
+        if power:land_gc+=int(is_gc(c))
     for c in land_pool:
         if len(land_chosen)>=spec.lands:break
-        if c not in land_chosen and (not power or sum(is_gc(x) for x in land_chosen)+sum(is_gc(catalog.cards[n]) for n in seen|remaining_pins if catalog.cards[n]['kind']!='land')+int(is_gc(c))<=power['gc_limit']):land_chosen.append(c)
+        if c not in land_chosen and (not power or land_gc+reserved_gc+int(is_gc(c))<=power['gc_limit']):
+            land_chosen.append(c)
+            if power:land_gc+=int(is_gc(c))
     if len(land_chosen)!=spec.lands:raise ValueError("合规地牌数量不足")
     for c in land_chosen:
         selected.append({"name":c["name"],"role":"Land"});seen.add(c["name"]);remaining_pins.discard(c["name"])

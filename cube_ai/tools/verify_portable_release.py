@@ -49,13 +49,14 @@ def main():
         assert request(url+'api/feedback/status?context=legacy%3Aclassic')['comparisons']==0
         for asset in ['workspace.js','tasks-ui.js','deck-study-ui.js','style.css']:
             with urllib.request.urlopen(url+asset,timeout=10) as response:assert response.status==200
-        names_code='''import json
+        names_code='''import json,sys
 from cube_ai.catalog import Catalog
 from cube_ai.forge import configuration,card_index,engine_name,parse_log,verified_game_result
 from cube_ai.forge_card_names import name_pairs,trace_name_pairs,ASSET,bundle_alias_asset
 from cube_ai.cube_family import pool_counts,group_cubes
 from cube_ai.surrogate import split_groups,VERSION as ACTIVITY_VERSION
 from cube_ai.tuning import canonical_attackers
+assert not any(n=='scipy' or n.startswith('scipy.') for n in sys.modules)
 c=Catalog();pairs=name_pairs();index=card_index(configuration())
 assert ACTIVITY_VERSION=='activity-6'
 pool=pool_counts([dict(name='Plains',role='Land')])
@@ -79,6 +80,10 @@ bundle_alias_asset(ASSET)
 print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs()),native_index_verified=True,catalog_aliases_verified=True)))
 '''
         names=json.loads(subprocess.check_output([str(python),'-X','utf8','-c',names_code],cwd=root,text=True,encoding='utf8',timeout=90))
+        build_job=request(url+'api/tasks',dict(operation='build',cards=[],spec=dict(bracket=3,seed=654,name='便携版构筑验收')))['job_id']
+        built=wait_until(lambda:(j if (j:=request(url+'api/job?id='+build_job))['state'] in {'done','failed'} else None))
+        assert built['state']=='done',built.get('error')
+        assert len(built['result']['cards'])==600 and built['result']['audit']['hard_errors']==0
         code="from pathlib import Path;import json,sys;from cube_ai.catalog import Catalog;from cube_ai.config import BuildSpec;c=Catalog();rows,unknown=c.parse(Path(sys.argv[1]).read_text(encoding='utf-8-sig'));assert not unknown;print(json.dumps(dict(operation='stress',cards=rows,spec=BuildSpec().to_dict(),trials=5)))"
         prepared=subprocess.check_output([str(python),'-X','utf8','-c',code,str(args.fixture.resolve())],cwd=root,text=True,encoding='utf8',timeout=90)
         job=request(url+'api/tasks',json.loads(prepared))['job_id']
@@ -97,7 +102,8 @@ print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs(
         report=dict(passed=True,application_version=expected,cards=status['cards'],offline_ai=True,forge_available=True,
                     embedded_runtime=True,task_pause_resume=True,shutdown_blocks_live_tasks=True,restart_recovers_result=True,
                     native_name_compatibility=names,clean_preference_state=True,preference_scope_validation=True,
-                    native_evidence_validation=True,cube_family_validation=True,native_event_comparison_validation=True)
+                    native_evidence_validation=True,cube_family_validation=True,native_event_comparison_validation=True,
+                    lazy_solver_import=True,full_cube_generation=True)
         args.out.write_text(json.dumps(report,indent=2),encoding='utf8');print(json.dumps(report),flush=True)
     finally:
         if url:
