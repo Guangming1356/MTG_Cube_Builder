@@ -1,6 +1,6 @@
 {
   "passed": true,
-  "application_version": "0.2.5",
+  "application_version": "0.2.6",
   "cards": 31070,
   "offline_ai": true,
   "forge_available": true,
@@ -20,5 +20,7 @@
   "cube_family_validation": true,
   "native_event_comparison_validation": true,
   "lazy_solver_import": true,
-  "full_cube_generation": true
+  "full_cube_generation": true,
+  "calibration_reference_validation": true,
+  "blocker_display_validation": true
 }
