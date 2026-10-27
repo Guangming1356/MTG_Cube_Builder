@@ -70,9 +70,13 @@ def extra_turn(card):
     return bool(re.search(r'\b(?:take|takes) (?:an?|one|two|three|\d+|X) extra turns?\b',card.get('text',''),re.I))
 
 def card_reasons(card,spec,*,power=None):
+    from .mana import requires_colorless_mana
     p=power or profile(spec)
-    if not p:return ['项目偏好：排除额外回合'] if spec.allow_extra_turns is False and extra_turn(card) else []
     reasons=[]
+    if not spec.allow_colorless_costs and requires_colorless_mana(card):reasons.append('项目偏好：排除需要支付无色法术力 {C} 的牌')
+    if not p:
+        if spec.allow_extra_turns is False and extra_turn(card):reasons.append('项目偏好：排除额外回合')
+        return reasons
     if is_gc(card) and (p['deck_gc']==0 or p['gc_limit']==0):reasons.append('该 Bracket/数量预算排除 Game Changers')
     if card['kind']!='land' and card['quality']>p['ceiling']+1e-6:reasons.append('超过该档项目单卡评价上限')
     if extra_turn(card) and not spec.allow_extra_turns:reasons.append('项目偏好：排除额外回合')
@@ -112,7 +116,7 @@ def cube_report(catalog,rows,spec):
 
 def may_add(catalog,names,name,spec):
     p=profile(spec)
-    if not p:return True
+    if not p:return not card_reasons(catalog.cards[name],spec)
     cards=[catalog.cards[n] for n in names+[name]]
     return not (p['deck_gc'] is not None and sum(is_gc(c) for c in cards)>p['deck_gc']) and not card_reasons(catalog.cards[name],spec)
 
@@ -127,7 +131,7 @@ class DeckRules:
         self.catalog=catalog;self.spec=spec;self.power=profile(spec);self.checks={}
 
     def select(self,initial,candidates):
-        if not self.power:return list(candidates)
+        if not self.power:return [n for n in candidates if not card_reasons(self.catalog.cards[n],self.spec)]
         cap=self.power['deck_gc']
         count=sum(is_gc(self.catalog.cards[n]) for n in initial) if cap is not None else 0
         selected=[]

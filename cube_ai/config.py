@@ -31,6 +31,7 @@ class BuildSpec:
     allow_fast_mana: bool = False
     allow_infinite_combos: bool = False
     allow_mass_land_destruction: bool = False
+    allow_colorless_costs: bool = False
     # None preserves historical/custom recipes; Commander presets explicitly use 3.
     bracket: int | None = None
     power_tuning: str = "balanced"
@@ -82,7 +83,7 @@ class BuildSpec:
         if not isinstance(self.name,str) or not self.name.strip():raise ValueError("name 必须是非空字符串")
         for key in ["size","commanders","lands","seed","players","rounds","pack_size","pick_count"]:
             if type(getattr(self,key)) is not int:raise ValueError(key+" 必须是整数")
-        for key in ["avoid_tribal","exclude_game_changers","allow_fast_mana","allow_infinite_combos","allow_mass_land_destruction","discard_after_pass"]:
+        for key in ["avoid_tribal","exclude_game_changers","allow_fast_mana","allow_infinite_combos","allow_mass_land_destruction","allow_colorless_costs","discard_after_pass"]:
             if type(getattr(self,key)) is not bool:raise ValueError(key+" 必须为 true/false")
         for key in ["exclude","pins","sets"]:
             if not isinstance(getattr(self,key),list) or any(not isinstance(n,str) for n in getattr(self,key)):

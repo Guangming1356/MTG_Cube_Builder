@@ -56,9 +56,16 @@ from cube_ai.forge_card_names import name_pairs,trace_name_pairs,ASSET,bundle_al
 from cube_ai.cube_family import pool_counts,group_cubes
 from cube_ai.surrogate import split_groups,VERSION as ACTIVITY_VERSION
 from cube_ai.tuning import canonical_attackers,canonical_blockers,baseline_check
+from cube_ai.config import BuildSpec
+from cube_ai.mana import requires_colorless_mana,commander_basic_sources
 assert not any(n=='scipy' or n.startswith('scipy.') for n in sys.modules)
 c=Catalog();pairs=name_pairs();index=card_index(configuration())
 assert ACTIVITY_VERSION=='activity-6'
+assert not BuildSpec().allow_colorless_costs
+assert requires_colorless_mana(c.cards['Warping Wail'])
+assert requires_colorless_mana(c.cards['Eldrazi Displacer'])
+assert not requires_colorless_mana(c.cards['Mind Stone'])
+assert commander_basic_sources(c,[],[],dict(B=23),'Grist, Voracious Larva // Grist, the Plague Swarm')==dict(B=22,G=1)
 pool=pool_counts([dict(name='Plains',role='Land')])
 families,_=group_cubes(dict(a=pool,b=pool))
 assert families['a']==families['b']
@@ -92,6 +99,9 @@ print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs(
         built=wait_until(lambda:(j if (j:=request(url+'api/job?id='+build_job))['state'] in {'done','failed'} else None))
         assert built['state']=='done',built.get('error')
         assert len(built['result']['cards'])==600 and built['result']['audit']['hard_errors']==0
+        assert built['result']['spec']['allow_colorless_costs'] is False
+        card_check="import json,sys;from cube_ai.catalog import Catalog;from cube_ai.mana import requires_colorless_mana;c=Catalog();rows=json.loads(sys.stdin.read());assert not any(requires_colorless_mana(c.cards[r['name']]) for r in rows);assert not any(r['role']=='Commander' and c.cards[r['name']]['identity']=='C' for r in rows)"
+        subprocess.run([str(python),'-X','utf8','-c',card_check],input=json.dumps(built['result']['cards']),cwd=root,text=True,encoding='utf8',check=True,capture_output=True,timeout=90)
         code="from pathlib import Path;import json,sys;from cube_ai.catalog import Catalog;from cube_ai.config import BuildSpec;c=Catalog();rows,unknown=c.parse(Path(sys.argv[1]).read_text(encoding='utf-8-sig'));assert not unknown;print(json.dumps(dict(operation='stress',cards=rows,spec=BuildSpec().to_dict(),trials=5)))"
         prepared=subprocess.check_output([str(python),'-X','utf8','-c',code,str(args.fixture.resolve())],cwd=root,text=True,encoding='utf8',timeout=90)
         job=request(url+'api/tasks',json.loads(prepared))['job_id']
@@ -111,7 +121,8 @@ print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs(
                     embedded_runtime=True,task_pause_resume=True,shutdown_blocks_live_tasks=True,restart_recovers_result=True,
                     native_name_compatibility=names,clean_preference_state=True,preference_scope_validation=True,
                     native_evidence_validation=True,cube_family_validation=True,native_event_comparison_validation=True,
-                    lazy_solver_import=True,full_cube_generation=True,calibration_reference_validation=True,blocker_display_validation=True)
+                    lazy_solver_import=True,full_cube_generation=True,calibration_reference_validation=True,blocker_display_validation=True,
+                    colorless_preference_validation=True,commander_mana_validation=True)
         args.out.write_text(json.dumps(report,indent=2),encoding='utf8');print(json.dumps(report),flush=True)
     finally:
         if url:

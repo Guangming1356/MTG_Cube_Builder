@@ -74,7 +74,11 @@ def test_current_frozen_candidate_conserves_hard_constraints(cards):
     b=json.loads((folder/'base_cube.json').read_text(encoding='utf-8'))
     n=json.loads((folder/'candidate.json').read_text(encoding='utf-8'))
     assert len(n['cards'])==len({r['name'] for r in n['cards']})==600
-    assert audit(cards,n['cards'],BuildSpec.from_dict(n['spec']),strict=True)['hard_errors']==0
+    # This immutable pre-0.2.7 experiment predates the optional C-cost filter.
+    # Audit its original constraints; new default-generation tests cover the
+    # new preference. Do not rewrite saved user evidence to retrofit defaults.
+    historical=dict(n['spec']);historical.setdefault('allow_colorless_costs',True)
+    assert audit(cards,n['cards'],BuildSpec.from_dict(historical),strict=True)['hard_errors']==0
     for a,z in zip(b['cards'],n['cards']):
         old,new=cards.cards[a['name']],cards.cards[z['name']]
         assert old['identity']==new['identity'] and old['bucket']==new['bucket']

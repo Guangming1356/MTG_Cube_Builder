@@ -342,7 +342,7 @@ def plan_schema():
         "curve":{"type":["object","null"],"properties":{k:{"type":"integer","minimum":0} for k in ['1','2','3','4','5+']},"required":['1','2','3','4','5+'],"additionalProperties":False},
         "pair_themes":{"type":"object","properties":{g:{"type":"array","items":{"type":"string","enum":list(THEME_NAMES)}} for g in GUILDS},"required":GUILDS,"additionalProperties":False},
         "explanation":{"type":"string"},"unapplied_requests":{"type":"array","items":{"type":"string"}}}
-    for k in ['avoid_tribal','exclude_game_changers','allow_fast_mana','allow_infinite_combos','allow_mass_land_destruction','discard_after_pass']:fields[k]={"type":"boolean"}
+    for k in ['avoid_tribal','exclude_game_changers','allow_fast_mana','allow_infinite_combos','allow_mass_land_destruction','allow_colorless_costs','discard_after_pass']:fields[k]={"type":"boolean"}
     for k in ['exclude','pins','sets']:fields[k]={"type":"array","items":{"type":"string"}}
     for k in ['players','rounds','pack_size','pick_count']:fields[k]={"type":"integer"}
     return {"type":"object","properties":fields,"required":list(fields),"additionalProperties":False}
@@ -353,6 +353,7 @@ def plan(message,base_spec,knowledge,client=None):
     prompt="""把用户 Cube 需求转换成完整的构筑参数，所有字段均须返回。只输出符合 Schema 的 JSON。
 同一玩法只修改需求涉及的字段，其余沿用 current。切换玩法时只重置玩法相关默认值：size、commanders、lands、legality_format、bracket、cube_gc_limit 和轮抓字段；预算、年份、系列、排除牌、锁定牌、互动/扫场/终结及曲线偏好仍沿用 current，除非用户另有要求。不要把 Commander 的槽位、赛制或轮抓规则带入传统 Cube。
 新增可执行偏好：interaction_min_ratio 是主牌最低互动比例，通常为 .18，要求多一些互动可设 .24、很多可设 .28，范围 .10–.30；wipe_min_ratio 是最低扫场比例，默认 .035，更多可设 .05；finisher_min_ratio 是最低终结比例，默认 .085，更多可设 .11。
+allow_colorless_costs 默认为 false：排除施放或使用主要异能需要支付 {C} 的牌，普通通用费用神器和产生无色法术力的牌仍可使用。无色不单独设置指挥官色组。只有用户明确要求时才开启该选项。
 curve_profile 为 balanced（默认）、low（低费行动更多，仍保留大咒语）、late（更多后期咒语）。更改曲线风格时 curve 设 null；明确要求精确曲线时才填写 curve，五档之和必须等于 size-commanders-lands。张数或槽位变化时，原有精确曲线须同比调整至新主牌数，并在解释中说明；互相冲突的精确要求写入 unapplied_requests。不要把比例填成百分整数。
 max_card_price 是单卡美元价格过滤，min_year/max_year 是发行年份过滤，sets 为系列代码；不受支持的筛选或偏好写入 unapplied_requests，不能在 explanation 中声称已经落实。
 不要生成整份牌表。保持各项安全偏好；Bracket 1–3 不允许已知无限组合、大规模毁地、额外回合。普通 Cube 的 commanders 为 0、bracket/cube_gc_limit 为 null。

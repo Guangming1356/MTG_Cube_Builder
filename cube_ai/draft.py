@@ -5,7 +5,7 @@ import re
 from collections import Counter
 from functools import lru_cache
 from .config import GUILDS
-from .brackets import DeckRules, deck_report
+from .brackets import DeckRules, card_reasons, deck_report
 
 @lru_cache(maxsize=8192)
 def _mana_requirements(cost):
@@ -31,7 +31,7 @@ def affordable(cost, lands, *, max_sources=None):
                    if not used&(1<<j) and colors & required[index])
     return assign(0,0)
 
-def opening_test(catalog,spells,land_names,identity,deck_size,rng,hands=40):
+def opening_test(catalog,spells,land_names,identity,deck_size,rng,hands=40,*,commander=None):
     pips=Counter()
     for n in spells:
         for p in re.findall(r"\{([WUBRG])\}",catalog.cards[n]["mana_cost"]):pips[p]+=1
@@ -41,6 +41,12 @@ def opening_test(catalog,spells,land_names,identity,deck_size,rng,hands=40):
     for _ in range(max(0,missing)):
         color=max(colors,key=lambda c:(pips[c]+1)/(allocated[c]+1))
         allocated[color]+=1;basics.append({"kind":"land","fixing":[color],"name":"基本地 "+color})
+    if commander:
+        from .mana import commander_basic_sources
+        repaired=commander_basic_sources(catalog,spells,land_names,allocated,commander)
+        if repaired!=dict(allocated):
+            allocated=repaired
+            basics=[{'kind':'land','fixing':[color],'name':'基本地 '+color} for color,n in allocated.items() for _ in range(n)]
     deck=[catalog.cards[n] for n in spells+land_names]+basics
     ready=Counter();landcounts=[]
     for _ in range(hands):
@@ -114,7 +120,8 @@ def draft_pod(catalog,rows,spec,rng,preferred_guilds=None,readiness_hands=40,_pa
                     have_commanders[seat]|=bool(selected['commander'] and selected['identity']==g)
     for seat,pool in enumerate(pools):
         g=preferred[seat]
-        commands=[catalog.cards[r["name"]] for r in pool if catalog.cards[r["name"]]["commander"]] if spec.mode=="commander" else [None]
+        commands=[catalog.cards[r["name"]] for r in pool if catalog.cards[r["name"]]["commander"] and catalog.cards[r["name"]]['identity']!='C'] if spec.mode=="commander" else [None]
+        if spec.mode=='commander':commands=[c for c in commands if not card_reasons(c,spec)]
         power=rules.power
         if power:commands=[c for c in commands if c['quality']<=power['commander_ceiling']]
         target=60 if spec.mode=="commander" else 40
@@ -144,7 +151,7 @@ def draft_pod(catalog,rows,spec,rng,preferred_guilds=None,readiness_hands=40,_pa
                and set(catalog.cards[r["name"]]["fixing"]) & set(identity)]
         lands=rules.select(([commander['name']] if commander else [])+spells,lands)[:land_target]
         # Commander is in the command zone, excluded from random opening hands.
-        ready=opening_test(catalog,spells,lands,identity,target-int(bool(commander)),rng,hands=readiness_hands)
+        ready=opening_test(catalog,spells,lands,identity,target-int(bool(commander)),rng,hands=readiness_hands,commander=commander and commander['name'])
         decks.append(dict(seat=seat,guild=g,identity=identity,buildable=True,ready=ready,
             commander=commander and commander["name"],spells=spells,lands=lands,
             basics=ready["basics"],land_count=land_target,spell_count=len(spells),

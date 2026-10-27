@@ -72,7 +72,7 @@ def revise(catalog,deck,spec,variant='balanced'):
     selected.sort(key=lambda name:(-cards[name]['quality'],cards[name]['mv'],name))
     result=dict(deck,spells=selected)
     target=60 if spec.mode=='commander' else 40
-    result['ready']=opening_test(catalog,selected,deck['lands'],deck['identity'],target-int(bool(commander)),random.Random(0),hands=0)
+    result['ready']=opening_test(catalog,selected,deck['lands'],deck['identity'],target-int(bool(commander)),random.Random(0),hands=0,commander=commander)
     result['basics']=result['ready']['basics'];result['design']=deck_design_report(catalog,result)
     result['bracket']=deck_report(catalog,result,spec)
     result['research_changes']=changes

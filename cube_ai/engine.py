@@ -256,6 +256,7 @@ def audit(catalog,rows,spec,unresolved=None,strict=False):
         errors=exclusion_reasons(c,spec)
         if errors:issue("error","excluded",c["name"]+": "+"; ".join(errors),[c["name"]])
         if r["role"]=="Commander" and not c["commander"]:issue("error","commander",c["name"]+" 不能作为指挥官",[c["name"]])
+        if r["role"]=="Commander" and c["identity"]=='C':issue('error','colorless_commander',c['name']+'：当前轮抓不设置独立无色指挥官色组',[c['name']])
         if r["role"]=="Land" and c["kind"]!="land":issue("error","land_role",c["name"]+" 并非正面地牌",[c["name"]])
         if r["role"]!="Land" and c["kind"]=="land":issue("error","land_role",c["name"]+" 正面地牌应在地槽位",[c["name"]])
         if r["role"]=="Main":main.append(c);colors[c["identity"]]+=1

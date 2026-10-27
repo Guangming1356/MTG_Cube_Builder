@@ -25,13 +25,13 @@ from .optimize import game_trace,schedule
 from .task_control import atomic_json
 
 STUDIES=ROOT/'private/deck-studies'
-VERSION='deck-policy-study-4'
+VERSION='deck-policy-study-5'
 NORMAL={'win','draw'}
 
 
 def snapshot_sources(catalog,rows,out):
     """Preserve the code and trusted card features used before native outcomes."""
-    names=['deck_study','deck_building','optimize','draft','forge','forge_worker','game_queue',
+    names=['deck_study','deck_building','mana','optimize','draft','forge','forge_worker','game_queue',
            'task_control','config','brackets','design','catalog','features','sim_cache',
            'tuning','experiment','resources','acceleration','engine','forge_card_names','forge_compat']
     folder=out/'source';folder.mkdir()
