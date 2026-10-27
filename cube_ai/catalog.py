@@ -192,7 +192,7 @@ class Catalog:
             result.append({"name": canonical, "role": role})
         return result, errors
 
-def exclusion_reasons(c, spec):
+def exclusion_reasons(c, spec, *, power=None):
     from .brackets import card_reasons, is_gc
     reasons = []
     if c["legalities"].get(spec.legality_format) != "legal": reasons.append("该赛制不合法/受限")
@@ -200,14 +200,14 @@ def exclusion_reasons(c, spec):
     if c.get('front_unusable'):reasons.append('合体结果面不能作为独立牌张/指挥官')
     if c.get('extra_deck'):reasons.append('需要额外 Attraction/贴纸/机关组件；当前环境未配置')
     if "Basic Land" in c["type"]: reasons.append("基本地另行提供")
-    if (is_gc(c) if spec.bracket is not None else c["game_changer"]) and spec.exclude_game_changers: reasons.append("Game Changer")
-    reasons.extend(card_reasons(c,spec))
+    if spec.exclude_game_changers and (is_gc(c) if spec.bracket is not None else c["game_changer"]): reasons.append("Game Changer")
+    reasons.extend(card_reasons(c,spec,power=power))
     if c["tribal"] and spec.avoid_tribal: reasons.append("部族依赖: " + ", ".join(c["tribal"]))
     if c.get('narrow_subtypes') and spec.avoid_tribal:reasons.append('窄副类别依赖: '+', '.join(c['narrow_subtypes']))
     if c.get('named_dependency') and spec.avoid_tribal:reasons.append('指定牌名配合依赖；默认排除窄组件')
     if c["fast_mana"] and not spec.allow_fast_mana: reasons.append("爆发快法术力")
     if c["mld"] and not spec.allow_mass_land_destruction: reasons.append("大规模炸地/法术力封锁")
-    if c["name"].casefold() in {n.strip().casefold() for n in spec.exclude}: reasons.append("用户排除")
+    if spec.exclude and c["name"].casefold() in {n.strip().casefold() for n in spec.exclude}: reasons.append("用户排除")
     if spec.max_card_price is not None and (c["price"] is None or c["price"] > spec.max_card_price): reasons.append("价格未知/超过单卡上限")
     if spec.sets and c["set"] not in spec.sets: reasons.append("不在指定快照印张系列")
     year = int(c["released"][:4] or 0)

@@ -25,7 +25,8 @@ def requires_colorless_mana(card):
     This is a construction preference, not an Oracle rules interpreter. Hybrid
     {C/W} can be paid with white and is deliberately not treated as mandatory C.
     """
-    return _requires_colorless(card.get('mana_cost',''),card.get('text',''))
+    cost=card.get('mana_cost','');text=card.get('text','')
+    return '{C}' in cost or '{C}' in text and _requires_colorless(cost,text)
 
 
 def commander_basic_sources(catalog,spells,land_names,basics,commander=None):

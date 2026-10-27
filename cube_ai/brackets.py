@@ -4,6 +4,8 @@ This module never assigns a certified official bracket from card scores or wins.
 """
 import re
 from datetime import date
+from .mana import requires_colorless_mana
+from .release_dates import paper_witness
 
 VERSION = "commander-brackets-2026-02-09/cube-policy-1"
 REVIEWED = "2026-10-11"
@@ -70,8 +72,6 @@ def extra_turn(card):
     return bool(re.search(r'\b(?:take|takes) (?:an?|one|two|three|\d+|X) extra turns?\b',card.get('text',''),re.I))
 
 def card_reasons(card,spec,*,power=None):
-    from .mana import requires_colorless_mana
-    from .release_dates import paper_witness
     p=power or profile(spec)
     reasons=[]
     if not spec.allow_colorless_costs and requires_colorless_mana(card):reasons.append('项目偏好：排除需要支付无色法术力 {C} 的牌')
@@ -79,13 +79,13 @@ def card_reasons(card,spec,*,power=None):
     if not p:
         if spec.allow_extra_turns is False and extra_turn(card):reasons.append('项目偏好：排除额外回合')
         return reasons
-    if is_gc(card) and (p['deck_gc']==0 or p['gc_limit']==0):reasons.append('该 Bracket/数量预算排除 Game Changers')
+    if (p['deck_gc']==0 or p['gc_limit']==0) and is_gc(card):reasons.append('该 Bracket/数量预算排除 Game Changers')
     if card['kind']!='land' and card['quality']>p['ceiling']+1e-6:reasons.append('超过该档项目单卡评价上限')
-    if extra_turn(card) and not spec.allow_extra_turns:reasons.append('项目偏好：排除额外回合')
+    if not spec.allow_extra_turns and extra_turn(card):reasons.append('项目偏好：排除额外回合')
     return reasons
 
-def score_adjustment(card,spec,role='Main'):
-    p=profile(spec)
+def score_adjustment(card,spec,role='Main',*,power=None):
+    p=power or profile(spec)
     if not p or card['kind']=='land':return 0
     target=p['commander_target'] if role=='Commander' else p['target']
     # Turn the existing monotonic quality objective into a target-band objective.

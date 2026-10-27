@@ -23,14 +23,19 @@ def reference_prior(card, spec):
     matches=[m['id'] for m in studies()['membership'].get(card['name'],[]) if m['group']==group]
     return min(.08,.04*len(matches)), matches
 
-def design_bonus(card,spec):
+def applicable_themes(identity,spec):
+    available=set()
+    for g in GUILDS:
+        if identity=='C' or set(identity)<=set(g):available.update(spec.pair_themes.get(g,[]))
+    return available
+
+
+def design_bonus(card,spec,*,available=None):
     ref,_=reference_prior(card,spec)
     # Require both an independent role and different applicable themes; count themes,
     # not guilds (one generic cantrip does not become a bridge just by fitting ten guilds).
     themes=set(card.get('enablers',[])+card.get('payoffs',[])) - {'draw','control'}
-    available=set()
-    for g in GUILDS:
-        if card['identity']=='C' or set(card['identity'])<=set(g):available.update(spec.pair_themes.get(g,[]))
+    if available is None:available=applicable_themes(card['identity'],spec)
     independent=card['quality']>=3 and any(card.get(k) for k in ['creature','interaction','draw','ramp','finisher'])
     bridge=.02*min(2,max(0,len(themes & available)-1)) if independent else 0
     return ref+bridge

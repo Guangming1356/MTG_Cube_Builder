@@ -16,7 +16,7 @@ from .catalog import exclusion_reasons
 from .config import GUILDS, TRIPLES, RUNS, WORKSPACE
 from .features import COMBOS, VERSION
 from .feedback import FeedbackStore
-from .design import VERSION as DESIGN_VERSION, design_bonus, cube_design_report, studies
+from .design import VERSION as DESIGN_VERSION, design_bonus, applicable_themes, cube_design_report, studies
 from .brackets import profile, is_gc, score_adjustment, cube_report, VERSION as BRACKET_VERSION
 
 def apportion(total, weights):
@@ -96,20 +96,21 @@ def build(catalog, spec, previous=None, progress=lambda x:None, store=None):
         n=catalog.resolve(name)
         if not n: raise ValueError(f"锁定牌不存在于牌库: {name}")
         if n in pins: raise ValueError(f"重复锁定牌: {n}")
-        reasons=exclusion_reasons(catalog.cards[n],spec)
+        reasons=exclusion_reasons(catalog.cards[n],spec,power=power)
         if reasons: raise ValueError(f"锁定牌 {n} 与约束冲突: {'; '.join(reasons)}")
         pins.append(n)
     if not spec.allow_infinite_combos and completes_combo(pins):
         raise ValueError("锁定牌包含已知无限组合")
     if power and sum(is_gc(catalog.cards[n]) for n in pins)>power['gc_limit']:
         raise ValueError("锁定牌超过 Cube Game Changer 数量预算")
-    eligible=[c for c in catalog.cards.values() if not exclusion_reasons(c,spec)]
+    eligible=[c for c in catalog.cards.values() if not exclusion_reasons(c,spec,power=power)]
+    design_themes={identity:applicable_themes(identity,spec) for identity in {c['identity'] for c in eligible}}
     preferred={r["name"] for r in previous or []}
     def score(c, role="Main"):
         themes=spec.pair_themes.get(c["identity"], [])
         synergy=.1*min(3,theme_fit(c,themes))
         bonus=2.0 if c["name"] in preferred else 0
-        return c["quality"] + synergy + learned(c) + design_bonus(c,spec) + bonus + score_adjustment(c,spec,role)
+        return c["quality"] + synergy + learned(c) + design_bonus(c,spec,available=design_themes[c["identity"]]) + bonus + score_adjustment(c,spec,role,power=power)
 
     selected=[];seen=set(); remaining_pins=set(pins)
     def gc_room(c,chosen=()):
@@ -253,7 +254,7 @@ def audit(catalog,rows,spec,unresolved=None,strict=False):
         c=catalog.cards.get(r["name"])
         if c is None:issue("error","unknown",r["name"]);continue
         cards.append(c);roles[r["role"]]+=1
-        errors=exclusion_reasons(c,spec)
+        errors=exclusion_reasons(c,spec,power=power)
         if errors:issue("error","excluded",c["name"]+": "+"; ".join(errors),[c["name"]])
         if r["role"]=="Commander" and not c["commander"]:issue("error","commander",c["name"]+" 不能作为指挥官",[c["name"]])
         if r["role"]=="Commander" and c["identity"]=='C':issue('error','colorless_commander',c['name']+'：当前轮抓不设置独立无色指挥官色组',[c['name']])
