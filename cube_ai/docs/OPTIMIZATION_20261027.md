@@ -76,3 +76,48 @@
 ### Artifacts
 
 本地私有研究目录新增 empty-copy-trial、empty-copy-native（协议、源码快照、原始日志、摘要及独立审计）、reference-regression-before.xml、full-tests-026.xml、test-source-freeze-026.json 及 ui-reference-026-v2/receipt.json。公开回归位于 test_calibration_reference.py、test_native_event_comparison.py，公开便携验收位于 verify_portable_release.py。研究日志、实验类和个人信息不随发布分发。
+
+## 0.2.8：不要把未来再版日期当作卡牌首次发行日期
+
+### Problem
+
+旧筛选将快照印张的 released_at 与当天比较，导致已有纸质版的旧牌因未来再版被排除。例如 Mind Stone 的快照采用 2026-11-09 的 mbc 印张，但 Scryfall 记录存在 1997-06-09 的 Weatherlight 纸质印张。需要恢复已有牌的正常候选资格，同时继续拦截没有已发售依据的未来牌。
+
+### Inputs
+
+本地 31,070 张快照中发现 30 张 Commander-legal 牌采用未来印张日期。逐一查询官方 api.scryfall.com 的相同 Oracle ID 印张列表，按发行日期升序；核对英文牌名、Oracle ID、纸质属性、非数字/非超大牌及过去日期，保存全部原始响应与校验值。所有 30 张均找到过去纸质印张。这里需要一个已发行印张作为依据，不声称计算了完整发行史或自动更新合法性。
+
+例：[Mind Stone 的纸质印张记录](https://api.scryfall.com/cards/162e81d3-6cd4-4cb8-8ed8-cfbd8d34ca71)。Scryfall 网页文档曾返回 403；使用其公开 API 的正常 JSON 请求成功，没有关闭安全验证或使用第三方转发。发行商的 [2022 年复刻牌表](https://media.wizards.com/2022/downloads/card-sets/BRO_Cardlist_11102022.pdf) 也列有 Mind Stone。
+
+### Checks performed
+
+- 修复前，Mind Stone、Chaos Warp、Fellwar Stone 的新回归均复现未来日期误排，三个失败保留。
+- 新旧筛选逐项比较七种设置、共 217,490 个牌张/设置组合：变化仅为五个 Bracket 档位各 30 个日期原因被移除，其他排除原因原样保持。默认每档 29 张恢复完整候选资格；Perch Protection 仍因额外回合偏好被排除。
+- 固定 15 套、每档三种种子的新 Cube 均通过 600 张严格审计；300 桌、900 副轮抓牌组均可组为 60 张，颜色身份和 Bracket 检查通过，保持默认排除 {C} 支付需求和独立无色指挥官的偏好。
+- 明确锁定 Mind Stone 与 Chaos Warp 另建一套 600 张 Cube，严格审计通过；30 张记录的牌名均能在本地 Forge 脚本索引中解析。索引解析不等于每张都经过完整对局。
+- 两套预定新牌表各取第一桌、每桌三局换座，共 6 局原生 Forge 诊断全部正常、无缓存或回退。Mind Stone 在其中两局实际施放。第一次尝试因完整堆/原生余量/系统预留不足，在零局时停止，保留记录；回归进程结束且重新测得内存足够后，以相同六个输入和相同预算运行，没有替换失败对局。
+- 独立复核六局原始日志、结果、种子、座位、牌组及源码摘要。完整源码回归 553 项通过。缺失/篡改证据、牌名或 Oracle ID 不匹配、数字版、未来日期和禁牌偏好均有检查；第一轮定向回归因历史断言文本/旧自定义例外不符合新统一检查而失败，原报告保留。
+
+### Findings
+
+问题出在印张日期与牌张可用性的混淆，并非强度评分太低。恢复的牌仍须通过赛制合法性、禁牌、快法术力、{C}、系列、年份、价格和强度检查。原本的快照印张字段没有改写为旧印张，目录签名、Oracle 角色标签和模型特征保持不变。
+
+### Decision
+
+**go：发布 0.2.8。** 新增可离线核验的 paper_release_witnesses.json，按精确牌名与 Oracle ID 绑定已发行纸质印张，固定校验值。文件丢失、修改或记录不匹配时不能据此放行；打包时缺失或修改直接失败。构筑过程不联网，合法性继续使用本地快照，不用发行依据覆盖禁牌和偏好。
+
+未来日期没有可信旧印张依据时，所有构筑模式均拦截，包含旧自定义模式；修复了该模式原先跳过日期检查的例外。轮抓缓存签名和组牌实验源码快照包含证据模块及数据，避免使用旧筛选结果。组牌实验记录版本为 deck-policy-study-6。
+
+便携包加入固定发行依据和新运行时检查，并补带 0.2.7 的无色费用报告。维护工具 `python -m cube_ai.tools.verify_paper_releases --out 全新目录` 只采集公开印张证据，不自动改写应用数据或校验值。
+
+### Risks
+
+这 30 条是对当前异常印张的核实，不是全牌库完整发行史。今后快照出现新的未来再版，需要用同一流程补充核实。系列/年份仍按快照印张字段筛选，没有自动切换印张；价格也继续来自原快照。六局属于两桌诊断，不证明胜率、各色组强度均衡或人类娱乐性改善；没有把它们加入训练语料。
+
+### Next actions
+
+继续按真实轮抓和对局数据检查行动密度、终结和色组差异；只对有依据的候选调整默认策略。发行依据更新保持独立、可审计，不混入评分模型训练。
+
+### Artifacts
+
+公开：release_dates.py、data/paper_release_witnesses.json、tools/verify_paper_releases.py 和 tests/test_release_dates.py。私有：release-date-028 下的原始 Scryfall 响应、冻结协议、structure、pinned-reprints-cube.json、native（零局资源停止）、native-v2（六局及独立审计）、regression-before.xml，以及 full-tests-028.xml、test-source-freeze-028.json。原始 API 响应和个人配置不随便携包分发。

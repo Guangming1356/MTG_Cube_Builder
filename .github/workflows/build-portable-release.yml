@@ -9,7 +9,7 @@ on:
       base_tag:
         description: "Verified portable release to reuse runtimes from"
         required: true
-        default: v2026.10.27
+        default: v2026.10.27-r2
         type: string
 permissions:
   contents: write

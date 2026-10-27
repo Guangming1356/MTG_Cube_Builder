@@ -36,10 +36,10 @@ def test_gc_check_counts_commander_and_land_and_ignores_snapshot_flag():
     c=dict(catalog.cards['Farewell'],game_changer=False)
     assert exclusion_reasons(c,BuildSpec.from_dict({'bracket':2,'exclude_game_changers':False}))
 
-def test_new_profiles_exclude_unreleased_and_extra_turns_without_breaking_legacy():
+def test_future_prints_without_paper_evidence_and_extra_turns_are_checked():
     catalog=Catalog();c=dict(catalog.cards['Lightning Bolt'],released='2099-01-01')
-    assert '快照印张尚未发行' in exclusion_reasons(c,BuildSpec.from_dict({'bracket':3}))
-    assert '快照印张尚未发行' not in exclusion_reasons(c,BuildSpec())
+    assert '尚未核实已发行的纸质印张' in exclusion_reasons(c,BuildSpec.from_dict({'bracket':3}))
+    assert '尚未核实已发行的纸质印张' in exclusion_reasons(c,BuildSpec())
     assert exclusion_reasons(catalog.cards['Time Warp'],BuildSpec.from_dict({'bracket':3}))
     assert not exclusion_reasons(catalog.cards['Time Warp'],BuildSpec.from_dict({'bracket':4,'allow_extra_turns':True}))
 

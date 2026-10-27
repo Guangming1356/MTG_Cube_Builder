@@ -18,7 +18,7 @@ import zipfile
 
 REPOSITORY='Guangming1356/MTG_Cube_Builder'
 DOCS={'BRACKETS.md','AI_CONNECTIONS.md','DEBUG_REPORT.md','PARALLEL_EVALUATION.md',
-      'SPEED_REPORT.md','SPEED_SEARCH_REPORT.md','DYNAMIC_RESOURCES.md','TASK_CONTROL.md','DECK_POLICY_STUDY.md','NATIVE_DIAGNOSTICS.md','FORGE_COMPATIBILITY.md','ROLE_ONTOLOGY_STUDY.md','CUBE_FAMILY_VALIDATION.md'}
+      'SPEED_REPORT.md','SPEED_SEARCH_REPORT.md','DYNAMIC_RESOURCES.md','TASK_CONTROL.md','DECK_POLICY_STUDY.md','NATIVE_DIAGNOSTICS.md','FORGE_COMPATIBILITY.md','ROLE_ONTOLOGY_STUDY.md','CUBE_FAMILY_VALIDATION.md','OPTIMIZATION_20261027_COLOR_POLICY.md'}
 SECRET=re.compile(rb'(?:sk-(?:proj-|ant-)?[A-Za-z0-9_-]{25,}|gh[pousr]_[A-Za-z0-9]{25,})')
 LOCAL_PROFILE=re.compile(rb'[A-Za-z]:[/\\]+Users[/\\]+[^/\\\s"\']+',re.I)
 PRIVATE_NAMES={'.env','.git','__pycache__','.pytest_cache','preferences.sqlite','catalog.json','ai-settings.bin','entrance.json','launcher.log','forge.profile.properties'}
@@ -59,6 +59,9 @@ def overlay_files(source):
     if (app/'forge_card_names.py').is_file():
         from cube_ai.forge_card_names import bundle_alias_asset
         files.update(bundle_alias_asset(app/'data/forge_name_aliases.json'))
+    if (app/'release_dates.py').is_file():
+        from cube_ai.release_dates import bundle_asset
+        files.update(bundle_asset(app/'data/paper_release_witnesses.json'))
     public_docs=DOCS|{p.name for p in (app/'docs').glob('OPTIMIZATION_*.md') if re.fullmatch(r'OPTIMIZATION_20\d{6}\.md',p.name)}
     for name in public_docs:
         path=app/'docs'/name

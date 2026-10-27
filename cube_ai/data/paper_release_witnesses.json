@@ -1,0 +1,246 @@
+{
+  "version": "paper-release-witness-1",
+  "reviewed": "2026-10-27",
+  "cards": [
+    {
+      "name": "Agate Instigator",
+      "oracle_id": "e1a2bd31-b800-47cd-8866-1b849a601b09",
+      "print_id": "163c093e-9b6f-497d-a167-cfee1dbc5106",
+      "released_at": "2024-08-02",
+      "set": "blc",
+      "source": "https://api.scryfall.com/cards/163c093e-9b6f-497d-a167-cfee1dbc5106"
+    },
+    {
+      "name": "Barrowgoyf",
+      "oracle_id": "74c0164c-130f-4572-9066-626c77f6e2ff",
+      "print_id": "cea3b218-0e6e-443a-84f7-380f1021e8e1",
+      "released_at": "2024-06-14",
+      "set": "m3c",
+      "source": "https://api.scryfall.com/cards/cea3b218-0e6e-443a-84f7-380f1021e8e1"
+    },
+    {
+      "name": "Chainer's Edict",
+      "oracle_id": "7975cb9d-d37e-44f8-9614-86d2ad453c35",
+      "print_id": "014af391-3b4a-4aab-a3e9-f60e61016985",
+      "released_at": "2002-02-04",
+      "set": "tor",
+      "source": "https://api.scryfall.com/cards/014af391-3b4a-4aab-a3e9-f60e61016985"
+    },
+    {
+      "name": "Chaos Warp",
+      "oracle_id": "07a0cba9-8768-4fd9-a3d5-b0f83b4bf8e8",
+      "print_id": "042431bc-0b21-4920-802f-6dd02e4c8721",
+      "released_at": "2011-06-17",
+      "set": "cmd",
+      "source": "https://api.scryfall.com/cards/042431bc-0b21-4920-802f-6dd02e4c8721"
+    },
+    {
+      "name": "Court of Embereth",
+      "oracle_id": "87a82441-9dfb-49bd-8b9e-eaab2c552843",
+      "print_id": "327cea0d-6328-4194-91de-8c6c937406ef",
+      "released_at": "2023-09-08",
+      "set": "woc",
+      "source": "https://api.scryfall.com/cards/327cea0d-6328-4194-91de-8c6c937406ef"
+    },
+    {
+      "name": "Court of Garenbrig",
+      "oracle_id": "1f3f6336-6f99-4181-be3c-1814f7b8ef36",
+      "print_id": "9b13b7cb-7778-40a2-afb1-035f0531cded",
+      "released_at": "2023-09-08",
+      "set": "woc",
+      "source": "https://api.scryfall.com/cards/9b13b7cb-7778-40a2-afb1-035f0531cded"
+    },
+    {
+      "name": "Court of Vantress",
+      "oracle_id": "ad82b43b-b15e-48f4-86ab-5ee2c448cf14",
+      "print_id": "0a4cb69a-4ca6-43ac-9b8a-78e968c19293",
+      "released_at": "2023-09-08",
+      "set": "woc",
+      "source": "https://api.scryfall.com/cards/0a4cb69a-4ca6-43ac-9b8a-78e968c19293"
+    },
+    {
+      "name": "Debt to the Deathless",
+      "oracle_id": "6130f22d-7901-4f9f-b777-27bb0dacc063",
+      "print_id": "610e5a91-857b-4121-8b75-dbbea27aa0aa",
+      "released_at": "2013-05-03",
+      "set": "dgm",
+      "source": "https://api.scryfall.com/cards/610e5a91-857b-4121-8b75-dbbea27aa0aa"
+    },
+    {
+      "name": "Devouring Light",
+      "oracle_id": "5334dc24-040e-4094-80f4-8d1b9de01230",
+      "print_id": "53fcc46c-682c-4482-8422-811b951d96cf",
+      "released_at": "2005-10-07",
+      "set": "rav",
+      "source": "https://api.scryfall.com/cards/53fcc46c-682c-4482-8422-811b951d96cf"
+    },
+    {
+      "name": "Dreadmalkin",
+      "oracle_id": "118cf682-a532-42e9-8d91-6ce6f0d31ace",
+      "print_id": "7327cfac-a4a4-445e-9d04-51c1ca142140",
+      "released_at": "2019-05-03",
+      "set": "war",
+      "source": "https://api.scryfall.com/cards/7327cfac-a4a4-445e-9d04-51c1ca142140"
+    },
+    {
+      "name": "Dust to Dust",
+      "oracle_id": "b17eb586-0272-4d02-be75-de06ea044b6f",
+      "print_id": "ade075fd-73ee-4d12-a2da-48e5938043af",
+      "released_at": "1994-08-01",
+      "set": "drk",
+      "source": "https://api.scryfall.com/cards/ade075fd-73ee-4d12-a2da-48e5938043af"
+    },
+    {
+      "name": "Empty the Warrens",
+      "oracle_id": "3a59c882-8bb8-49ba-862f-125020dd5bec",
+      "print_id": "952bb27c-c58a-478a-b637-eb4f7e1e0ab4",
+      "released_at": "2006-10-06",
+      "set": "tsp",
+      "source": "https://api.scryfall.com/cards/952bb27c-c58a-478a-b637-eb4f7e1e0ab4"
+    },
+    {
+      "name": "Exotic Orchard",
+      "oracle_id": "27b047e3-0d41-45e2-98e9-9391d7923a1e",
+      "print_id": "6aae6480-4e71-4d94-a648-f80d3849d792",
+      "released_at": "2009-02-06",
+      "set": "con",
+      "source": "https://api.scryfall.com/cards/6aae6480-4e71-4d94-a648-f80d3849d792"
+    },
+    {
+      "name": "Fa'adiyah Seer",
+      "oracle_id": "8ba2f559-f9bd-48ef-9fef-6dffe768f4ed",
+      "print_id": "6a9985e8-535d-4815-8a58-a98c3edb68d4",
+      "released_at": "2007-02-02",
+      "set": "plc",
+      "source": "https://api.scryfall.com/cards/6a9985e8-535d-4815-8a58-a98c3edb68d4"
+    },
+    {
+      "name": "Fellwar Stone",
+      "oracle_id": "95560508-7ac9-4be9-8a3f-3c7d5b52807b",
+      "print_id": "dc47e322-f8b8-4685-b035-fda0cc433e6b",
+      "released_at": "1994-08-01",
+      "set": "drk",
+      "source": "https://api.scryfall.com/cards/dc47e322-f8b8-4685-b035-fda0cc433e6b"
+    },
+    {
+      "name": "Invisible Woman",
+      "oracle_id": "085016ee-4429-453f-b7f3-d61065f1214e",
+      "print_id": "640ebf2f-5687-42d4-97e5-85e2fefa89a9",
+      "released_at": "2026-06-26",
+      "set": "msc",
+      "source": "https://api.scryfall.com/cards/640ebf2f-5687-42d4-97e5-85e2fefa89a9"
+    },
+    {
+      "name": "Jeweled Amulet",
+      "oracle_id": "e2ad4b4d-d5fe-4a64-9b40-296c8fc8bcce",
+      "print_id": "34f7bad2-d28f-42d2-9246-fe3545ef49a7",
+      "released_at": "1995-06-03",
+      "set": "ice",
+      "source": "https://api.scryfall.com/cards/34f7bad2-d28f-42d2-9246-fe3545ef49a7"
+    },
+    {
+      "name": "Maeve, Insidious Singer",
+      "oracle_id": "2494daad-c81d-4a80-ba5d-e7011af8de46",
+      "print_id": "2743136b-3610-4c43-8ed7-a00b1f58a874",
+      "released_at": "2022-10-14",
+      "set": "gn3",
+      "source": "https://api.scryfall.com/cards/2743136b-3610-4c43-8ed7-a00b1f58a874"
+    },
+    {
+      "name": "Mind Stone",
+      "oracle_id": "c97361b5-af16-4a7b-af85-a429dbaf4ad2",
+      "print_id": "162e81d3-6cd4-4cb8-8ed8-cfbd8d34ca71",
+      "released_at": "1997-06-09",
+      "set": "wth",
+      "source": "https://api.scryfall.com/cards/162e81d3-6cd4-4cb8-8ed8-cfbd8d34ca71"
+    },
+    {
+      "name": "Misleading Signpost",
+      "oracle_id": "eaffdf95-8e20-408d-99fa-3adc9e19523d",
+      "print_id": "958b247d-83d3-4dd6-9a1a-654ba3adf078",
+      "released_at": "2023-09-08",
+      "set": "woc",
+      "source": "https://api.scryfall.com/cards/958b247d-83d3-4dd6-9a1a-654ba3adf078"
+    },
+    {
+      "name": "Mr. Foxglove",
+      "oracle_id": "c2008ba9-00df-4607-ba0c-189af52033eb",
+      "print_id": "8504e660-1a15-472d-8e5c-dee0c1d26c8f",
+      "released_at": "2024-08-02",
+      "set": "blc",
+      "source": "https://api.scryfall.com/cards/8504e660-1a15-472d-8e5c-dee0c1d26c8f"
+    },
+    {
+      "name": "Otharri, Suns' Glory",
+      "oracle_id": "b081352b-d17b-4031-bbcc-c5c02cbfa6b6",
+      "print_id": "348e0927-1d8f-4723-879d-f7e95ac60c27",
+      "released_at": "2023-02-10",
+      "set": "onc",
+      "source": "https://api.scryfall.com/cards/348e0927-1d8f-4723-879d-f7e95ac60c27"
+    },
+    {
+      "name": "Path of Ancestry",
+      "oracle_id": "b473e293-59e3-4e04-acf2-622604aeb25f",
+      "print_id": "70e70720-f0b9-4ad7-9366-927d6798d31e",
+      "released_at": "2017-08-25",
+      "set": "c17",
+      "source": "https://api.scryfall.com/cards/70e70720-f0b9-4ad7-9366-927d6798d31e"
+    },
+    {
+      "name": "Perch Protection",
+      "oracle_id": "295fe873-ecb5-4d5e-a73c-3af6c478afc5",
+      "print_id": "1f81d6ea-9a76-43b9-b030-d40c5cfbeefe",
+      "released_at": "2024-08-02",
+      "set": "blc",
+      "source": "https://api.scryfall.com/cards/1f81d6ea-9a76-43b9-b030-d40c5cfbeefe"
+    },
+    {
+      "name": "Run Amok",
+      "oracle_id": "d463de75-8d3c-4077-a2cc-c304a63acc69",
+      "print_id": "d3f2aa2c-deec-4927-a2d6-f5dce5967e26",
+      "released_at": "2018-04-27",
+      "set": "dom",
+      "source": "https://api.scryfall.com/cards/d3f2aa2c-deec-4927-a2d6-f5dce5967e26"
+    },
+    {
+      "name": "Runadi, Behemoth Caller",
+      "oracle_id": "95dc1f55-9dad-4a35-ac5e-abc53d442ffb",
+      "print_id": "f4f5500f-e82c-44f3-8be8-cee4c86824b1",
+      "released_at": "2022-12-02",
+      "set": "j22",
+      "source": "https://api.scryfall.com/cards/f4f5500f-e82c-44f3-8be8-cee4c86824b1"
+    },
+    {
+      "name": "Scurry of Squirrels",
+      "oracle_id": "3beed054-a099-4887-b1bd-39cf9e514e94",
+      "print_id": "c343b965-af2b-45c3-babb-9242736cf1e5",
+      "released_at": "2024-08-02",
+      "set": "blc",
+      "source": "https://api.scryfall.com/cards/c343b965-af2b-45c3-babb-9242736cf1e5"
+    },
+    {
+      "name": "Spiritmonger",
+      "oracle_id": "3913c7f2-86b7-4dd4-84a6-9bd4c1c66781",
+      "print_id": "b96d6e67-f690-4f19-bb25-a7c2d2aaf42f",
+      "released_at": "2001-06-04",
+      "set": "apc",
+      "source": "https://api.scryfall.com/cards/b96d6e67-f690-4f19-bb25-a7c2d2aaf42f"
+    },
+    {
+      "name": "Tempt with Bunnies",
+      "oracle_id": "6874be51-623d-4eaf-a67a-2fcbb9a8ceca",
+      "print_id": "90cc0369-dc9b-4e75-8e3c-ec0783fa13a9",
+      "released_at": "2024-08-02",
+      "set": "blc",
+      "source": "https://api.scryfall.com/cards/90cc0369-dc9b-4e75-8e3c-ec0783fa13a9"
+    },
+    {
+      "name": "Thought Vessel",
+      "oracle_id": "9965d9c5-2ebf-4a6c-930e-55c5890979be",
+      "print_id": "e0cd769e-1aaf-458c-849f-3b6ebc7fd8c5",
+      "released_at": "2015-11-13",
+      "set": "c15",
+      "source": "https://api.scryfall.com/cards/e0cd769e-1aaf-458c-849f-3b6ebc7fd8c5"
+    }
+  ]
+}

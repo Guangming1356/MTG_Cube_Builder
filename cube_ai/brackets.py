@@ -71,16 +71,17 @@ def extra_turn(card):
 
 def card_reasons(card,spec,*,power=None):
     from .mana import requires_colorless_mana
+    from .release_dates import paper_witness
     p=power or profile(spec)
     reasons=[]
     if not spec.allow_colorless_costs and requires_colorless_mana(card):reasons.append('项目偏好：排除需要支付无色法术力 {C} 的牌')
+    if card.get('released','')>date.today().isoformat() and not paper_witness(card):reasons.append('尚未核实已发行的纸质印张')
     if not p:
         if spec.allow_extra_turns is False and extra_turn(card):reasons.append('项目偏好：排除额外回合')
         return reasons
     if is_gc(card) and (p['deck_gc']==0 or p['gc_limit']==0):reasons.append('该 Bracket/数量预算排除 Game Changers')
     if card['kind']!='land' and card['quality']>p['ceiling']+1e-6:reasons.append('超过该档项目单卡评价上限')
     if extra_turn(card) and not spec.allow_extra_turns:reasons.append('项目偏好：排除额外回合')
-    if card.get('released','')>date.today().isoformat():reasons.append('快照印张尚未发行')
     return reasons
 
 def score_adjustment(card,spec,role='Main'):

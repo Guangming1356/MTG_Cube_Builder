@@ -23,3 +23,9 @@
 GitHub 中的“Build verified Windows release”工作流可按需生成完整便携版，验收并核对远端附件后才正式发布；本机不需要长期保留发布包。
 
 完整构建须显式传入 `--version YYYYMMDD`；先运行 build_portable.py 生成暂存目录，再用 compile_portable.ps1 编译入口，最后以同一版本号传入 `--package <目录>`。缺缓存时会在复制运行环境前停止。
+
+## 核对未来再版印张
+
+`python -m cube_ai.tools.verify_paper_releases --out 全新目录` 查询未来日期牌张的官方 Scryfall 印张记录，保存原始 JSON、摘要和候选纸质发行依据。目标目录已存在时停止；不会自动更新运行中的应用数据，不调用 AI。
+
+复核候选中的牌名、Oracle ID、纸质属性和过去日期后，维护 `data/paper_release_witnesses.json` 与 `release_dates.py` 中的固定校验值，并运行对应回归与便携验收。该数据只证明存在已发行纸质印张，不替换赛制合法性、禁牌和原快照的系列/年份/价格字段。构筑和审计阶段保持离线运行。

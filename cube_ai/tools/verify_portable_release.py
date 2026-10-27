@@ -58,9 +58,16 @@ from cube_ai.surrogate import split_groups,VERSION as ACTIVITY_VERSION
 from cube_ai.tuning import canonical_attackers,canonical_blockers,baseline_check
 from cube_ai.config import BuildSpec
 from cube_ai.mana import requires_colorless_mana,commander_basic_sources
+from cube_ai.release_dates import paper_witness,ASSET as PAPER_ASSET,bundle_asset
+from cube_ai.brackets import card_reasons
 assert not any(n=='scipy' or n.startswith('scipy.') for n in sys.modules)
 c=Catalog();pairs=name_pairs();index=card_index(configuration())
 assert ACTIVITY_VERSION=='activity-6'
+assert paper_witness(c.cards['Mind Stone'])['released_at']=='1997-06-09'
+assert not card_reasons(c.cards['Mind Stone'],BuildSpec.from_dict(dict(bracket=3)))
+unknown=dict(c.cards['Mind Stone'],name='Unknown future card',oracle_id='11111111-1111-1111-1111-111111111111',released='2099-01-01')
+assert any('纸质印张' in r for r in card_reasons(unknown,BuildSpec()))
+bundle_asset(PAPER_ASSET)
 assert not BuildSpec().allow_colorless_costs
 assert requires_colorless_mana(c.cards['Warping Wail'])
 assert requires_colorless_mana(c.cards['Eldrazi Displacer'])
@@ -122,7 +129,7 @@ print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs(
                     native_name_compatibility=names,clean_preference_state=True,preference_scope_validation=True,
                     native_evidence_validation=True,cube_family_validation=True,native_event_comparison_validation=True,
                     lazy_solver_import=True,full_cube_generation=True,calibration_reference_validation=True,blocker_display_validation=True,
-                    colorless_preference_validation=True,commander_mana_validation=True)
+                    colorless_preference_validation=True,commander_mana_validation=True,paper_release_validation=True)
         args.out.write_text(json.dumps(report,indent=2),encoding='utf8');print(json.dumps(report),flush=True)
     finally:
         if url:
