@@ -1,6 +1,6 @@
 {
   "passed": true,
-  "application_version": "0.2.8",
+  "application_version": "0.2.9",
   "cards": 31070,
   "offline_ai": true,
   "forge_available": true,
@@ -25,5 +25,6 @@
   "blocker_display_validation": true,
   "colorless_preference_validation": true,
   "commander_mana_validation": true,
-  "paper_release_validation": true
+  "paper_release_validation": true,
+  "scoped_rules_validation": true
 }
