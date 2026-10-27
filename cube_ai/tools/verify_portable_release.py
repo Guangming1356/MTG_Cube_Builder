@@ -50,19 +50,25 @@ def main():
         for asset in ['workspace.js','tasks-ui.js','deck-study-ui.js','style.css']:
             with urllib.request.urlopen(url+asset,timeout=10) as response:assert response.status==200
         names_code='''import json,sys
-from cube_ai.catalog import Catalog,exclusion_reasons
+from cube_ai.catalog import Catalog,exclusion_reasons,ReadOnlyLegalities,CATALOG_CACHE_FORMAT
 from cube_ai.forge import configuration,card_index,engine_name,parse_log,verified_game_result
 from cube_ai.forge_card_names import name_pairs,trace_name_pairs,ASSET,bundle_alias_asset
 from cube_ai.cube_family import pool_counts,group_cubes
 from cube_ai.surrogate import split_groups,VERSION as ACTIVITY_VERSION
 from cube_ai.tuning import canonical_attackers,canonical_blockers,baseline_check
-from cube_ai.config import BuildSpec
+from cube_ai.config import BuildSpec,ROOT
 from cube_ai.mana import requires_colorless_mana,commander_basic_sources
 from cube_ai.release_dates import paper_witness,ASSET as PAPER_ASSET,bundle_asset
 from cube_ai.brackets import card_reasons,profile,score_adjustment
 from cube_ai.design import applicable_themes,design_bonus
 assert not any(n=='scipy' or n.startswith('scipy.') for n in sys.modules)
 c=Catalog();pairs=name_pairs();index=card_index(configuration())
+assert CATALOG_CACHE_FORMAT==2
+cached=json.loads((ROOT/'data/catalog.json').read_text(encoding='utf8'))
+assert cached['_catalog_cache_format']==CATALOG_CACHE_FORMAT
+assert all(type(card['legalities']) is int and 0<=card['legalities']<len(cached['_legalities_pool']) for card in cached['cards'])
+assert len(cached['cards'])==len(c.cards) and all(isinstance(card['legalities'],ReadOnlyLegalities) for card in c.cards.values())
+del cached
 spec=BuildSpec.from_dict(dict(bracket=3));power=profile(spec)
 for name in ['Mind Stone','Warping Wail','Time Warp','Chrome Mox']:
     card=c.cards[name]
@@ -138,7 +144,7 @@ print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs(
                     native_evidence_validation=True,cube_family_validation=True,native_event_comparison_validation=True,
                     lazy_solver_import=True,full_cube_generation=True,calibration_reference_validation=True,blocker_display_validation=True,
                     colorless_preference_validation=True,commander_mana_validation=True,paper_release_validation=True,
-                    scoped_rules_validation=True)
+                    scoped_rules_validation=True,catalog_cache_format_validation=True)
         args.out.write_text(json.dumps(report,indent=2),encoding='utf8');print(json.dumps(report),flush=True)
     finally:
         if url:

@@ -51,6 +51,59 @@ def _read_catalog_json(path):
     # after construction; reduces steady memory without duplicating their peak.
     return json.loads(path.read_text(encoding='utf8'),object_hook=_legality_pool())
 
+CATALOG_CACHE_FORMAT = 2
+
+
+def _decode_catalog_cache(value):
+    if not isinstance(value,dict) or '_catalog_cache_format' not in value:return value
+    if type(value['_catalog_cache_format']) is not int or value['_catalog_cache_format']!=CATALOG_CACHE_FORMAT:
+        raise ValueError('不支持的牌库缓存格式')
+    pool=value.get('_legalities_pool');cards=value.get('cards')
+    if not isinstance(pool,list) or not isinstance(cards,list):raise ValueError('牌库缓存结构无效')
+    maps=[];known={}
+    for item in pool:
+        if not isinstance(item,dict) or not all(isinstance(k,str) and isinstance(v,str) for k,v in item.items()):
+            raise ValueError('牌库缓存合法性记录无效')
+        token=tuple(item.items());shared=known.get(token)
+        if shared is None:shared=known[token]=ReadOnlyLegalities(item)
+        maps.append(shared)
+    for card in cards:
+        index=card.get('legalities') if isinstance(card,dict) else None
+        if type(index) is not int or not 0<=index<len(maps):raise ValueError('牌库缓存合法性引用无效')
+        card['legalities']=maps[index]
+    del value['_catalog_cache_format'];del value['_legalities_pool']
+    return value
+
+
+def _write_catalog_cache(value,path):
+    # Keep only one temporary card copy: large normalized records are not cloned
+    # as a second full list. The small reference list shares integer pool indices.
+    pool=[];known={};references=[]
+    for card in value['cards']:
+        item=card.get('legalities')
+        if not isinstance(item,dict):raise ValueError('牌库缓存缺少合法性记录')
+        token=tuple(item.items())
+        if token not in known:
+            if not all(isinstance(k,str) and isinstance(v,str) for k,v in item.items()):
+                raise ValueError('牌库缓存合法性记录无效')
+            known[token]=len(pool);pool.append(item)
+        references.append(known[token])
+    header=dict(_catalog_cache_format=CATALOG_CACHE_FORMAT,_legalities_pool=pool)
+    header.update((k,v) for k,v in value.items() if k not in {'cards','_catalog_cache_format','_legalities_pool'})
+    fd,tmp=tempfile.mkstemp(prefix='catalog-',suffix='.tmp',dir=path.parent)
+    try:
+        with os.fdopen(fd,'w',encoding='utf8') as file:
+            file.write(json.dumps(header,ensure_ascii=False)[:-1]+', "cards": [')
+            for i,(card,index) in enumerate(zip(value['cards'],references)):
+                packed=dict(card);packed['legalities']=index
+                if i:file.write(', ')
+                file.write(json.dumps(packed,ensure_ascii=False))
+            file.write(']}')
+        os.replace(tmp,path)
+    finally:
+        if os.path.exists(tmp):os.unlink(tmp)
+
+
 class Catalog:
     def __init__(self, source=None, use_cache=True):
         self.source = Path(source or card_pool_path())
@@ -58,12 +111,14 @@ class Catalog:
         stat = self.source.stat()
         signature = f"{self.source.resolve()}:{stat.st_size}:{stat.st_mtime_ns}:{VERSION}"
         cache = DATA / "catalog.json"
-        j = None
+        j = None;cache_legacy=False
         if use_cache and cache.exists():
             try:
                 cached = _read_catalog_json(cache)
+                cache_legacy=isinstance(cached,dict) and '_catalog_cache_format' not in cached
+                cached=_decode_catalog_cache(cached)
                 if isinstance(cached,dict) and cached.get('signature')==signature and isinstance(cached.get('cards'),list) and cached['cards'] and 'snapshot' in cached:
-                    if all(isinstance(c,dict) and all(k in c for k in ['name','text','identity','quality','kind']) for c in cached['cards']):j=cached
+                    if all(isinstance(c,dict) and isinstance(c.get('legalities'),ReadOnlyLegalities) and all(k in c for k in ['name','text','identity','quality','kind']) for c in cached['cards']):j=cached
             except (OSError,ValueError):pass
         if j is None:
             raw = _read_catalog_json(self.source)
@@ -84,12 +139,11 @@ class Catalog:
                     fixing=list(FETCHES.get(c["name"], c.get("produced_mana", []))),
                     image=image, url=c.get("scryfall_uri", ""), **f))
             j = dict(signature=signature, snapshot=raw.get("date"), version=VERSION, cards=records)
-            fd,tmp=tempfile.mkstemp(prefix='catalog-',suffix='.tmp',dir=DATA)
-            try:
-                with os.fdopen(fd,'w',encoding='utf8') as file:json.dump(j,file,ensure_ascii=False)
-                os.replace(tmp,cache)
-            finally:
-                if os.path.exists(tmp):os.unlink(tmp)
+            _write_catalog_cache(j,cache)
+        elif cache_legacy:
+            # A readable legacy cache remains usable on read-only installations.
+            try:_write_catalog_cache(j,cache)
+            except OSError:pass
         self.snapshot = j["snapshot"]
         self.signature = hashlib.sha256(signature.encode()).hexdigest()[:16]
         self.cards = {c["name"]: c for c in j["cards"]}
