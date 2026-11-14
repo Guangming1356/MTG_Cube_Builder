@@ -3,18 +3,51 @@ const workspaceKey='cube-atelier-workspace-v1';
 const workspaceStorageKey=()=>statusInfo?.workspace_id?workspaceKey+':'+statusInfo.workspace_id:null;
 let workspaceRestored=false,cardPage=1,cardQueryTimer;
 const roleLabels={Commander:'指挥官',Main:'主牌',Land:'地牌'};
+let workspaceEditRevision=0,workspaceSaveTimer,lastWorkspaceSnapshot='',recoverableWorkspaceCube=null;
+const workspaceExtraFields=['quick-mode','quick-name','quick-bracket','quick-power','quick-deck-policy',
+  'trials','forge-pods','forge-games','forge-clock','forge-workers',
+  'optimization-profile','optimization-swaps','optimization-workers','optimization-search','optimization-scoring',
+  'calibration-mode','calibration-goal','deck-study-variant','deck-study-pods','deck-study-workers','deck-study-clock'];
+
+function workspaceFields(){
+  return [...Array.from($('spec-form')?.elements||[]),...workspaceExtraFields.map(id=>$(id))]
+    .filter(node=>node?.id&&['INPUT','SELECT','TEXTAREA'].includes(node.tagName)&&node.type!=='file'&&typeof node.value==='string');
+}
+function captureWorkspaceDraft(){
+  return Object.fromEntries(workspaceFields().map(node=>[node.id,node.type==='checkbox'?node.checked:node.value]));
+}
+function applyWorkspaceDraft(draft){
+  if(!draft||typeof draft!=='object'||Array.isArray(draft))return;
+  for(const node of workspaceFields()){
+    if(!Object.hasOwn(draft,node.id))continue;
+    const value=draft[node.id];
+    if(node.type==='checkbox'){if(typeof value==='boolean')node.checked=value;}
+    else if(typeof value==='string'){
+      if(node.tagName==='SELECT'&&!Array.from(node.options||[]).some(option=>option.value===value))continue;
+      node.value=value;
+    }
+  }
+  if($('report-deck-policy'))$('report-deck-policy').value=$('deck_policy').value;
+  window.updateBracketControls?.();window.updateQuickMode?.(false);
+  window.updateQuickBracket?.();
+  for(const id of ['optimization-profile','deck-study-pods'])$(id)?.onchange?.();
+}
 
 function persistWorkspace(){
-  if(!current)return;
-  const state={version:1,view:activeView,spec:current.spec,
+  clearTimeout(workspaceSaveTimer);
+  // Startup navigation must not overwrite a workspace before we have read it.
+  if(!workspaceRestored&&!current)return;
+  const cube=current?{spec:current.spec,
     cards:current.cards.map(({name,role})=>({name,role})),
-    run_id:current.run_id,provenance:current.provenance,saved_at:Date.now()};
+    run_id:current.run_id,provenance:current.provenance}:recoverableWorkspaceCube;
+  const state={version:2,view:activeView,cube,form:captureWorkspaceDraft()};
   try{
     const key=workspaceStorageKey();
     if(!key)return;
-    localStorage.setItem(key,JSON.stringify(state));
+    const snapshot=JSON.stringify(state);if(snapshot===lastWorkspaceSnapshot)return;
+    localStorage.setItem(key,JSON.stringify({...state,saved_at:Date.now()}));lastWorkspaceSnapshot=snapshot;
     $('workspace-status').hidden=false;
-    $('workspace-status').textContent=`${current.spec.name} · ${current.cards.length} 张 · 已在此浏览器保留，刷新可继续`;
+    $('workspace-status').textContent=current?`${current.spec.name} · ${current.cards.length} 张 · 牌表和设置已保留，刷新可继续`:'设置草稿已保留，刷新可继续';
   }catch{
     $('workspace-status').hidden=false;
     $('workspace-status').textContent='浏览器暂时不能保留工作区，请下载完整备份后再关闭页面。';
@@ -26,18 +59,43 @@ window.restoreWorkspace=async()=>{
   workspaceRestored=true;
   try{
     const key=workspaceStorageKey();if(!key)return;
-    const raw=localStorage.getItem(key);if(!raw)return;
+    const raw=localStorage.getItem(key);if(!raw){if(workspaceEditRevision)persistWorkspace();return;}
     const state=JSON.parse(raw);
-    if(state.version!==1||!Array.isArray(state.cards)||!state.spec||state.cards.length>900)return;
-    const result=await api('/api/analyze',{spec:state.spec,cards:state.cards});
+    if(!state||![1,2].includes(state.version))return;
+    const cube=state.version===1?state:state.cube;
+    const revision=workspaceEditRevision;
+    let draft=revision?captureWorkspaceDraft():state.form;
+    if(!cube){
+      applyWorkspaceDraft(draft);
+      if(viewChanges===0&&['home','design'].includes(state.view))view(state.view);
+      persistWorkspace();notice('已恢复上次的设置草稿，可以继续构筑。');return;
+    }
+    if(!Array.isArray(cube.cards)||!cube.spec||cube.cards.length>900)return;
+    recoverableWorkspaceCube=cube;
+    applyWorkspaceDraft(draft);
+    const result=await api('/api/analyze',{spec:cube.spec,cards:cube.cards});
     // A late startup response must not replace a Cube explicitly opened since.
     if(current)return;
-    result.run_id=state.run_id;result.provenance=state.provenance;setCube(result);
+    if(workspaceEditRevision!==revision)draft=captureWorkspaceDraft();
+    result.run_id=cube.run_id;result.provenance=cube.provenance;setCube(result);
+    applyWorkspaceDraft(draft);persistWorkspace();
     // Preserve navigation made before or during the asynchronous recovery.
     if(viewChanges===0&&['home','cards','report','design','advisor','guide','learning'].includes(state.view))view(state.view);
-    notice('已恢复上次打开的牌表，并按当前牌库重新检查。');
+    notice('已恢复牌表和设置草稿，牌表已按当前牌库重新检查。');
   }catch(error){notice('上次工作区未能恢复。原保存记录和下载备份仍可打开：'+error.message,true);}
 };
+
+function workspaceEdited(event){
+  const id=event.target?.id;if(!id)return;
+  if(id!=='report-deck-policy'&&!workspaceFields().some(node=>node.id===id))return;
+  workspaceEditRevision++;clearTimeout(workspaceSaveTimer);
+  if(event.type==='change')persistWorkspace();
+  else workspaceSaveTimer=setTimeout(persistWorkspace,250);
+}
+window.workspaceHasDraftEdits=()=>workspaceEditRevision>0;
+document.addEventListener('input',workspaceEdited);
+document.addEventListener('change',workspaceEdited);
+window.addEventListener?.('beforeunload',persistWorkspace);
 
 window.renderWorkspaceCards=()=>{
   if(!current)return;
@@ -80,7 +138,7 @@ for(const id of ['card-search','color-filter','role-filter','card-sort','card-pa
 }
 $('card-prev').onclick=()=>{cardPage--;renderCards();};
 $('card-next').onclick=()=>{cardPage++;renderCards();};
-document.addEventListener('cube-changed',()=>{cardPage=1;persistWorkspace();});
+document.addEventListener('cube-changed',()=>{cardPage=1;recoverableWorkspaceCube=null;persistWorkspace();});
 document.addEventListener('workspace-view',persistWorkspace);
 onCubeReady(()=>window.restoreWorkspace());
 

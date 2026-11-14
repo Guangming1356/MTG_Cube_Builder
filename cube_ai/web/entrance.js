@@ -15,16 +15,17 @@ window.updateHome=()=>{
   $('home-assessment').textContent=current?.provenance?.validation_status==='experimental'?'实验候选：尚未通过全部独立测试，不代表已证实更强。':'';
   ['home-cards','home-check','home-save','home-optimize'].forEach(id=>$(id).disabled=working||!has||(id==='home-optimize'&&(current.spec?.mode!=='commander'||current.spec?.players!==3)));
   $('home-open').disabled=working||!$('home-library').value;
-  $('home-downloads').innerHTML=has&&current.run_id?`<a class="download-button" href="/exports/${encodeURIComponent(current.run_id)}/cube.csv">下载牌表</a><a href="/exports/${encodeURIComponent(current.run_id)}/cube.json">保存完整备份</a><a href="/exports/${encodeURIComponent(current.run_id)}/cubecobra.txt">用于 CubeCobra</a>`:'';
+  $('home-downloads').innerHTML=has&&current.run_id?`<a class="download-button" href="/exports/${encodeURIComponent(current.run_id)}/cube.csv">下载牌表</a><a href="/exports/${encodeURIComponent(current.run_id)}/cube.json">下载已保存备份</a><a href="/exports/${encodeURIComponent(current.run_id)}/cubecobra.txt">用于 CubeCobra</a>`:'';
 };
 const oldLock=lock;
 lock=value=>{oldLock(value);window.updateHome();};
 $('home-library').onchange=window.updateHome;
-$('quick-mode').onchange=()=>{
-  $('quick-deck-policy').value=$('quick-mode').value==='commander'?'balanced':'quality';
-  const edh=$('quick-mode').value==='commander';$('quick-power-controls').hidden=!edh;$('quick-name').value=edh?'我的三人 EDH Cube':'我的传统 Cube';
+window.updateQuickMode=(reset=true)=>{
+  const edh=$('quick-mode').value==='commander';$('quick-power-controls').hidden=!edh;
+  if(reset){$('quick-deck-policy').value=edh?'balanced':'quality';$('quick-name').value=edh?'我的三人 EDH Cube':'我的传统 Cube';}
   $('quick-rules').textContent=edh?'三人每包 15 张，每人取 2 张，传过三人后弃 9 张；每人抓 60 张。选入任意张，再加基本地，组至少 60 张含指挥官的牌组。':'传统轮抓：8 人，每人 3 包 15 张，每次取 1 张；从抓到的牌中组 40 张牌组，基本地不限。';
 };
+$('quick-mode').onchange=()=>window.updateQuickMode();
 $('quick-build').onclick=()=>guard(async()=>{
   const mode=$('quick-mode').value;fillSpec({...statusInfo.presets[mode],...quickPowerSpec(),name:$('quick-name').value.trim()||'我的 Cube',seed:Math.floor(Math.random()*1000000000)});
   notice('正在构筑，请稍等。完成后会自动保存。');setCube(await job('build'));await refreshRuns();view('home');focusCurrent();notice('牌表已生成并保存。可以下载牌表，或继续检查轮抓与实战。');

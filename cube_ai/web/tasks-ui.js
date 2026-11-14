@@ -28,7 +28,7 @@ async function showTaskResult(id){
   else if(job.operation==='diagnose-game'){renderNativeDiagnostic(result);view('report');$('native-diagnostic-panel').scrollIntoView({block:'start'});}
   else if(job.operation==='plan'){fillSpec(result.spec);view('design');}
   else if(job.operation==='stress'){
-    $('stress-result').innerHTML=`<h3>${result.trials} 桌轮抓已完成</h3><p>合法组牌率 ${(result.buildable_rate*100).toFixed(1)}%。这是组牌与法术力检查，不代表实战胜率。</p><details><summary>查看完整轮抓结果</summary><pre>${esc(JSON.stringify(result,null,2))}</pre></details>`;
+    renderStress(result);
     view('report');$('stress-result').scrollIntoView({block:'start'});
   }else if(job.operation==='chat'){
     $('ai-output').innerHTML=`<h3>已完成的顾问建议</h3><p>${esc(result.analysis||result.summary||'分析已完成，完整结果见下方。')}</p><details><summary>完整建议</summary><pre>${esc(JSON.stringify(result,null,2))}</pre></details>`;view('advisor');
