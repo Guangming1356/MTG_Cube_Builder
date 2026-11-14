@@ -42,6 +42,8 @@ class BuildSpec:
     wipe_min_ratio: float = .035
     finisher_min_ratio: float = .085
     curve_profile: str = 'balanced'
+    # Missing in old recipes means the original quality-first spell selection.
+    deck_policy: str = 'quality'
     max_card_price: float | None = None
     exclude: list[str] = field(default_factory=list)
     pins: list[str] = field(default_factory=list)
@@ -103,6 +105,7 @@ class BuildSpec:
         main=self.size-self.commanders-self.lands
         if main<40:raise ValueError('至少需要 40 个主牌槽位')
         if self.curve_profile not in {'balanced','low','late'}:raise ValueError('curve_profile 必须为 balanced/low/late')
+        if not isinstance(self.deck_policy,str) or self.deck_policy not in {'quality','balanced'}:raise ValueError('deck_policy 必须为 quality/balanced')
         for key,low,high in [('interaction_min_ratio',.10,.30),('wipe_min_ratio',.01,.08),('finisher_min_ratio',.06,.20)]:
             value=getattr(self,key)
             if type(value) not in {int,float} or not low<=value<=high:raise ValueError(f'{key} 必须在 {low}–{high} 之间')

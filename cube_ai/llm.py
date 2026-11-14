@@ -334,6 +334,7 @@ def plan_schema():
         "power_tuning":{"type":"string","enum":["gentle","balanced","strong"]},
         "commander_tuning":{"type":"string","enum":["gentle","matched","strong"]},
         "curve_profile":{"type":"string","enum":["balanced","low","late"]},
+        "deck_policy":{"type":"string","enum":["quality","balanced"]},
         "interaction_min_ratio":{"type":"number","minimum":.10,"maximum":.30},
         "wipe_min_ratio":{"type":"number","minimum":.01,"maximum":.08},
         "finisher_min_ratio":{"type":"number","minimum":.06,"maximum":.20},
@@ -355,10 +356,11 @@ def plan(message,base_spec,knowledge,client=None):
 新增可执行偏好：interaction_min_ratio 是主牌最低互动比例，通常为 .18，要求多一些互动可设 .24、很多可设 .28，范围 .10–.30；wipe_min_ratio 是最低扫场比例，默认 .035，更多可设 .05；finisher_min_ratio 是最低终结比例，默认 .085，更多可设 .11。
 allow_colorless_costs 默认为 false：排除施放或使用主要异能需要支付 {C} 的牌，普通通用费用神器和产生无色法术力的牌仍可使用。无色不单独设置指挥官色组。只有用户明确要求时才开启该选项。
 curve_profile 为 balanced（默认）、low（低费行动更多，仍保留大咒语）、late（更多后期咒语）。更改曲线风格时 curve 设 null；明确要求精确曲线时才填写 curve，五档之和必须等于 size-commanders-lands。张数或槽位变化时，原有精确曲线须同比调整至新主牌数，并在解释中说明；互相冲突的精确要求写入 unapplied_requests。不要把比例填成百分整数。
+deck_policy 控制抓牌后的自动组牌：balanced（均衡费用，适当增加低费行动，保留互动、抓牌与终结的最低供给）或 quality（质量优先）。它不改变 Cube 的费用配额或轮抓规则；未被要求修改时沿用 current。
 max_card_price 是单卡美元价格过滤，min_year/max_year 是发行年份过滤，sets 为系列代码；不受支持的筛选或偏好写入 unapplied_requests，不能在 explanation 中声称已经落实。
 不要生成整份牌表。保持各项安全偏好；Bracket 1–3 不允许已知无限组合、大规模毁地、额外回合。普通 Cube 的 commanders 为 0、bracket/cube_gc_limit 为 null。
 解释仅说明实际参数变化和未能落实的要求，不承诺未经验证的胜率或娱乐性。"""
-    context={"current":base_spec.to_dict(),"presets":{"commander":BuildSpec.from_dict({'bracket':3}).to_dict(),"classic":BuildSpec.from_dict({'mode':'classic'}).to_dict()},"knowledge":knowledge.search(message,3),"request":message}
+    context={"current":base_spec.to_dict(),"presets":{"commander":BuildSpec.from_dict({'bracket':3,'deck_policy':'balanced'}).to_dict(),"classic":BuildSpec.from_dict({'mode':'classic'}).to_dict()},"knowledge":knowledge.search(message,3),"request":message}
     messages=[{"role":"system","content":prompt},{"role":"user","content":json.dumps(context,ensure_ascii=False)}]
     response=client.request(messages,schema=schema)
     text=response_text(response,client.style)

@@ -21,6 +21,7 @@ const oldLock=lock;
 lock=value=>{oldLock(value);window.updateHome();};
 $('home-library').onchange=window.updateHome;
 $('quick-mode').onchange=()=>{
+  $('quick-deck-policy').value=$('quick-mode').value==='commander'?'balanced':'quality';
   const edh=$('quick-mode').value==='commander';$('quick-power-controls').hidden=!edh;$('quick-name').value=edh?'我的三人 EDH Cube':'我的传统 Cube';
   $('quick-rules').textContent=edh?'三人每包 15 张，每人取 2 张，传过三人后弃 9 张；每人抓 60 张。选入任意张，再加基本地，组至少 60 张含指挥官的牌组。':'传统轮抓：8 人，每人 3 包 15 张，每次取 1 张；从抓到的牌中组 40 张牌组，基本地不限。';
 };
@@ -72,10 +73,15 @@ onCubeReady(()=>{$('quick-build').disabled=false;window.updateHome();});
   }catch(error){$('design-cases').textContent='设计资料暂时无法读取，请重新打开入口。';}
 })();
 
-function quickPowerSpec(){if($('quick-mode').value!=='commander')return {bracket:null};const bracket=Number($('quick-bracket').value);return {bracket,power_tuning:$('quick-power').value,exclude_game_changers:bracket<=2};}
+function quickPowerSpec(){const deck_policy=$('quick-deck-policy').value;if($('quick-mode').value!=='commander')return {bracket:null,deck_policy};const bracket=Number($('quick-bracket').value);return {bracket,deck_policy,power_tuning:$('quick-power').value,exclude_game_changers:bracket<=2};}
 function bracketNote(value){const p=statusInfo?.brackets?.profiles.find(p=>p.bracket===Number(value));return p?`${p.description} 每副牌 Game Changers：${p.deck_gc??'不限'}。${p.own_turns?`官方体验预期：通常至少经历 ${p.own_turns} 个自己的回合才进入胜负阶段；这是对局预期，不能据此认证轮抓牌组。`:'竞技意图与环境适配需要额外验证。'}`:'保留自定义参数，不按官方 Bracket 目标认证。';}
 window.updateBracketControls=()=>{const b=Number($('bracket').value),low=b>0&&b<=3;$('bracket-controls').hidden=$('mode').value!=='commander';$('bracket-note').textContent=bracketNote($('bracket').value);['allow_extra_turns','allow_infinite_combos','allow_mass_land_destruction'].forEach(id=>$(id).disabled=working||low);$('exclude_game_changers').disabled=working||(b===1||b===2);$('cube_gc_limit').disabled=working||(b===1||b===2);};
 $('bracket').onchange=()=>{const b=Number($('bracket').value);$('exclude_game_changers').checked=b===1||b===2;$('cube_gc_limit').value='';if(b>0&&b<=3)['allow_extra_turns','allow_infinite_combos','allow_mass_land_destruction'].forEach(id=>$(id).checked=false);window.updateBracketControls();};
 const lockWithBracket=lock;lock=value=>{lockWithBracket(value);if(statusInfo)window.updateBracketControls();};
 function updateQuickBracket(){$('quick-bracket-note').textContent=bracketNote($('quick-bracket').value);}
 $('quick-bracket').onchange=updateQuickBracket;onCubeReady(()=>{updateQuickBracket();window.updateBracketControls();});
+
+function deckPolicyLabel(value){return value==='balanced'?'均衡费用':'质量优先';}
+$('report').insertAdjacentHTML('afterbegin',`<article class="panel"><h2>抓牌后怎样组牌</h2><label>自动组牌方式<select id="report-deck-policy"><option value="balanced">均衡费用（前期行动更多）</option><option value="quality">质量优先（原有方式）</option></select></label><p class="sub">用于轮抓检查、Forge 对局和实战改进。均衡费用从实际抓到的牌中调整咒语，增加低费行动，同时保留互动、抓牌与终结的最低供给。保存完整备份会保留这项选择。</p></article>`);
+$('report-deck-policy').onchange=()=>{$('deck_policy').value=$('report-deck-policy').value;notice('后续轮抓与实战将使用'+deckPolicyLabel($('deck_policy').value)+'。');};
+$('deck_policy').onchange=()=>{$('report-deck-policy').value=$('deck_policy').value;};

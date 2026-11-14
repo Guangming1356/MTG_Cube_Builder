@@ -43,6 +43,8 @@ def main():
                       if isinstance(n,ast.Assign) and any(isinstance(t,ast.Name) and t.id=='__version__' for t in n.targets))
         assert status['version']==expected and status.get('workspace_id')
         assert not status['gpt']['configured'] and status['forge']['available']
+        assert status['presets']['commander']['deck_policy']=='balanced'
+        assert status['presets']['classic']['deck_policy']=='quality'
         assert status['feedback']['comparisons']==0 and status['feedback']['model'] is None
         assert status['feedback']['model_compatible'] is False and status['feedback']['model_reason']=='not_trained'
         assert status['features']['feedback_scope'] is True
@@ -130,7 +132,7 @@ print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs(
         assert built['result']['spec']['allow_colorless_costs'] is False
         card_check="import json,sys;from cube_ai.catalog import Catalog;from cube_ai.mana import requires_colorless_mana;c=Catalog();rows=json.loads(sys.stdin.read());assert not any(requires_colorless_mana(c.cards[r['name']]) for r in rows);assert not any(r['role']=='Commander' and c.cards[r['name']]['identity']=='C' for r in rows)"
         subprocess.run([str(python),'-X','utf8','-c',card_check],input=json.dumps(built['result']['cards']),cwd=root,text=True,encoding='utf8',check=True,capture_output=True,timeout=90)
-        code="from pathlib import Path;import json,sys;from cube_ai.catalog import Catalog;from cube_ai.config import BuildSpec;c=Catalog();rows,unknown=c.parse(Path(sys.argv[1]).read_text(encoding='utf-8-sig'));assert not unknown;print(json.dumps(dict(operation='stress',cards=rows,spec=BuildSpec().to_dict(),trials=5)))"
+        code="from pathlib import Path;import json,sys;from cube_ai.catalog import Catalog;from cube_ai.config import BuildSpec;c=Catalog();rows,unknown=c.parse(Path(sys.argv[1]).read_text(encoding='utf-8-sig'));assert not unknown;assert BuildSpec().deck_policy=='quality';print(json.dumps(dict(operation='stress',cards=rows,spec=BuildSpec(deck_policy='balanced').to_dict(),trials=5)))"
         prepared=subprocess.check_output([str(python),'-X','utf8','-c',code,str(args.fixture.resolve())],cwd=root,text=True,encoding='utf8',timeout=90)
         job=request(url+'api/tasks',json.loads(prepared))['job_id']
         request(url+'api/task/control',dict(id=job,action='pause'))
@@ -142,6 +144,8 @@ print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs(
         result=wait_until(lambda:(j if (j:=request(url+'api/job?id='+job))['state'] in {'done','failed'} else None))
         assert result['state']=='done',result.get('error')
         assert result['result']['trials']==5 and result['result']['drafted_pool_sizes']=={'60':15}
+        assert result['result']['deck_policy']=='balanced'
+        assert all(d['deck_policy']=='balanced' for d in result['result']['examples'])
         request(url+'api/shutdown',{});time.sleep(1);url=start()
         restored=request(url+'api/job?id='+job)
         assert restored['state']=='done' and restored['result']==result['result']
@@ -151,7 +155,8 @@ print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs(
                     native_evidence_validation=True,cube_family_validation=True,native_event_comparison_validation=True,
                     lazy_solver_import=True,full_cube_generation=True,calibration_reference_validation=True,blocker_display_validation=True,
                     colorless_preference_validation=True,commander_mana_validation=True,paper_release_validation=True,
-                    scoped_rules_validation=True,catalog_cache_format_validation=True,early_result_recording_validation=True)
+                    scoped_rules_validation=True,catalog_cache_format_validation=True,early_result_recording_validation=True,
+                    deck_policy_validation=True)
         args.out.write_text(json.dumps(report,indent=2),encoding='utf8');print(json.dumps(report),flush=True)
     finally:
         if url:

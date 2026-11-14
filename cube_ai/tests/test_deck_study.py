@@ -111,7 +111,8 @@ def test_cycle_activity_includes_offturn_interaction_but_not_triggers_or_partial
 
 
 @pytest.mark.parametrize('variant',['balanced','protected'])
-def test_controlled_pipeline_preserves_both_policies_and_writes_replayable_evidence(fixture,tmp_path,monkeypatch,variant):
+@pytest.mark.parametrize('policy',['quality','balanced'])
+def test_controlled_pipeline_preserves_both_policies_and_writes_replayable_evidence(fixture,tmp_path,monkeypatch,variant,policy):
     from cube_ai import deck_study,tuning
     catalog,rows=fixture;before=copy.deepcopy(rows)
     monkeypatch.setattr(deck_study,'STUDIES',tmp_path/'studies')
@@ -131,7 +132,7 @@ def test_controlled_pipeline_preserves_both_policies_and_writes_replayable_evide
         (out/log).write_text('\n'.join(lines),encoding='utf8')
         return dict(outcome='win',winner=order[0],log=log,turns=12,cache_hit=False)
     monkeypatch.setattr(deck_study,'run_battle',battle)
-    result=compare(catalog,rows,BuildSpec(),pods=2,workers=1,clock_seconds=30,seed=1937,variant=variant)
+    result=compare(catalog,rows,BuildSpec(deck_policy=policy),pods=2,workers=1,clock_seconds=30,seed=1937,variant=variant)
     assert result['policy']['name']==variant and result['policy']['preserve_finishers']==(variant=='protected')
     assert rows==before and len(calls)==12 and result['training_samples_added']==0
     assert result['summary']['paired_complete_pods']==2 and not result['summary']['supports_activity_improvement']
@@ -146,6 +147,10 @@ def test_controlled_pipeline_preserves_both_policies_and_writes_replayable_evide
     assert len(list((out/'tables').glob('*.json')))==2
     assert json.loads((out/'games.json').read_text(encoding='utf8'))==saved['games']
     assert (out/'source/forge.py').is_file() and (out/'source/catalog.json').is_file()
+    assert saved['spec']['deck_policy']==policy
+    for table in saved['tables']:
+        assert all(d['deck_policy']=='quality' for d in table['policies']['quality'])
+        assert all(d['deck_policy']==variant for d in table['policies']['balanced'])
 
 
 def test_http_operation_forwards_the_explicit_research_variant(monkeypatch):

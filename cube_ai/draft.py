@@ -143,26 +143,32 @@ def draft_pod(catalog,rows,spec,rng,preferred_guilds=None,readiness_hands=40,_pa
             score=sum(catalog.cards[n]["quality"] for n in spells[:needed])
             if not best or score>best[0]:best=(score,commander,identity,spells[:needed])
         if best is None:
-            decks.append(dict(seat=seat,guild=g,buildable=False,drafted=[r["name"] for r in pool]));continue
+            decks.append(dict(seat=seat,guild=g,buildable=False,deck_policy=spec.deck_policy,deck_policy_changes=[],drafted=[r["name"] for r in pool]));continue
         _,commander,identity,spells=best
         land_target=target-len(spells)-int(bool(commander))
         lands=[r["name"] for r in pool if catalog.cards[r["name"]]["kind"]=="land"
                and (catalog.cards[r["name"]]["identity"]=="C" or set(catalog.cards[r["name"]]["identity"])<=set(identity))
                and set(catalog.cards[r["name"]]["fixing"]) & set(identity)]
         lands=rules.select(([commander['name']] if commander else [])+spells,lands)[:land_target]
-        # Commander is in the command zone, excluded from random opening hands.
-        ready=opening_test(catalog,spells,lands,identity,target-int(bool(commander)),rng,hands=readiness_hands,commander=commander and commander['name'])
-        decks.append(dict(seat=seat,guild=g,identity=identity,buildable=True,ready=ready,
+        deck=dict(seat=seat,guild=g,identity=identity,buildable=True,
             commander=commander and commander["name"],spells=spells,lands=lands,
-            basics=ready["basics"],land_count=land_target,spell_count=len(spells),
+            land_count=land_target,spell_count=len(spells),deck_policy=spec.deck_policy,deck_policy_changes=[],
             construction_warning="可用非地牌偏少，补地后合法但可能很弱" if land_target/target>.48 else None,
-            drafted=[r["name"] for r in pool]))
+            drafted=[r["name"] for r in pool])
+        if spec.deck_policy=='balanced':
+            from .deck_building import revise
+            deck=revise(catalog,deck,spec,'balanced',evaluate=False)
+            deck.pop('research_changes',None)
+        # Evaluate only the final spells. Commander stays outside opening hands.
+        # Both policies sample the same number of cards, preserving the draft RNG.
+        ready=opening_test(catalog,deck['spells'],lands,identity,target-int(bool(commander)),rng,hands=readiness_hands,commander=deck['commander'])
+        deck.update(ready=ready,basics=ready['basics']);decks.append(deck)
     from .design import deck_design_report
     for deck in decks:
         if deck['buildable']:
             deck['design']=deck_design_report(catalog,deck)
             deck['bracket']=deck_report(catalog,deck,spec)
-    return dict(decks=decks,packs=opened)
+    return dict(decks=decks,packs=opened,deck_policy=spec.deck_policy)
 
 def stress_test(catalog,rows,spec,trials=100,progress=lambda x:None):
     if not 5<=trials<=500:raise ValueError("压力测试次数需在 5–500 之间")
@@ -186,7 +192,7 @@ def stress_test(catalog,rows,spec,trials=100,progress=lambda x:None):
         all_g=[x for x in summary if x["guild"]==g];ok=[x for x in all_g if x["buildable"]]
         group_summary[g]=dict(decks=len(all_g),buildable_rate=round(len(ok)/max(1,len(all_g)),3),
             ready_by_turn={str(t):round(sum(x["ready"]["ready_by_turn"][str(t)] for x in ok)/max(1,len(ok)),3) for t in range(1,5)})
-    return dict(trials=trials,players=spec.players,drafted_pool_sizes=dict(sizes),
+    return dict(trials=trials,players=spec.players,deck_policy=spec.deck_policy,drafted_pool_sizes=dict(sizes),
                 bracket_check=dict(target=spec.bracket,decks_checked=len(valid) if spec.bracket else 0,
                     violations=sum(bool(d['bracket'] and d['bracket']['violations']) for d in valid),
                     max_deck_game_changers=max((len(d['bracket']['game_changers']) for d in valid if d['bracket']),default=0),

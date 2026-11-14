@@ -1,9 +1,9 @@
-// Optional, controlled comparison; no Cube or default deck policy is changed.
+// Controlled comparison always uses quality-first as its fixed control.
 $('report').insertAdjacentHTML('beforeend',`
 <article class="panel" id="deck-study-panel">
   <span class="eyebrow">同一批抓牌，比较组牌后的体验</span>
   <h2>比较组牌后的体验 <span class="badge">实验</span></h2>
-  <p>用同一批抓牌，比较默认组牌与指定策略。Forge 会实际对局，每桌轮换三次座位，结果保存在对照记录中。</p>
+  <p>用同一批抓牌，比较质量优先与指定策略。Forge 会实际对局，每桌轮换三次座位，结果保存在对照记录中。</p>
   <div class="fields">
     <label>对照策略<select id="deck-study-variant"><option value="balanced">均衡费用</option><option value="protected">保留已选终结牌</option></select></label>
     <label>轮抓桌数<select id="deck-study-pods"><option value="10">10 桌 · 快速体验</option><option value="20" selected>20 桌 · 常规观察</option><option value="50">50 桌 · 深入比较</option></select></label>
@@ -30,8 +30,8 @@ function renderDeckStudy(result){
   const labels={normal_completion:'正常完成率足够',first4_coverage:'前四完整周期观测充足',independent_pods:'独立轮抓桌数足够',fewer_no_action_cycles:'零行动比例有改善',fewer_no_spell_turns:'零施放比例有改善',finisher_observation_not_lower:'终结施放的观测未明显下降'};
   $('deck-study-result').innerHTML=`<h3>${summary.supports_activity_improvement?'前期行动更连贯':'本次尚未观察到明确改善'}</h3>
     <p>「${esc(result.spec.name)}」· ${result.pods} 桌 · 完整配对 ${summary.paired_complete_pods} 桌。</p>
-    <p>相对默认组牌，${balancedLabel}的${metric}<strong>${change}</strong>。</p>
-    <div class="table-wrap"><table><thead><tr><th>组牌策略</th><th>正常完成 / 计划</th><th>${metric} ↓</th><th>用到终结牌的玩家 ↑</th></tr></thead><tbody>${[['quality','默认组牌'],['balanced',balancedLabel]].map(([key,label])=>{const value=summary.policies[key];return `<tr><td>${label}</td><td>${value.normal} / ${result.games_per_policy}</td><td>${pct(cycleMetric?value.no_action_cycle_rate:value.no_spell_first4_rate)}</td><td>${pct(value.finisher_presence)}</td></tr>`;}).join('')}</tbody></table></div>
+    <p>相对质量优先，${balancedLabel}的${metric}<strong>${change}</strong>。</p>
+    <div class="table-wrap"><table><thead><tr><th>组牌策略</th><th>正常完成 / 计划</th><th>${metric} ↓</th><th>用到终结牌的玩家 ↑</th></tr></thead><tbody>${[['quality','质量优先'],['balanced',balancedLabel]].map(([key,label])=>{const value=summary.policies[key];return `<tr><td>${label}</td><td>${value.normal} / ${result.games_per_policy}</td><td>${pct(cycleMetric?value.no_action_cycle_rate:value.no_spell_first4_rate)}</td><td>${pct(value.finisher_presence)}</td></tr>`;}).join('')}</tbody></table></div>
     ${renderEngineDiagnostics(result.games)}
     ${!summary.gates.normal_completion?'<p class="issue error">正常完成率不足 90%，请先查看异常对局。</p>':''}
     <details><summary>详细统计、判定依据与原始记录</summary>

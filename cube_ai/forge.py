@@ -221,7 +221,8 @@ def write_deck(deck,path,index,catalog,spec=None):
     content=['[metadata]','Name='+path.stem,'[Commander]','1 '+engine_name(cmd,index),'[Main]']
     content += [str(count)+' '+engine_name(n,index) for n,count in sorted(main.items())]
     path.write_text('\n'.join(content)+'\n',encoding='utf-8')
-    return dict(main=sum(main.values()),commander=1,total=60,sha256=sha256(path))
+    return dict(main=sum(main.values()),commander=1,total=60,sha256=sha256(path),
+                deck_policy=deck.get('deck_policy','quality'))
 
 def diagnose_log(log):
     """Explain engine symptoms without blaming a card or changing outcomes."""

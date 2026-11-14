@@ -4,6 +4,7 @@ These controlled games are deliberately outside matches/optimizations so they
 cannot silently become additional model-training or strength-validation samples.
 """
 from collections import Counter
+from dataclasses import replace
 from datetime import datetime,timezone
 import hashlib
 import json
@@ -25,7 +26,7 @@ from .optimize import game_trace,schedule
 from .task_control import atomic_json
 
 STUDIES=ROOT/'private/deck-studies'
-VERSION='deck-policy-study-6'
+VERSION='deck-policy-study-7'
 NORMAL={'win','draw'}
 
 
@@ -154,7 +155,7 @@ def compare(catalog,rows,spec,pods=20,workers=0,clock_seconds=180,seed=None,prog
             for pod,(draft_seed,prefs) in enumerate(zip(seeds,guilds)):
                 while len(queue)>=queue.ceiling*2:collect(True)
                 progress(f'准备同一桌抓牌的两种组牌：{pod+1}/{pods}')
-                drafted=draft_pod(catalog,rows,spec,random.Random(draft_seed),prefs,readiness_hands=0)
+                drafted=draft_pod(catalog,rows,replace(spec,deck_policy='quality'),random.Random(draft_seed),prefs,readiness_hands=0)
                 before=drafted['decks'];after=[revise(catalog,deck,spec,variant) for deck in before]
                 table=dict(pod=pod,draft_seed=draft_seed,guilds=prefs,policies={'quality':before,'balanced':after},packs=drafted['packs'])
                 tables.append(table);unsupported=[]

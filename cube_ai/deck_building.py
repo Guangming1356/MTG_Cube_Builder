@@ -1,4 +1,4 @@
-"""Experimental spell selection; drafted pool, commander and lands remain fixed."""
+"""Spell selection with fixed drafted pool, commander and nonbasic lands."""
 from collections import Counter
 import random
 
@@ -23,7 +23,7 @@ def roles(card):
     return result
 
 
-def revise(catalog,deck,spec,variant='balanced'):
+def revise(catalog,deck,spec,variant='balanced',*,evaluate=True):
     if not deck['buildable']:return dict(deck)
     options=VARIANTS[variant];cards=catalog.cards
     selected=list(deck['spells']);commander=deck.get('commander');power=profile(spec)
@@ -71,12 +71,14 @@ def revise(catalog,deck,spec,variant='balanced'):
         if not swapped:break
     selected.sort(key=lambda name:(-cards[name]['quality'],cards[name]['mv'],name))
     result=dict(deck,spells=selected)
-    target=60 if spec.mode=='commander' else 40
-    result['ready']=opening_test(catalog,selected,deck['lands'],deck['identity'],target-int(bool(commander)),random.Random(0),hands=0,commander=commander)
-    result['basics']=result['ready']['basics'];result['design']=deck_design_report(catalog,result)
-    result['bracket']=deck_report(catalog,result,spec)
+    result['deck_policy']=variant;result['deck_policy_changes']=changes
     result['research_changes']=changes
     assert len(selected)==len(deck['spells']) and set(selected)<=set(deck['drafted'])
-    assert len(selected)+len(result['lands'])+sum(result['basics'].values())+int(bool(commander))==target
-    assert not result['bracket'] or not result['bracket']['violations']
+    if evaluate:
+        target=60 if spec.mode=='commander' else 40
+        result['ready']=opening_test(catalog,selected,deck['lands'],deck['identity'],target-int(bool(commander)),random.Random(0),hands=0,commander=commander)
+        result['basics']=result['ready']['basics'];result['design']=deck_design_report(catalog,result)
+        result['bracket']=deck_report(catalog,result,spec)
+        assert len(selected)+len(result['lands'])+sum(result['basics'].values())+int(bool(commander))==target
+        assert not result['bracket'] or not result['bracket']['violations']
     return result

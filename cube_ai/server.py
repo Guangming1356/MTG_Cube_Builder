@@ -388,7 +388,7 @@ def handler_for(app):
                         active_jobs=active_jobs,speed_version=2,task_controls=True,features=dict(deck_study=True,protected_deck_study=True,calibration_preview=True,native_diagnostic=True,persistent_job_history=True,workspace_restore=True,feedback_scope=True),
                         experiments=dict(profiles={k:experiment_budget(k) for k in PROFILES},resources=execution_resources()),
                         knowledge_chunks=len(app.knowledge.chunks),gpt=app.ai_status(),themes=THEME_NAMES,
-                        presets={"commander":BuildSpec.from_dict({'bracket':3}).to_dict(),"classic":BuildSpec.from_dict({"mode":"classic"}).to_dict()},brackets=public_profiles(),
+                        presets={"commander":BuildSpec.from_dict({'bracket':3,'deck_policy':'balanced'}).to_dict(),"classic":BuildSpec.from_dict({"mode":"classic"}).to_dict()},brackets=public_profiles(),
                         feedback=app.feedback.status("commander:commander",app.catalog),forge=forge_status()))
                 if path.path=="/api/forge/status":return self.json(200,forge_status())
                 if path.path=='/api/deck-studies':
