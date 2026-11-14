@@ -20,7 +20,8 @@ class TaskStopped(Exception):pass
 
 class TaskControl:
     def __init__(self,folder):
-        self.folder=Path(folder);self.lock=threading.RLock();self.active_native=0
+        self.folder=Path(folder);self.folder.mkdir(parents=True,exist_ok=True)
+        self.lock=threading.RLock();self.active_native=0
         self.last_message='准备运行';self.pause_started=None;self.paused_seconds=0.
 
     def command(self):

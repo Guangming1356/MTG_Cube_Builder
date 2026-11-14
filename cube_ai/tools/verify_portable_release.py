@@ -57,6 +57,9 @@ from cube_ai.cube_family import pool_counts,group_cubes
 from cube_ai.surrogate import split_groups,VERSION as ACTIVITY_VERSION
 from cube_ai.tuning import canonical_attackers,canonical_blockers,baseline_check
 from cube_ai.config import BuildSpec,ROOT
+from cube_ai.task_control import TaskControl
+from pathlib import Path
+import tempfile
 from cube_ai.mana import requires_colorless_mana,commander_basic_sources
 from cube_ai.release_dates import paper_witness,ASSET as PAPER_ASSET,bundle_asset
 from cube_ai.brackets import card_reasons,profile,score_adjustment
@@ -64,6 +67,10 @@ from cube_ai.design import applicable_themes,design_bonus
 assert not any(n=='scipy' or n.startswith('scipy.') for n in sys.modules)
 c=Catalog();pairs=name_pairs();index=card_index(configuration())
 assert CATALOG_CACHE_FORMAT==2
+with tempfile.TemporaryDirectory() as control_temp:
+    control_folder=Path(control_temp)/'new-job'/'control'
+    TaskControl(control_folder).record(dict(marker='portable recorder check'),Path(control_temp)/'logs')
+    assert (control_folder/'completed-games.jsonl').is_file()
 cached=json.loads((ROOT/'data/catalog.json').read_text(encoding='utf8'))
 assert cached['_catalog_cache_format']==CATALOG_CACHE_FORMAT
 assert all(type(card['legalities']) is int and 0<=card['legalities']<len(cached['_legalities_pool']) for card in cached['cards'])
@@ -144,7 +151,7 @@ print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs(
                     native_evidence_validation=True,cube_family_validation=True,native_event_comparison_validation=True,
                     lazy_solver_import=True,full_cube_generation=True,calibration_reference_validation=True,blocker_display_validation=True,
                     colorless_preference_validation=True,commander_mana_validation=True,paper_release_validation=True,
-                    scoped_rules_validation=True,catalog_cache_format_validation=True)
+                    scoped_rules_validation=True,catalog_cache_format_validation=True,early_result_recording_validation=True)
         args.out.write_text(json.dumps(report,indent=2),encoding='utf8');print(json.dumps(report),flush=True)
     finally:
         if url:

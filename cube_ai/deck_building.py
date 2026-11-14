@@ -30,7 +30,7 @@ def revise(catalog,deck,spec,variant='balanced'):
     prefix=([commander] if commander else [])+deck['lands']
     candidates=[name for name in deck['drafted'] if name not in prefix and cards[name]['kind']!='land'
                 and (cards[name]['identity']=='C' or set(cards[name]['identity'])<=set(deck['identity']))
-                and (not power or not card_reasons(cards[name],spec,power=power))]
+                and not card_reasons(cards[name],spec,power=power)]
     vectors={name:roles(cards[name]) for name in candidates}
     counts=Counter()
     for name in selected:counts.update(vectors[name])
