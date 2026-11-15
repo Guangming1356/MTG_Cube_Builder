@@ -1,6 +1,6 @@
 {
   "passed": true,
-  "application_version": "0.2.14",
+  "application_version": "0.2.15",
   "cards": 31070,
   "offline_ai": true,
   "forge_available": true,
@@ -30,5 +30,6 @@
   "catalog_cache_format_validation": true,
   "early_result_recording_validation": true,
   "deck_policy_validation": true,
-  "entry_cost_validation": true
+  "entry_cost_validation": true,
+  "commander_selection_validation": true
 }
