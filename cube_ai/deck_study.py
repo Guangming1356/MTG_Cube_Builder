@@ -22,7 +22,7 @@ from .engine import audit
 from .forge import (campaign_resources,card_index,configuration,engine_name,
                     engine_description,evidence_files,forge_session,run_battle,write_deck)
 from .game_queue import GameQueue
-from .optimize import game_trace,schedule
+from .optimize import game_trace,schedule,TRACE_VERSION
 from .task_control import atomic_json
 
 STUDIES=ROOT/'private/deck-studies'
@@ -51,7 +51,7 @@ def snapshot_sources(catalog,rows,out):
     cards=[catalog.cards[name] for name in sorted({row['name'] for row in rows})]
     atomic_json(folder/'catalog.json',dict(cards=cards,snapshot=catalog.snapshot,signature=catalog.signature))
     return dict(files=hashes,card_records=len(cards),stored_before_games=True,
-                activity_version='completed-player-cycles-1')
+                activity_version='completed-player-cycles-1',trace_version=TRACE_VERSION)
 
 
 def _average(records,key):

@@ -13,7 +13,7 @@ from .config import ROOT
 from .acceleration import linear
 
 MODELS=ROOT/'models'
-VERSION='activity-6'
+VERSION='activity-7'
 _training_lock=threading.Lock()
 
 def engine_scope():

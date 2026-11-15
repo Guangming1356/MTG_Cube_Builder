@@ -322,3 +322,22 @@ def test_trace_card_prefixes_and_alternate_faces_remain_unambiguous():
     value=game_trace(SimpleNamespace(cards=cards),log,[deck])['players']['a']
     assert value['casts']=={'Fireball':1,'Fire':1,'Front // Back':1}
     assert value['finisher_casts']==1 and value['interaction_casts']==1 and value['spellcasts']==3
+
+
+def test_trace_separates_forge_auxiliary_events_without_losing_wrapped_names():
+    from types import SimpleNamespace
+    from cube_ai.optimize import game_trace,log_events
+    cards={name:dict(finisher=name=='Summon: Titan',interaction=name=='Fire') for name in ['Commander','Fire','Fireball','Summon: Titan']}
+    deck=dict(id='a',commander='Commander',spells=['Fire','Fireball','Summon: Titan'])
+    log=('Turn: Turn 1 (Ai(1)-a)\n'
+         'Add To Stack: Ai(1)-a cast Summon: Ti\ntan\n'
+         'Replacement Effect: Summon: Titan enters with a lore counter.\n'
+         'Add To Stack: Ai(1)-a cast Fireball\nZone Change: something moved.\n'
+         'Add To Stack: Ai(1)-a cast Fire\nMana: Island added {U}.\n'
+         'Add To Stack: Ai(1)-a cast Fireballs\nDiscard: a discards a card.\n'
+         'Add To Stack: Ai(1)-a activated Fire\nPlayer Control: control changed.\n')
+    player=game_trace(SimpleNamespace(cards=cards),log,[deck])['players']['a']
+    assert player['casts']=={'Summon: Titan':1,'Fireball':1,'Fire':1}
+    assert player['activations']=={'Fire':1}
+    assert (player['finisher_casts'],player['interaction_casts'],player['spellcasts'])==(1,1,4)
+    assert 'Replacement Effect:' in log_events(log)[1]  # historical event fingerprints unchanged

@@ -28,7 +28,8 @@ from .experiment import experiment_budget, execution_resources
 from .performance import Timings
 
 OPTIMIZATIONS=ROOT/'optimizations'
-POLICY_VERSION='forge-feedback-1.5'
+POLICY_VERSION='forge-feedback-1.6'
+TRACE_VERSION='forge-event-boundaries-2'
 _eligible_cache={}
 # Sparse self-play cannot justify cutting these efficient, broadly useful spells.
 # This expert guard is versioned policy, not invented training labels.
@@ -114,15 +115,19 @@ def draft_evaluation(catalog,rows,spec,seeds,guilds,include_tables=False,learned
         incremental=workspace is not None,wall_seconds=round(time.perf_counter()-started,6))
     return report
 
-def iter_log_events(log):
+def iter_log_events(log, *, split_auxiliary=False):
     """Stream events without copying every remaining suffix of a large log."""
     text=log.replace('\r\n','\n')
-    previous=None
-    for match in re.finditer(r'^(?:Turn|Phase|Land|Add To Stack|Resolve Stack|Combat|Damage|Life|Mulligan|Game Outcome|Match Result|Game Result):',text,re.M):
-        if previous is not None and not text.startswith(('Match Result:','Game Result:'),previous):
+    previous=None;keep=False
+    primary=r'Turn|Phase|Land|Add To Stack|Resolve Stack|Combat|Damage|Life|Mulligan|Game Outcome|Match Result|Game Result'
+    primary_kinds=frozenset(primary.split('|'))
+    auxiliary=r'|Mana|Zone Change|Discard|Replacement Effect|Player Control|Warning|No AI assigned for API|ComputerUtilMana' if split_auxiliary else ''
+    for match in re.finditer(r'^(?P<kind>'+primary+auxiliary+r'):',text,re.M):
+        if previous is not None and keep:
             yield text[previous:match.start()].strip().replace('\n','')
         previous=match.start()
-    if previous is not None and not text.startswith(('Match Result:','Game Result:'),previous):
+        keep=match['kind'] in primary_kinds and match['kind'] not in ('Match Result','Game Result')
+    if previous is not None and keep:
         yield text[previous:].strip().replace('\n','')
 
 
@@ -149,7 +154,7 @@ def game_trace(catalog,log,decks,*,extended=False):
     def name_of(text):
         if text in cards:return cards[text]
         return next((name for prefix,name in card_prefixes if text.startswith(prefix+' targeting') or text.startswith(prefix+' (')),None)
-    for event in iter_log_events(log):
+    for event in iter_log_events(log,split_auxiliary=True):
         turn=re.match(r'Turn: Turn (\d+) \(Ai\(\d+\)-([^\)]+)\)',event)
         if turn:
             active=turn[2]
@@ -195,7 +200,7 @@ def game_trace(catalog,log,decks,*,extended=False):
             p['no_spell_cycle_rate']=sum(x==0 for x in p['cycle_spells'][:count])/count if count else None
             actions=[sum(values) for values in zip(p['cycle_spells'][:count],p['cycle_activations'][:count],p['cycle_attacks'][:count])]
             p['no_action_cycle_rate']=sum(x==0 for x in actions)/count if count else None
-    result=dict(players=players,ai_missing_apis=sorted(set(re.findall(r'No AI assigned for API: (\w+)',log))),
+    result=dict(players=players,trace_version=TRACE_VERSION,ai_missing_apis=sorted(set(re.findall(r'No AI assigned for API: (\w+)',log))),
         limitation='前四个自己的回合只统计实际施放咒语；零施放不等于卡手，保留互动或发动异能也可能是正确策略。未记录手牌，未施放牌不能当作抽到的死牌。')
     if extended:
         result.update(activity_version='completed-player-cycles-1',

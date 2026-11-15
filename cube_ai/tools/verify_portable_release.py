@@ -117,7 +117,7 @@ for name in ['Mind Stone','Warping Wail','Time Warp','Chrome Mox']:
     assert score_adjustment(card,spec,power=power)==score_adjustment(card,spec)
     assert design_bonus(card,spec,available=applicable_themes(card['identity'],spec))==design_bonus(card,spec)
 assert not any(n=='scipy' or n.startswith('scipy.') for n in sys.modules)
-assert ACTIVITY_VERSION=='activity-6'
+assert ACTIVITY_VERSION=='activity-7'
 assert paper_witness(c.cards['Mind Stone'])['released_at']=='1997-06-09'
 assert not card_reasons(c.cards['Mind Stone'],BuildSpec.from_dict(dict(bracket=3)))
 unknown=dict(c.cards['Mind Stone'],name='Unknown future card',oracle_id='11111111-1111-1111-1111-111111111111',released='2099-01-01')
