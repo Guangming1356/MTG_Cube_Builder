@@ -1,6 +1,6 @@
 {
   "passed": true,
-  "application_version": "0.2.16",
+  "application_version": "0.2.17",
   "cards": 31070,
   "offline_ai": true,
   "forge_available": true,
@@ -32,5 +32,6 @@
   "deck_policy_validation": true,
   "entry_cost_validation": true,
   "commander_selection_validation": true,
-  "mana_payment_validation": true
+  "mana_payment_validation": true,
+  "readiness_stream_validation": true
 }
