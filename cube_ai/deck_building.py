@@ -2,7 +2,7 @@
 from collections import Counter
 import random
 
-from .brackets import card_reasons,deck_report,is_gc,profile
+from .brackets import DeckRules,deck_report,is_gc
 from .design import deck_design_report,package_roles
 from .draft import opening_test
 
@@ -23,14 +23,15 @@ def roles(card):
     return result
 
 
-def revise(catalog,deck,spec,variant='balanced',*,evaluate=True):
+def revise(catalog,deck,spec,variant='balanced',*,evaluate=True,_rules=None):
+    rules=(_rules or DeckRules(catalog,spec)).ensure_scope(catalog,spec)
     if not deck['buildable']:return dict(deck)
     options=VARIANTS[variant];cards=catalog.cards
-    selected=list(deck['spells']);commander=deck.get('commander');power=profile(spec)
+    selected=list(deck['spells']);commander=deck.get('commander');power=rules.power
     prefix=([commander] if commander else [])+deck['lands']
     candidates=[name for name in deck['drafted'] if name not in prefix and cards[name]['kind']!='land'
                 and (cards[name]['identity']=='C' or set(cards[name]['identity'])<=set(deck['identity']))
-                and not card_reasons(cards[name],spec,power=power)]
+                and rules.allowed(name)]
     vectors={name:roles(cards[name]) for name in candidates}
     counts=Counter()
     for name in selected:counts.update(vectors[name])
@@ -78,7 +79,7 @@ def revise(catalog,deck,spec,variant='balanced',*,evaluate=True):
         target=60 if spec.mode=='commander' else 40
         result['ready']=opening_test(catalog,selected,deck['lands'],deck['identity'],target-int(bool(commander)),random.Random(0),hands=0,commander=commander,starting_life=40 if spec.mode=='commander' else 20)
         result['basics']=result['ready']['basics'];result['design']=deck_design_report(catalog,result)
-        result['bracket']=deck_report(catalog,result,spec)
+        result['bracket']=deck_report(catalog,result,spec,_rules=rules)
         assert len(selected)+len(result['lands'])+sum(result['basics'].values())+int(bool(commander))==target
         assert not result['bracket'] or not result['bracket']['violations']
     return result

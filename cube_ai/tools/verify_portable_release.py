@@ -78,6 +78,17 @@ assert OPENING_SAMPLER=='ordered-prefix-11-v1' and READINESS_STREAM=='readiness-
 parent_rng=random.Random(37);before_state=parent_rng.getstate()
 assert _readiness_rng(parent_rng,0).getstate()!=_readiness_rng(parent_rng,1).getstate()
 assert parent_rng.getstate()==before_state
+from cube_ai.brackets import DeckRules,_extra_turn_text,extra_turn
+blocked_spec=BuildSpec();blocked_rules=DeckRules(c,blocked_spec)
+assert blocked_rules.allowed('Mind Stone') and not blocked_rules.allowed('Warping Wail')
+assert tuple(blocked_rules.reasons('Warping Wail'))
+allowed_spec=BuildSpec(allow_colorless_costs=True)
+assert DeckRules(c,allowed_spec).allowed('Warping Wail')
+try:blocked_rules.ensure_scope(c,allowed_spec)
+except ValueError:pass
+else:raise AssertionError('Rule scopes must not cross request parameters')
+assert extra_turn(c.cards['Time Warp']) and not extra_turn(c.cards['Eater of Days'])
+assert _extra_turn_text.cache_info().maxsize==8192
 assert not affordable('',[]) and affordable('{0}',[])
 assert not affordable('{1}',[set()])
 assert affordable('{2/W}',[{'U'},{'U'}])
@@ -187,7 +198,7 @@ print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs(
                     lazy_solver_import=True,full_cube_generation=True,calibration_reference_validation=True,blocker_display_validation=True,
                     colorless_preference_validation=True,commander_mana_validation=True,paper_release_validation=True,
                     scoped_rules_validation=True,catalog_cache_format_validation=True,early_result_recording_validation=True,
-                    deck_policy_validation=True,entry_cost_validation=True,commander_selection_validation=True,mana_payment_validation=True,readiness_stream_validation=True)
+                    deck_policy_validation=True,entry_cost_validation=True,commander_selection_validation=True,mana_payment_validation=True,readiness_stream_validation=True,rules_scope_validation=True)
         args.out.write_text(json.dumps(report,indent=2),encoding='utf8');print(json.dumps(report),flush=True)
     finally:
         if url:

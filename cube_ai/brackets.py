@@ -4,6 +4,7 @@ This module never assigns a certified official bracket from card scores or wins.
 """
 import re
 from datetime import date
+from functools import lru_cache
 from .mana import requires_colorless_mana
 from .release_dates import paper_witness
 
@@ -68,8 +69,12 @@ def is_gc(card):
     return card['name'].split(' // ')[0] in GAME_CHANGERS
 
 def extra_turn(card):
+    return _extra_turn_text(card.get('text',''))
+
+@lru_cache(maxsize=8192)
+def _extra_turn_text(text):
     # Both singular and multiple extra turns; excludes skipping turns.
-    return bool(re.search(r'\b(?:take|takes) (?:an?|one|two|three|\d+|X) extra turns?\b',card.get('text',''),re.I))
+    return bool(re.search(r'\b(?:take|takes) (?:an?|one|two|three|\d+|X) extra turns?\b',text,re.I))
 
 def card_reasons(card,spec,*,power=None):
     p=power or profile(spec)
@@ -130,27 +135,42 @@ class DeckRules:
     """
     def __init__(self,catalog,spec):
         self.catalog=catalog;self.spec=spec;self.power=profile(spec);self.checks={}
+        self.rejections={}
+
+    def ensure_scope(self,catalog,spec):
+        if self.catalog is not catalog or self.spec is not spec:
+            raise ValueError('规则检查上下文与当前牌库或构筑参数不一致')
+        return self
+
+    def check(self,name):
+        if name not in self.checks:
+            card=self.catalog.cards[name];reasons=tuple(card_reasons(card,self.spec,power=self.power))
+            self.checks[name]=(is_gc(card),not reasons)
+            if reasons:self.rejections[name]=reasons
+        return self.checks[name]
+
+    def allowed(self,name):return self.check(name)[1]
+
+    def reasons(self,name):
+        self.check(name)
+        return self.rejections.get(name,())
 
     def select(self,initial,candidates):
-        if not self.power:return [n for n in candidates if not card_reasons(self.catalog.cards[n],self.spec)]
-        cap=self.power['deck_gc']
-        count=sum(is_gc(self.catalog.cards[n]) for n in initial) if cap is not None else 0
+        cap=self.power['deck_gc'] if self.power else None
+        count=sum(self.check(n)[0] for n in initial) if cap is not None else 0
         selected=[]
         for name in candidates:
-            if name not in self.checks:
-                card=self.catalog.cards[name]
-                self.checks[name]=(is_gc(card),not card_reasons(card,self.spec,power=self.power))
-            gc,allowed=self.checks[name]
+            gc,allowed=self.check(name)
             if not allowed or (cap is not None and count+gc>cap):continue
             selected.append(name);count+=gc
         return selected
 
-def deck_report(catalog,deck,spec):
-    p=profile(spec)
+def deck_report(catalog,deck,spec,*,_rules=None):
+    rules=(_rules or DeckRules(catalog,spec)).ensure_scope(catalog,spec);p=rules.power
     if not p:return None
     names=([deck['commander']] if deck.get('commander') else [])+deck.get('spells',[])+deck.get('lands',[])
-    gc=[n for n in names if is_gc(catalog.cards[n])]
-    violations=[n+': '+'; '.join(card_reasons(catalog.cards[n],spec)) for n in names if card_reasons(catalog.cards[n],spec)]
+    gc=[n for n in names if rules.check(n)[0]]
+    violations=[n+': '+'; '.join(reasons) for n in names if (reasons:=rules.reasons(n))]
     if deck.get('commander') and catalog.cards[deck['commander']]['quality']>p['commander_ceiling']:
         violations.append('实际指挥官超过项目该档评价上限')
     if p['deck_gc'] is not None and len(gc)>p['deck_gc']:violations.append('整副牌含指挥官和地牌的 Game Changers 超过官方数量限制')

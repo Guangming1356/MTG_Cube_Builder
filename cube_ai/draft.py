@@ -123,10 +123,10 @@ def build_deck(catalog,names,spec,rng,guild,seat=0,*,readiness_hands=40,_rules=N
     if guild not in GUILDS:raise ValueError('无效的轮抓偏好色组')
     unknown=[name for name in names if name not in catalog.cards]
     if unknown:raise ValueError('抓牌池含未知牌名：'+', '.join(unknown))
-    pool=[dict(name=name) for name in names];g=guild;rules=_rules or DeckRules(catalog,spec)
+    pool=[dict(name=name) for name in names];g=guild;rules=(_rules or DeckRules(catalog,spec)).ensure_scope(catalog,spec)
     legal_commands=[catalog.cards[r['name']] for r in pool if catalog.cards[r['name']]['commander'] and catalog.cards[r['name']]['identity']!='C'] if spec.mode=='commander' else []
     commands=[c for c in legal_commands if automatic_commander(c,spec)] if spec.mode=='commander' else [None]
-    if spec.mode=='commander':commands=[c for c in commands if not card_reasons(c,spec)]
+    if spec.mode=='commander':commands=[c for c in commands if rules.allowed(c['name'])]
     power=rules.power
     if power:commands=[c for c in commands if c['quality']<=power['commander_ceiling']]
     target=60 if spec.mode=="commander" else 40
@@ -165,7 +165,7 @@ def build_deck(catalog,names,spec,rng,guild,seat=0,*,readiness_hands=40,_rules=N
         drafted=[r["name"] for r in pool])
     if spec.deck_policy=='balanced':
         from .deck_building import revise
-        deck=revise(catalog,deck,spec,'balanced',evaluate=False)
+        deck=revise(catalog,deck,spec,'balanced',evaluate=False,_rules=rules)
         deck.pop('research_changes',None)
     # Evaluate only the final spells. Commander stays outside opening hands.
     # Readiness is an observation, not part of dealing the next table. Its
@@ -177,7 +177,7 @@ def build_deck(catalog,names,spec,rng,guild,seat=0,*,readiness_hands=40,_rules=N
     if commander and commander.get('commander_setup'):deck['commander_setup_notes']=commander_messages(commander)
     from .design import deck_design_report
     deck['design']=deck_design_report(catalog,deck)
-    deck['bracket']=deck_report(catalog,deck,spec)
+    deck['bracket']=deck_report(catalog,deck,spec,_rules=rules)
     return deck
 
 def stress_test(catalog,rows,spec,trials=100,progress=lambda x:None):
