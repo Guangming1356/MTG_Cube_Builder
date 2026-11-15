@@ -34,12 +34,14 @@ def test_failed_game_not_used_as_positive_card_training(cards,tmp_path):
     assert e['summary']['failure_rate']==1
 
 def test_sparse_win_pressure_shrunk_and_no_labels(cards):
-    e=dict(summary=dict(mean_early_no_spell_rate=.4,no_finisher_cast_rate=.2),preferred_guilds={'BR':dict(appearances=3,wins=3)},guilds={})
+    e=dict(summary=dict(mean_early_no_spell_rate=.4,no_finisher_cast_rate=.2),preferred_guilds={'BR':dict(appearances=3,wins=3)},
+        preferred_pods={'BR':dict(pods=1,score_sum=1)},guilds={})
     d=dict(observations=[])
     m=feedback_model(cards,e,d)
     assert .85<=m['guilds']['BR']['pressure']<1
     assert m['guilds']['BU']['pressure']==1
     assert m['low_weight']==pytest.approx(.29)
+    assert m['guilds']['BR']['observed_games']==3 and m['guilds']['BR']['observed_pods']==1
 
 
 def test_legacy_actual_identity_stats_do_not_drive_preference_pressure(cards):
@@ -61,6 +63,7 @@ def test_evidence_attributes_games_to_draft_preference_and_keeps_actual_identity
     evidence=evidence_from_match(cards,result)
     assert evidence['guilds']['B']['wins']==1
     assert evidence['preferred_guilds']['BR']==dict(appearances=1,wins=1,draws=0)
+    assert evidence['preferred_pods']['BR']==dict(pods=1,score_sum=1)
     assert evidence['preferred_attribution']==dict(basis='draft_preference',unattributed_appearances=0)
     pressure=feedback_model(cards,evidence,dict(observations=[]))
     assert pressure['guilds']['BR']['observed_games']==1
@@ -69,6 +72,58 @@ def test_evidence_attributes_games_to_draft_preference_and_keeps_actual_identity
     incomplete=evidence_from_match(cards,result)
     assert not incomplete['preferred_guilds']
     assert incomplete['preferred_attribution']['unattributed_appearances']==3
+
+
+def test_repeated_games_in_one_pod_do_not_inflate_pressure(cards,tmp_path):
+    decks=[dict(id='a',guild='BR',identity='B',spells=[],commander='Sun Titan'),
+           dict(id='b',guild='UW',identity='UW',spells=[],commander='Sun Titan'),
+           dict(id='c',guild='GR',identity='G',spells=[],commander='Sun Titan')]
+    (tmp_path/'game.log').write_text('Turn: Turn 1 (Ai(1)-a)\n',encoding='utf8')
+    game=dict(pod=0,game=0,winner='a',turns=1,outcome='win',order=['a','b','c'],log='game.log')
+    result=dict(path=str(tmp_path),match_id='test',tables=[dict(pod=0,decks=decks)],games=[game],
+        summary=dict(completed=1,games=1,guilds={}),skipped_pods=0)
+    single=evidence_from_match(cards,result)
+    result['games']=[dict(game,game=i) for i in range(3)];result['summary'].update(completed=3,games=3)
+    repeated=evidence_from_match(cards,result)
+    assert repeated['preferred_guilds']['BR']['appearances']==3
+    assert repeated['preferred_pods']['BR']==single['preferred_pods']['BR']
+    one=feedback_model(cards,single,dict(observations=[]))['guilds']['BR']
+    three=feedback_model(cards,repeated,dict(observations=[]))['guilds']['BR']
+    assert one['pressure']==three['pressure'] and three['observed_pods']==1
+
+
+def test_legacy_preference_counts_without_pod_boundaries_are_neutral(cards):
+    evidence=dict(summary=dict(mean_early_no_spell_rate=.4,no_finisher_cast_rate=.2),
+        preferred_guilds={'BR':dict(appearances=30,wins=30)},guilds={})
+    result=feedback_model(cards,evidence,dict(observations=[]))['guilds']['BR']
+    assert result['observed_games']==30 and result['observed_pods']==0 and result['pressure']==1
+
+
+def test_same_guild_seats_and_draws_share_a_single_pod_weight(cards,tmp_path):
+    decks=[dict(id='a',guild='BR',identity='B',spells=[],commander='Sun Titan'),
+           dict(id='b',guild='BR',identity='R',spells=[],commander='Sun Titan'),
+           dict(id='c',guild='GR',identity='G',spells=[],commander='Sun Titan')]
+    (tmp_path/'game.log').write_text('Turn: Turn 1 (Ai(1)-a)\n',encoding='utf8')
+    games=[dict(pod=0,game=0,winner='a',turns=1,outcome='win',order=['a','b','c'],log='game.log'),
+           dict(pod=0,game=1,winner=None,turns=2,outcome='draw',order=['b','c','a'],log='game.log')]
+    result=dict(path=str(tmp_path),match_id='test',tables=[dict(pod=0,decks=decks)],games=games,
+        summary=dict(completed=2,games=2,guilds={}),skipped_pods=0)
+    evidence=evidence_from_match(cards,result)
+    assert evidence['preferred_guilds']['BR']==dict(appearances=4,wins=1,draws=2)
+    assert evidence['preferred_pods']['BR']['pods']==1
+    assert evidence['preferred_pods']['BR']['score_sum']==pytest.approx(5/12)
+
+
+def test_all_draws_are_neutral_not_losses(cards,tmp_path):
+    decks=[dict(id='a',guild='BR',identity='B',spells=[],commander='Sun Titan'),
+           dict(id='b',guild='UW',identity='UW',spells=[],commander='Sun Titan'),
+           dict(id='c',guild='GR',identity='G',spells=[],commander='Sun Titan')]
+    (tmp_path/'game.log').write_text('Turn: Turn 1 (Ai(1)-a)\n',encoding='utf8')
+    game=dict(pod=0,game=0,winner=None,turns=1,outcome='draw',order=['a','b','c'],log='game.log')
+    result=dict(path=str(tmp_path),match_id='test',tables=[dict(pod=0,decks=decks)],games=[game],
+        summary=dict(completed=1,games=1,guilds={}),skipped_pods=0)
+    evidence=evidence_from_match(cards,result)
+    assert feedback_model(cards,evidence,dict(observations=[]))['guilds']['BR']['pressure']==1
 
 def test_bootstrap_resamples_pods_not_players():
     groups={g:dict(mean_strength=.5) for g in GUILDS}

@@ -120,7 +120,8 @@ assert not any(n=='scipy' or n.startswith('scipy.') for n in sys.modules)
 assert ACTIVITY_VERSION=='activity-7'
 from cube_ai.optimize import feedback_model
 sample_evidence=dict(summary=dict(mean_early_no_spell_rate=.4,no_finisher_cast_rate=.2),
-    guilds={'BR':dict(appearances=3,wins=3)},preferred_guilds={'BR':dict(appearances=3,wins=0)})
+    guilds={'BR':dict(appearances=3,wins=3)},preferred_guilds={'BR':dict(appearances=3,wins=0)},
+    preferred_pods={'BR':dict(pods=1,score_sum=0)})
 sample_feedback=feedback_model(c,sample_evidence,dict(observations=[]))
 assert sample_feedback['guild_attribution']=='draft_preference'
 assert sample_feedback['guilds']['BR']['pressure']>1

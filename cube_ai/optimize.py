@@ -28,7 +28,7 @@ from .experiment import experiment_budget, execution_resources
 from .performance import Timings
 
 OPTIMIZATIONS=ROOT/'optimizations'
-POLICY_VERSION='forge-feedback-1.7'
+POLICY_VERSION='forge-feedback-1.8'
 TRACE_VERSION='forge-event-boundaries-2'
 _eligible_cache={}
 # Sparse self-play cannot justify cutting these efficient, broadly useful spells.
@@ -209,7 +209,7 @@ def game_trace(catalog,log,decks,*,extended=False):
 
 def evidence_from_match(catalog,result):
     out=Path(result['path']);tables={p['pod']:p for p in result['tables']};traces=[];card_stats=defaultdict(Counter)
-    preferred=defaultdict(Counter);unattributed=0
+    preferred=defaultdict(Counter);preferred_pods=defaultdict(lambda:defaultdict(Counter));unattributed=0
     for r in result['games']:
         if r['outcome'] not in {'win','draw'}:continue
         trace=game_trace(catalog,(out/r['log']).read_text(encoding='utf-8'),tables[r['pod']]['decks'],extended=True)
@@ -225,6 +225,9 @@ def evidence_from_match(catalog,result):
             stat=preferred[guild];stat['appearances']+=1
             stat['wins']+=int(r['winner']==deck_id)
             stat['draws']+=int(r['outcome']=='draw')
+            pod_stat=preferred_pods[guild][r['pod']];pod_stat['appearances']+=1
+            pod_stat['wins']+=int(r['winner']==deck_id)
+            pod_stat['draws']+=int(r['outcome']=='draw')
         for d in tables[r['pod']]['decks']:
             p=trace['players'][d['id']]
             for n in d['spells']+[d['commander']]:
@@ -245,6 +248,8 @@ def evidence_from_match(catalog,result):
     return dict(match_id=result['match_id'],summary=summary,traces=traces,
         cards={n:dict(v) for n,v in sorted(card_stats.items())},guilds=result['summary']['guilds'],
         preferred_guilds={g:dict(c) for g,c in sorted(preferred.items())},
+        preferred_pods={g:dict(pods=len(pods),score_sum=sum((c['wins']+c['draws']/3)/c['appearances'] for c in pods.values()))
+            for g,pods in sorted(preferred_pods.items())},
         preferred_attribution=dict(basis='draft_preference',unattributed_appearances=unattributed))
 
 def collect_training(catalog,rows,spec,out,pods=30,workers=0,clock=120,progress=print,experiment_seed=None,budget=None):
@@ -303,12 +308,17 @@ def feedback_model(catalog,evidence,drafts):
         # commander's identity. Never mix the two groups when applying pressure.
         # Historical evidence without preference labels gets neutral pressure.
         observed=evidence.get('preferred_guilds',{}).get(g,{})
-        games=observed.get('appearances',0);wins=observed.get('wins',0)
-        # Prior: three wins per nine observations; sparse group wins have little influence.
-        posterior=(wins+3)/(games+9)
+        games=observed.get('appearances',0)
+        cluster=evidence.get('preferred_pods',{}).get(g,{})
+        pods=cluster.get('pods',0);score_sum=cluster.get('score_sum',0)
+        if type(pods) is not int or pods<0 or type(score_sum) not in (int,float) or not math.isfinite(score_sum) or not 0<=score_sum<=pods:
+            pods=0;score_sum=0
+        # The neutral prior is 1/3 per draft table. A draw receives neutral
+        # credit; seat rotations of one table contribute one averaged result.
+        posterior=(score_sum+3)/(pods+9)
         pressure=max(.85,min(1.15,1+(1/3-posterior)*.6))
         needs[g]={k:statistics.mean(max(0,1-d['components'][k]) for d in decks) if decks else 0 for k in ['low','interaction','draw','finisher','creature']}
-        needs[g]['pressure']=pressure;needs[g]['observed_games']=games;needs[g]['posterior_win']=posterior
+        needs[g]['pressure']=pressure;needs[g]['observed_games']=games;needs[g]['observed_pods']=pods;needs[g]['posterior_score']=posterior
         needs[g]['package_gaps']={}
         for package in ['sacrifice','reanimator']:
             for component in (['fodder','outlet','reward'] if package=='sacrifice' else ['entry','return','target']):
@@ -317,7 +327,7 @@ def feedback_model(catalog,evidence,drafts):
     return dict(version=POLICY_VERSION,early_no_spell=early,early_activity_metric='completed_cycle_no_action' if use_cycles else 'legacy_own_turn_no_spell',finisher_uncast=finisher,guilds=needs,
         guild_attribution='draft_preference',
         low_weight=.15+.35*early,finisher_weight=.12+.25*finisher,
-        note='权重来自整副牌的缺口与真实行为；色组缺口和胜率均按轮抓偏好归组，胜率仅做收缩后的弱压力信号。未施放牌不扣分，未知牌不伪造样本。')
+        note='权重来自整副牌的缺口与真实行为；色组按轮抓偏好归组，同桌对局先取平均再收缩，平局按三人中性的三分之一计分。该分数不是预测胜率。未施放牌不扣分，未知牌不伪造样本。')
 
 def utility(card,model,game_stats=None,spec=None):
     available=[g for g in GUILDS if card['identity']=='C' or set(card['identity'])<=set(g)]
