@@ -92,6 +92,26 @@ def test_fixed_readiness_does_not_confuse_absent_free_and_snow_costs(cost,expect
     assert result['ready_by_turn']==({'1':0,'2':0,'3':1,'4':1} if expected is None else {str(t):expected for t in range(1,5)})
 
 
+@pytest.mark.parametrize('cost,expected,calls',[
+    ('{0}',{'1':1,'2':1,'3':1,'4':1},1),
+    ('{X}{X}{U}',{'1':0,'2':0,'3':1,'4':1},15),
+])
+def test_readiness_stays_true_after_first_affordable_turn(monkeypatch,cost,expected,calls):
+    import cube_ai.draft as draft
+    catalog=example_catalog(cost)
+    class Fixed:
+        def sample(self,deck,count):return deck
+    original=draft._affordable_masks
+    observed=[]
+    def counted(*args,**kwargs):
+        observed.append(kwargs['max_sources'])
+        return original(*args,**kwargs)
+    monkeypatch.setattr(draft,'_affordable_masks',counted)
+    result=opening_test(catalog,['Spell']*7,['Land']*4,'U',11,Fixed(),hands=1)
+    assert result['ready_by_turn']==expected
+    assert len(observed)==calls
+
+
 def test_opening_uses_snow_provenance_and_explicit_starting_life():
     class Fixed:
         def sample(self,deck,count):return deck

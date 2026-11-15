@@ -56,7 +56,11 @@ def opening_test(catalog,spells,land_names,identity,deck_size,rng,hands=40,*,com
             # Test feasible choices among every land seen, while respecting one
             # land drop per turn. The first lands in a shuffled hand need not be
             # the lands a player would actually choose to play.
-            if any(_affordable_masks(cost,sources,max_sources=turn,life_budget=life_budget) for cost in costs):ready[turn]+=1
+            if any(_affordable_masks(cost,sources,max_sources=turn,life_budget=life_budget) for cost in costs):
+                # The cards and usable sources seen only grow, and the land-drop
+                # limit increases, so affordability persists in this model.
+                for later in range(turn,5):ready[later]+=1
+                break
     return dict(ready_by_turn={str(t):round(ready[t]/hands,3) for t in range(1,5)} if hands else {},
                 opening_2_to_4_lands=round(sum(2<=x<=4 for x in landcounts)/hands,3) if hands else None,
                 basics=dict(allocated),model_version=MODEL_VERSION,starting_life=starting_life,assumptions=readiness_assumptions(starting_life),
