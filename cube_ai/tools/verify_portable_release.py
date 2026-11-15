@@ -66,8 +66,13 @@ from cube_ai.mana import requires_colorless_mana,commander_basic_sources
 from cube_ai.release_dates import paper_witness,ASSET as PAPER_ASSET,bundle_asset
 from cube_ai.brackets import card_reasons,profile,score_adjustment
 from cube_ai.design import applicable_themes,design_bonus
+from cube_ai.features import VERSION as FEATURE_VERSION
 assert not any(n=='scipy' or n.startswith('scipy.') for n in sys.modules)
 c=Catalog();pairs=name_pairs();index=card_index(configuration())
+assert FEATURE_VERSION=='ontology-1.4'
+assert c.cards['Phyrexian Dreadnought']['entry_risks']==['sacrifice_large_power']
+assert c.cards['Phyrexian Dreadnought']['quality']<2 and 'blink' not in c.cards['Phyrexian Dreadnought']['payoffs']
+assert not c.cards['Sun Titan'].get('entry_risks')
 assert CATALOG_CACHE_FORMAT==2
 with tempfile.TemporaryDirectory() as control_temp:
     control_folder=Path(control_temp)/'new-job'/'control'
@@ -156,7 +161,7 @@ print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs(
                     lazy_solver_import=True,full_cube_generation=True,calibration_reference_validation=True,blocker_display_validation=True,
                     colorless_preference_validation=True,commander_mana_validation=True,paper_release_validation=True,
                     scoped_rules_validation=True,catalog_cache_format_validation=True,early_result_recording_validation=True,
-                    deck_policy_validation=True)
+                    deck_policy_validation=True,entry_cost_validation=True)
         args.out.write_text(json.dumps(report,indent=2),encoding='utf8');print(json.dumps(report),flush=True)
     finally:
         if url:

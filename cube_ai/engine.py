@@ -256,6 +256,9 @@ def audit(catalog,rows,spec,unresolved=None,strict=False):
         cards.append(c);roles[r["role"]]+=1
         errors=exclusion_reasons(c,spec,power=power)
         if errors:issue("error","excluded",c["name"]+": "+"; ".join(errors),[c["name"]])
+        if c.get('entry_risks'):
+            from .entry_costs import messages as entry_cost_messages
+            issue('warning','entry_cost',c['name']+'：'+'；'.join(entry_cost_messages(c))+'。已计入独立使用评分，请结合配合判断。',[c['name']])
         if r["role"]=="Commander" and not c["commander"]:issue("error","commander",c["name"]+" 不能作为指挥官",[c["name"]])
         if r["role"]=="Commander" and c["identity"]=='C':issue('error','colorless_commander',c['name']+'：当前轮抓不设置独立无色指挥官色组',[c['name']])
         if r["role"]=="Land" and c["kind"]!="land":issue("error","land_role",c["name"]+" 并非正面地牌",[c["name"]])

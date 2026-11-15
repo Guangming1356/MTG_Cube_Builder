@@ -438,7 +438,11 @@ def handler_for(app):
                 if path.path=="/api/card":
                     n=app.catalog.resolve(q("name"))
                     if not n:raise FileNotFoundError("未确认的牌名")
-                    return self.json(200,{k:v for k,v in app.catalog.cards[n].items() if k!="vector"})
+                    card={k:v for k,v in app.catalog.cards[n].items() if k!="vector"}
+                    if card.get('entry_risks'):
+                        from .entry_costs import messages as entry_cost_messages
+                        card['entry_cost_notes']=entry_cost_messages(card)
+                    return self.json(200,card)
                 if path.path=="/api/knowledge":return self.json(200,app.knowledge.search(q("q")))
                 if path.path=="/api/job":
                     job=app.get_job(q('id'))

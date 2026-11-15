@@ -2,8 +2,9 @@
 import math
 import re
 from functools import lru_cache
+from .entry_costs import entry_burden
 
-VERSION = "ontology-1.3"
+VERSION = "ontology-1.4"
 FAST_MANA = set("Black Lotus|Lotus Petal|Mana Crypt|Mana Vault|Sol Ring|Chrome Mox|Mox Diamond|Mox Opal|Mox Amber|Mox Jasper|Lion's Eye Diamond|Jeweled Lotus|Grim Monolith|Simian Spirit Guide|Elvish Spirit Guide".split("|"))
 LOCKS = {"Stasis", "Winter Orb", "Static Orb", "Armageddon", "Ravages of War", "Jokulhaups", "Worldfire"}
 COMBOS = [
@@ -67,6 +68,8 @@ def tribal_pattern(tribes):
 
 def tribal_requirements(text, tribes):
     # Token production is an enabler. A demanded subtype is a dependency.
+    if not tribes:
+        return ['chosen_type'] if match(r"choose a creature type|of the chosen type|shares? (?:at least one )?creature type",text) else []
     found = []
     pattern,mapping=tribal_pattern(tuple(sorted(tribes)))
     for hit in pattern.finditer(text):
@@ -96,6 +99,8 @@ def extract(raw, tribes):
     draw = match(r"draw (?:a|two|three|four|five|six|seven|x|that many|cards? equal)|exile the top [^.]*may (?:play|cast)", text)
     evasive = match(r"\bflying\b|\btrample\b|\bmenace\b|can't be blocked", text)
     etb = match(r"when (?:this|~|" + re.escape(name.split(",")[0]) + r")[^.]{0,50} enters", text)
+    burden=entry_burden(front.get('oracle_text',text),front.get('name',name)) if creature else dict(risks=[],penalty=0,negative_only=False)
+    if burden['negative_only']:etb=False
     enablers, payoffs = set(), set()
     rules = {
         "tokens": (r"create[^.]{0,140}tokens?", r"tokens? (?:you control|would be created)|whenever[^.]*tokens?[^.]*enters|populate"),
@@ -115,6 +120,7 @@ def extract(raw, tribes):
     for theme, (supply, demand) in rules.items():
         if match(supply, text): enablers.add(theme)
         if match(demand, text): payoffs.add(theme)
+    if burden['negative_only']:payoffs.discard('blink')
     # Self references are not demands for the card's creature subtype.
     dependency_text=text.replace(name,'').replace(name.split(' // ')[0],'')
     subtype_dependencies = tribal_requirements(dependency_text, tribes)
@@ -126,6 +132,7 @@ def extract(raw, tribes):
     else:score_penalty=0
     if match(r'skip your next (?:two|three) turns',text):score_penalty+=1.2
     if named_dependency:score_penalty+=.45
+    score_penalty+=burden['penalty']
     fast = name in FAST_MANA or (not is_land and mv == 0 and match(r"add \{", text)
         and not match(r"multikicker|suspend|pay [^.]*life|remove[^.]*charge counter", text))
     mld = name in LOCKS or match(r"destroy all lands|sacrifices? all lands|lands don't untap", text)
@@ -164,4 +171,5 @@ def extract(raw, tribes):
                 enablers=sorted(enablers), payoffs=sorted(payoffs), tribal=subtype_dependencies,
                 fast_mana=bool(fast), mld=mld, quality=round(score, 3), vector=vector,
                 front_unusable=bool(front_unusable),extra_deck=extra_deck,named_dependency=bool(named_dependency),
-                calibrated=name in CALIBRATION, mana_cost=mana_cost)
+                calibrated=name in CALIBRATION, mana_cost=mana_cost,
+                **({'entry_risks':burden['risks']} if burden['risks'] else {}))
