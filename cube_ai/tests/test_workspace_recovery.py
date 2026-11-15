@@ -30,3 +30,12 @@ def test_stress_report_distinguishes_missing_observations_from_zero_success():
     result=subprocess.run([node,str(script)],capture_output=True,text=True,timeout=10)
     assert result.returncode==0,result.stdout+result.stderr
     assert '"passed":4' in result.stdout
+
+
+def test_task_monitor_works_with_local_service_when_internet_is_offline():
+    node=shutil.which('node')
+    if node is None:pytest.skip('Node is needed for the browser-state regression')
+    script=Path(__file__).parent/'js/test_task_monitor_offline.cjs'
+    result=subprocess.run([node,str(script)],capture_output=True,text=True,encoding='utf8',timeout=10)
+    assert result.returncode==0,result.stdout+result.stderr
+    assert '"passed":6' in result.stdout

@@ -78,7 +78,8 @@ function scheduleTaskMonitor(immediate=false){
   clearTimeout(taskMonitorTimer);
   if(window.cubeServiceClosed)return;
   taskMonitorTimer=setTimeout(async()=>{
-    if(!document.hidden&&navigator.onLine){try{await refreshTaskMonitor();}catch{}}
+    // The service is local: navigator.onLine can be false while it works.
+    if(!document.hidden){try{await refreshTaskMonitor();}catch{}}
     scheduleTaskMonitor();
   },immediate?0:document.hidden?30000:taskMonitorActive?1500:12000);
 }
