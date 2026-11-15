@@ -28,7 +28,7 @@ from .experiment import experiment_budget, execution_resources
 from .performance import Timings
 
 OPTIMIZATIONS=ROOT/'optimizations'
-POLICY_VERSION='forge-feedback-1.6'
+POLICY_VERSION='forge-feedback-1.7'
 TRACE_VERSION='forge-event-boundaries-2'
 _eligible_cache={}
 # Sparse self-play cannot justify cutting these efficient, broadly useful spells.
@@ -209,10 +209,22 @@ def game_trace(catalog,log,decks,*,extended=False):
 
 def evidence_from_match(catalog,result):
     out=Path(result['path']);tables={p['pod']:p for p in result['tables']};traces=[];card_stats=defaultdict(Counter)
+    preferred=defaultdict(Counter);unattributed=0
     for r in result['games']:
         if r['outcome'] not in {'win','draw'}:continue
         trace=game_trace(catalog,(out/r['log']).read_text(encoding='utf-8'),tables[r['pod']]['decks'],extended=True)
         traces.append(dict(pod=r['pod'],game=r['game'],winner=r['winner'],turns=r['turns'],**trace))
+        decks_by_id={d['id']:d for d in tables[r['pod']]['decks']}
+        order=r.get('order')
+        if not isinstance(order,list):unattributed+=len(decks_by_id);order=[]
+        else:unattributed+=max(0,len(decks_by_id)-len(order))
+        for deck_id in order:
+            guild=decks_by_id.get(deck_id,{}).get('guild')
+            if guild not in GUILDS:
+                unattributed+=1;continue
+            stat=preferred[guild];stat['appearances']+=1
+            stat['wins']+=int(r['winner']==deck_id)
+            stat['draws']+=int(r['outcome']=='draw')
         for d in tables[r['pod']]['decks']:
             p=trace['players'][d['id']]
             for n in d['spells']+[d['commander']]:
@@ -231,7 +243,9 @@ def evidence_from_match(catalog,result):
         deckout_rate=statistics.mean('draw a card' in (p['loss_reason'] or '') or 'library' in (p['loss_reason'] or '').lower() for p in all_players) if all_players else None,
         median_global_turns=statistics.median(t['turns'] for t in traces) if traces else None)
     return dict(match_id=result['match_id'],summary=summary,traces=traces,
-        cards={n:dict(v) for n,v in sorted(card_stats.items())},guilds=result['summary']['guilds'])
+        cards={n:dict(v) for n,v in sorted(card_stats.items())},guilds=result['summary']['guilds'],
+        preferred_guilds={g:dict(c) for g,c in sorted(preferred.items())},
+        preferred_attribution=dict(basis='draft_preference',unattributed_appearances=unattributed))
 
 def collect_training(catalog,rows,spec,out,pods=30,workers=0,clock=120,progress=print,experiment_seed=None,budget=None):
     from .surrogate import active_model
@@ -285,7 +299,10 @@ def feedback_model(catalog,evidence,drafts):
     needs={}
     for g in GUILDS:
         decks=[x for x in drafts['observations'] if x.get('preferred')==g and x['buildable']]
-        observed=evidence['guilds'].get(g,{})
+        # Structural decks are grouped by draft preference, not by the chosen
+        # commander's identity. Never mix the two groups when applying pressure.
+        # Historical evidence without preference labels gets neutral pressure.
+        observed=evidence.get('preferred_guilds',{}).get(g,{})
         games=observed.get('appearances',0);wins=observed.get('wins',0)
         # Prior: three wins per nine observations; sparse group wins have little influence.
         posterior=(wins+3)/(games+9)
@@ -298,8 +315,9 @@ def feedback_model(catalog,evidence,drafts):
                 key=package+':'+component
                 needs[g]['package_gaps'][key]=statistics.mean(component in d.get('design',{}).get('packages',{}).get(package,{}).get('missing',[]) for d in decks) if decks else 0
     return dict(version=POLICY_VERSION,early_no_spell=early,early_activity_metric='completed_cycle_no_action' if use_cycles else 'legacy_own_turn_no_spell',finisher_uncast=finisher,guilds=needs,
+        guild_attribution='draft_preference',
         low_weight=.15+.35*early,finisher_weight=.12+.25*finisher,
-        note='权重来自整副牌的缺口与真实行为；胜率仅做收缩后的弱压力信号。未施放牌不扣分，未知牌不伪造样本。')
+        note='权重来自整副牌的缺口与真实行为；色组缺口和胜率均按轮抓偏好归组，胜率仅做收缩后的弱压力信号。未施放牌不扣分，未知牌不伪造样本。')
 
 def utility(card,model,game_stats=None,spec=None):
     available=[g for g in GUILDS if card['identity']=='C' or set(card['identity'])<=set(g)]

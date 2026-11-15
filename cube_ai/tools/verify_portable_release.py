@@ -118,6 +118,12 @@ for name in ['Mind Stone','Warping Wail','Time Warp','Chrome Mox']:
     assert design_bonus(card,spec,available=applicable_themes(card['identity'],spec))==design_bonus(card,spec)
 assert not any(n=='scipy' or n.startswith('scipy.') for n in sys.modules)
 assert ACTIVITY_VERSION=='activity-7'
+from cube_ai.optimize import feedback_model
+sample_evidence=dict(summary=dict(mean_early_no_spell_rate=.4,no_finisher_cast_rate=.2),
+    guilds={'BR':dict(appearances=3,wins=3)},preferred_guilds={'BR':dict(appearances=3,wins=0)})
+sample_feedback=feedback_model(c,sample_evidence,dict(observations=[]))
+assert sample_feedback['guild_attribution']=='draft_preference'
+assert sample_feedback['guilds']['BR']['pressure']>1
 assert paper_witness(c.cards['Mind Stone'])['released_at']=='1997-06-09'
 assert not card_reasons(c.cards['Mind Stone'],BuildSpec.from_dict(dict(bracket=3)))
 unknown=dict(c.cards['Mind Stone'],name='Unknown future card',oracle_id='11111111-1111-1111-1111-111111111111',released='2099-01-01')
