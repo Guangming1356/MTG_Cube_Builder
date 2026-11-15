@@ -6,6 +6,7 @@ import math
 import random
 import re
 import statistics
+from .casting_costs import curve_value
 import uuid
 import zipfile
 import time
@@ -45,7 +46,7 @@ def deck_metrics(catalog,deck):
     if not deck['buildable']:return dict(strength=0,buildable=False)
     cards=[catalog.cards[n] for n in deck['spells']]
     counts={f:sum(c[f] for c in cards) for f in ['creature','interaction','wipe','ramp','draw','finisher']}
-    counts.update(low=sum(c['mv']<=2 for c in cards),expensive=sum(c['mv']>=6 for c in cards),
+    counts.update(low=sum(curve_value(c)<=2 for c in cards),expensive=sum(curve_value(c)>=6 for c in cards),
         spells=len(cards),lands=deck['land_count'],mean_mv=round(statistics.mean(c['mv'] for c in cards),3) if cards else 0,
         mean_quality=round(statistics.mean(c['quality'] for c in cards),3) if cards else 0)
     # A transparent structural utility, not a predicted game-win probability.
@@ -298,7 +299,7 @@ def feedback_model(catalog,evidence,drafts):
 def utility(card,model,game_stats=None,spec=None):
     available=[g for g in GUILDS if card['identity']=='C' or set(card['identity'])<=set(g)]
     role=sum(model['guilds'][g]['pressure']*(
-        model['low_weight']*(card['mv']<=2)*(1+model['guilds'][g]['low'])+
+        model['low_weight']*(curve_value(card)<=2)*(1+model['guilds'][g]['low'])+
         .18*card['interaction']*(1+model['guilds'][g]['interaction'])+
         .10*card['draw']*(1+model['guilds'][g]['draw'])+
         model['finisher_weight']*card['finisher']*(1+model['guilds'][g]['finisher'])+

@@ -18,5 +18,7 @@ vm.createContext(context);vm.runInContext(source.slice(start,end),context);
   await context.detail(card.name);assert.ok(!detail.innerHTML.includes('进场代价'));
   card={...card,name:'Phage the Untouchable',commander_setup_notes:['从指挥区直接施放会触发自身败北 <提示>']};
   await context.detail(card.name);assert.match(detail.innerHTML,/指挥官施放条件/);assert.match(detail.innerHTML,/自身败北/);assert.match(detail.innerHTML,/&lt;提示&gt;/);
-  console.log(JSON.stringify({passed:3,card_notes_rendered_without_desktop_control:true}));
+  card={...card,name:'Benevolent River Spirit',mv:2,cast_mv:7,commander_setup_notes:undefined,casting_notes:['waterbend <5>']};
+  await context.detail(card.name);assert.match(detail.innerHTML,/waterbend/);assert.match(detail.innerHTML,/&lt;5&gt;/);
+  console.log(JSON.stringify({passed:4,card_notes_rendered_without_desktop_control:true}));
 })().catch(error=>{console.error(error);process.exitCode=1;});

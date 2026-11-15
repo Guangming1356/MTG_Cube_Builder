@@ -69,7 +69,9 @@ from cube_ai.design import applicable_themes,design_bonus
 from cube_ai.features import VERSION as FEATURE_VERSION
 assert not any(n=='scipy' or n.startswith('scipy.') for n in sys.modules)
 c=Catalog();pairs=name_pairs();index=card_index(configuration())
-assert FEATURE_VERSION=='ontology-1.5'
+assert FEATURE_VERSION=='ontology-1.6'
+assert c.cards['Benevolent River Spirit']['mv']==2
+assert c.cards['Benevolent River Spirit']['cast_mv']==7
 from cube_ai.mana import affordable,MODEL_VERSION
 assert MODEL_VERSION=='printed-cost-2'
 from cube_ai.draft import OPENING_SAMPLER,READINESS_STREAM,_readiness_rng

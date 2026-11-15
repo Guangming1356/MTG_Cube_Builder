@@ -78,9 +78,20 @@ def test_current_frozen_candidate_conserves_hard_constraints(cards):
     # Audit its original constraints; new default-generation tests cover the
     # new preference. Do not rewrite saved user evidence to retrofit defaults.
     historical=dict(n['spec']);historical.setdefault('allow_colorless_costs',True)
-    assert audit(cards,n['cards'],BuildSpec.from_dict(historical),strict=True)['hard_errors']==0
+    # Preserve the experiment and audit its original printed-MV curve separately;
+    # the current estimator intentionally reclassifies additional mana costs.
+    import copy
+    old_catalog=copy.copy(cards);old_catalog.cards=dict(cards.cards)
+    for name,card in cards.cards.items():
+        if card.get('casting_requirements'):
+            old=dict(card);old.pop('cast_mv',None)
+            old['bucket']=str(max(1,int(old['mv']))) if old['mv']<5 else '5+'
+            old_catalog.cards[name]=old
+    assert audit(old_catalog,n['cards'],BuildSpec.from_dict(historical),strict=True)['hard_errors']==0
+    current=audit(cards,n['cards'],BuildSpec.from_dict(historical),strict=True)
+    assert all(i['code']=='curve_quota' for i in current['issues'] if i['severity']=='error')
     for a,z in zip(b['cards'],n['cards']):
-        old,new=cards.cards[a['name']],cards.cards[z['name']]
+        old,new=old_catalog.cards[a['name']],old_catalog.cards[z['name']]
         assert old['identity']==new['identity'] and old['bucket']==new['bucket']
         assert old['creature']==new['creature']
         assert (old['mv']>=6)==(new['mv']>=6)

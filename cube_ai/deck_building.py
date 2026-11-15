@@ -5,6 +5,7 @@ import random
 from .brackets import DeckRules,deck_report,is_gc
 from .design import deck_design_report,package_roles
 from .draft import opening_test
+from .casting_costs import curve_value
 
 VARIANTS={
     'conservative':dict(low=10,high=8,swaps=4),
@@ -16,7 +17,7 @@ VARIANTS={
 
 def roles(card):
     result={key:int(bool(card[key])) for key in ['creature','interaction','draw','finisher']}
-    result.update(low=int(card['mv']<=2),high=int(card['mv']>=6))
+    result.update(low=int(curve_value(card)<=2),high=int(curve_value(card)>=6))
     packages=package_roles(card)
     for package,values in packages.items():
         for key,value in values.items():result[package+':'+key]=int(bool(value))
@@ -63,14 +64,14 @@ def revise(catalog,deck,spec,variant='balanced',*,evaluate=True,_rules=None):
         swapped=False
         for goal in (['low'] if low_need else [])+(['high'] if high_need else []):
             incoming=sorted((name for name in candidates if name not in selected and (vectors[name]['low'] if goal=='low' else not vectors[name]['high'])),
-                            key=lambda name:(-cards[name]['quality'],cards[name]['mv'],name))
+                            key=lambda name:(-cards[name]['quality'],curve_value(cards[name]),name))
             outgoing=sorted((name for name in selected if not vectors[name]['low'] and (True if goal=='low' else vectors[name]['high'])),
-                            key=lambda name:(not vectors[name]['high'],cards[name]['quality'],-cards[name]['mv'],name))
+                            key=lambda name:(not vectors[name]['high'],cards[name]['quality'],-curve_value(cards[name]),name))
             for add in incoming:
                 if any(exchange(add,remove) for remove in outgoing):swapped=True;break
             if swapped:break
         if not swapped:break
-    selected.sort(key=lambda name:(-cards[name]['quality'],cards[name]['mv'],name))
+    selected.sort(key=lambda name:(-cards[name]['quality'],curve_value(cards[name]),name))
     result=dict(deck,spells=selected)
     result['deck_policy']=variant;result['deck_policy_changes']=changes
     result['research_changes']=changes

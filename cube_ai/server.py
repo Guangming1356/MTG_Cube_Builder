@@ -445,6 +445,9 @@ def handler_for(app):
                     if card.get('commander_setup'):
                         from .commander_rules import messages as commander_messages
                         card['commander_setup_notes']=commander_messages(card)
+                    if card.get('casting_requirements'):
+                        from .casting_costs import messages as casting_messages
+                        card['casting_notes']=casting_messages(card)
                     return self.json(200,card)
                 if path.path=="/api/knowledge":return self.json(200,app.knowledge.search(q("q")))
                 if path.path=="/api/job":

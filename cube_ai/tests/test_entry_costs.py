@@ -86,6 +86,8 @@ def test_card_details_explain_the_cost_only_for_flagged_cards(catalog,tmp_path):
         card=requests.get(url,params=dict(name='Phyrexian Dreadnought')).json()
         assert card['entry_risks']==['sacrifice_large_power'] and '总力量' in card['entry_cost_notes'][0]
         assert 'entry_cost_notes' not in requests.get(url,params=dict(name='Sun Titan')).json()
+        spirit=requests.get(url,params=dict(name='Benevolent River Spirit')).json()
+        assert spirit['mv']==2 and spirit['cast_mv']==7 and 'waterbend' in spirit['casting_notes'][0]
         phage=requests.get(url,params=dict(name='Phage the Untouchable')).json()
         assert phage['commander'] and phage['commander_setup']==['hand_cast_required']
         assert '败北' in phage['commander_setup_notes'][0]
@@ -101,4 +103,4 @@ def test_card_detail_renderer_uses_notes_and_omits_empty_notices():
     script=Path(__file__).parent/'js/test_entry_details.cjs'
     result=subprocess.run([node,str(script)],capture_output=True,text=True,timeout=10)
     assert result.returncode==0,result.stdout+result.stderr
-    assert '"passed":3' in result.stdout
+    assert '"passed":4' in result.stdout

@@ -2,6 +2,7 @@
 import re
 from collections import Counter
 from functools import lru_cache
+from .casting_costs import mana_cost as casting_mana_cost
 
 MODEL_VERSION='printed-cost-2'
 MANA_BITS={color:1<<i for i,color in enumerate('WUBRGCS')}
@@ -85,7 +86,8 @@ def readiness_assumptions(starting_life):
     return (f'每回合抽牌、最多下一张地，在已见地牌中选择来源；每张产法术力地只计一点，雪境来源单独检查。'
             f'每个 X 按 1；非瑞克西亚费用按起始 {starting_life} 生命、至少保留 1 点生命分别测试一张牌，'
             '不累计此前生命付款或受到的伤害。没有法术力费用不等于 {0}。'
-            '不结算加速、进场横置、条件产费、费用增减、额外/替代费用、调度、合法目标或牌效；费用可支付不代表一定能行动。')
+            '已识别的强制附加法术力和资源/法术力二选一费用按纯法术力分支计算，waterbend 不使用横置协助。'
+            '不结算加速、进场横置、条件产费、费用增减、其它附加/替代费用、调度、合法目标或牌效；费用可支付不代表一定能行动。')
 
 
 @lru_cache(maxsize=4096)
@@ -121,7 +123,7 @@ def commander_basic_sources(catalog,spells,land_names,basics,commander=None):
     strategy; nonbasic source limitations are the same as the readiness model.
     """
     if not commander:return dict(basics)
-    cost=catalog.cards[commander]['mana_cost']
+    cost=casting_mana_cost(catalog.cards[commander])
     needed=Counter(re.findall(r'\{([WUBRG])\}',cost))
     if not needed:return dict(basics)
     fixed=[set(catalog.cards[n]['fixing'])|({'S'} if 'Snow' in catalog.cards[n].get('type','').split() else set()) for n in land_names]
@@ -129,7 +131,7 @@ def commander_basic_sources(catalog,spells,land_names,basics,commander=None):
     if all(counts[c]+basics.get(c,0)>=n for c,n in needed.items()):return dict(basics)
     def sources(allocation):return fixed+[{c} for c,n in allocation.items() for _ in range(n)]
     current=Counter(basics);original_sources=sources(current)
-    protected=[catalog.cards[n]['mana_cost'] for n in spells if affordable(catalog.cards[n]['mana_cost'],original_sources)]
+    protected=[casting_mana_cost(catalog.cards[n]) for n in spells if affordable(casting_mana_cost(catalog.cards[n]),original_sources)]
     for color in 'WUBRG':
         for _ in range(max(0,needed[color]-counts[color]-current[color])):
             donors=sorted((c for c,n in current.items() if c!=color and n>0 and counts[c]+n>needed[c]),

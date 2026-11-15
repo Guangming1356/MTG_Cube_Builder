@@ -4,8 +4,9 @@ import re
 from functools import lru_cache
 from .entry_costs import entry_burden
 from .commander_rules import eligible as commander_eligible,setup_requirements
+from .casting_costs import extract as casting_requirements
 
-VERSION = "ontology-1.5"
+VERSION = "ontology-1.6"
 FAST_MANA = set("Black Lotus|Lotus Petal|Mana Crypt|Mana Vault|Sol Ring|Chrome Mox|Mox Diamond|Mox Opal|Mox Amber|Mox Jasper|Lion's Eye Diamond|Jeweled Lotus|Grim Monolith|Simian Spirit Guide|Elvish Spirit Guide".split("|"))
 LOCKS = {"Stasis", "Winter Orb", "Static Orb", "Armageddon", "Ravages of War", "Jokulhaups", "Worldfire"}
 COMBOS = [
@@ -94,6 +95,8 @@ def extract(raw, tribes):
     creature = "Creature" in typ
     commander = commander_eligible(raw)
     mana_cost = front.get("mana_cost", raw.get("mana_cost", ""))
+    casting=casting_requirements(front.get('oracle_text',text),mana_cost,mv) if not is_land else {}
+    cast_mv=casting.get('cast_mv',mv)
     interaction = match(r"counter target (?:spell|activated|triggered)|(?:destroy|exile|return) (?:another )?target (?:[^.]{0,35})?(?:creature|artifact|enchantment|permanent|planeswalker)|target creature gets -|deals? (?:\d+|x) damage to (?:any target|target creature)|(?:each|target) (?:opponent|player) sacrifices", text)
     wipe = match(r"(?:destroy|exile) all (?:[^.]{0,20})?(?:creatures|artifacts|enchantments|nonland permanents)|(?:each|all) creatures? (?:gets?|get) -|(?:return|exile) all (?:[^.]{0,20})?creatures|damage to each creature|each creature deals", text)
     ramp = not is_land and match(r"add \{|add (?:one|two|three) mana|search your library for[^.]{0,120}land|additional land|create[^.]*treasure token", text)
@@ -146,16 +149,16 @@ def extract(raw, tribes):
     rank = raw.get("edhrec_rank") or 50000
     popularity = max(-.35, min(.4, .22 * (3.3 - math.log10(max(rank, 10)))))
     try:
-        body = (float(front.get("power", 0)) + float(front.get("toughness", 0))) / max(1, mv)
+        body = (float(front.get("power", 0)) + float(front.get("toughness", 0))) / max(1, cast_mv)
     except (ValueError, TypeError):
         body = 1.5
     score = 2.7 + popularity
     score += .35 * interaction + .35 * wipe + .35 * draw + .25 * etb
-    score += .25 * (ramp and mv <= 3) + .18 * evasive + .2 * finisher
+    score += .25 * (ramp and cast_mv <= 3) + .18 * evasive + .2 * finisher
     score += .17 * min(3, len(enablers & payoffs))
     if creature: score += max(-.3, min(.35, .25 * (body - 1.6)))
     if not text.strip(): score -= .9
-    if mv > 7: score -= .13 * (mv - 7)
+    if cast_mv > 7: score -= .13 * (cast_mv - 7)
     if subtype_dependencies: score -= .45
     score = CALIBRATION.get(name, max(1.0, min(4.65, score)))
     score=max(1.0,score-score_penalty)
@@ -163,7 +166,7 @@ def extract(raw, tribes):
     if kind in {"instant","sorcery"}:enablers.add("spells")
     if "Artifact" in typ:enablers.add("artifacts")
     if "Equipment" in typ:enablers.add("equipment")
-    bucket = str(max(1, int(mv))) if mv < 5 else "5+"
+    bucket = str(max(1, int(cast_mv))) if cast_mv < 5 else "5+"
     vector = [1, min(mv, 10) / 10, float(creature), float(interaction), float(wipe), float(ramp),
               float(draw), float(finisher), float(evasive), float(etb), float(commander),
               len(enablers) / 10, len(payoffs) / 10, float(bool(subtype_dependencies)),
@@ -174,5 +177,6 @@ def extract(raw, tribes):
                 fast_mana=bool(fast), mld=mld, quality=round(score, 3), vector=vector,
                 front_unusable=bool(front_unusable),extra_deck=extra_deck,named_dependency=bool(named_dependency),
                 calibrated=name in CALIBRATION, mana_cost=mana_cost,
+                **casting,
                 **({'commander_setup':commander_setup} if commander_setup else {}),
                 **({'entry_risks':burden['risks']} if burden['risks'] else {}))

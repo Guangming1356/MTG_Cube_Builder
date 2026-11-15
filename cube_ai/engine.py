@@ -19,6 +19,7 @@ from .commander_rules import automatic as automatic_commander,messages as comman
 from .feedback import FeedbackStore
 from .design import VERSION as DESIGN_VERSION, design_bonus, applicable_themes, cube_design_report, studies
 from .brackets import profile, is_gc, score_adjustment, cube_report, VERSION as BRACKET_VERSION
+from .casting_costs import curve_value,report as casting_cost_report
 
 def apportion(total, weights):
     if total == 0: return {k:0 for k in weights}
@@ -195,7 +196,7 @@ def build(catalog, spec, previous=None, progress=lambda x:None, store=None):
     cons.add("6费以上保底",[c["mv"]>=6 for c in candidates],math.ceil(nmain*.09))
     for group in "WUBRG":
         amount=main_targets[group]
-        cons.add(group+" 低中费密度",[c["identity"]==group and c["mv"]<=3 for c in candidates],math.floor(amount*.57))
+        cons.add(group+" 低中费密度",[c["identity"]==group and curve_value(c)<=3 for c in candidates],math.floor(amount*.57))
         cons.add(group+" 互动",[c["identity"]==group and c["interaction"] for c in candidates],max(2,math.floor(amount*.10)))
         cons.add(group+" 后期手段",[c["identity"]==group and c["finisher"] for c in candidates],max(1,math.floor(amount*.05)))
         cons.add(group+" 加速上限",[c["identity"]==group and c["ramp"] for c in candidates],hi=math.ceil(amount*.25))
@@ -295,7 +296,7 @@ def audit(catalog,rows,spec,unresolved=None,strict=False):
         if sum(c['mv']>=6 for c in main)<math.ceil(len(main)*.09):issue('error','late_density','6 费以上密度不足')
         for g in 'WUBRG':
             own=[c for c in main if c['identity']==g];amount=main_targets[g]
-            if sum(c['mv']<=3 for c in own)<math.floor(amount*.57):issue('error','mono_curve',g+' 低中费不足')
+            if sum(curve_value(c)<=3 for c in own)<math.floor(amount*.57):issue('error','mono_curve',g+' 低中费不足')
             if sum(c['interaction'] for c in own)<max(2,math.floor(amount*.10)):issue('error','mono_interaction',g+' 互动不足')
             if sum(c['finisher'] for c in own)<max(1,math.floor(amount*.05)):issue('error','mono_finisher',g+' 后期手段不足')
             if sum(c['ramp'] for c in own)>math.ceil(amount*.25):issue('error','mono_ramp',g+' 加速超过上限')
@@ -337,7 +338,7 @@ def audit(catalog,rows,spec,unresolved=None,strict=False):
     if spec.lands and fixing:
         values=[fixing[c] for c in "WUBRG"]
         if max(values)-min(values)>4:issue("warning","fixing","各色修色地来源差超过 4")
-    return dict(total=len(rows),roles=dict(roles),main_colors=dict(colors),curve=dict(curve),
+    return dict(total=len(rows),roles=dict(roles),main_colors=dict(colors),curve=dict(curve),casting_costs=casting_cost_report(main),
         role_counts=role_counts,density_targets=density_minima(spec,spec.size-spec.commanders-spec.lands),quality_by_group=mean,pairs=pairs,fixing=dict(fixing),
         eligible_commanders=sum(c["commander"] for c in cards),automatic_commanders=sum(automatic_commander(c,spec) for c in cards),issues=issues,
         hard_errors=sum(i["severity"]=="error" for i in issues),snapshot=catalog.snapshot,

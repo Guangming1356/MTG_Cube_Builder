@@ -7,6 +7,7 @@ from .config import GUILDS
 from .brackets import DeckRules, card_reasons, deck_report
 from .commander_rules import automatic as automatic_commander,messages as commander_messages
 from .mana import affordable,_affordable_masks,land_source_mask,readiness_assumptions,MODEL_VERSION
+from .casting_costs import curve_value,mana_cost as casting_mana_cost,VERSION as CASTING_VERSION
 
 READINESS_STREAM='readiness-fork-1'
 OPENING_SAMPLER='ordered-prefix-11-v1'
@@ -22,7 +23,7 @@ def opening_test(catalog,spells,land_names,identity,deck_size,rng,hands=40,*,com
     if type(hands) is not int or hands<0:raise ValueError('起手抽样次数必须为非负整数')
     pips=Counter()
     for n in spells:
-        for p in re.findall(r"\{([WUBRG])\}",catalog.cards[n]["mana_cost"]):pips[p]+=1
+        for p in re.findall(r"\{([WUBRG])\}",casting_mana_cost(catalog.cards[n])):pips[p]+=1
     colors=list(identity) if identity!="C" else ["C"]
     missing=deck_size-len(spells)-len(land_names)
     basics=[];allocated=Counter()
@@ -36,6 +37,8 @@ def opening_test(catalog,spells,land_names,identity,deck_size,rng,hands=40,*,com
             allocated=repaired
             basics=[{'kind':'land','fixing':[color],'name':'基本地 '+color} for color,n in allocated.items() for _ in range(n)]
     deck=[catalog.cards[n] for n in spells+land_names]+basics
+    # Payment-only copies keep the catalog's printed cost and mana value intact.
+    deck=[dict(c,mana_cost=casting_mana_cost(c)) if c.get('casting_requirements') else c for c in deck]
     if hands and len(deck)<11:raise ValueError('起手与前四回合抽牌测试至少需要 11 张牌')
     land_masks={card['name']:land_source_mask(card) for card in deck if card['kind']=='land'}
     ready=Counter();landcounts=[];life_budget=max(0,starting_life-1)
@@ -57,7 +60,7 @@ def opening_test(catalog,spells,land_names,identity,deck_size,rng,hands=40,*,com
     return dict(ready_by_turn={str(t):round(ready[t]/hands,3) for t in range(1,5)} if hands else {},
                 opening_2_to_4_lands=round(sum(2<=x<=4 for x in landcounts)/hands,3) if hands else None,
                 basics=dict(allocated),model_version=MODEL_VERSION,starting_life=starting_life,assumptions=readiness_assumptions(starting_life),
-                sampling_version=OPENING_SAMPLER,hands=hands,cards_per_hand=11)
+                sampling_version=OPENING_SAMPLER,hands=hands,cards_per_hand=11,casting_version=CASTING_VERSION)
 
 def deal(catalog,rows,spec,rng):
     count=spec.players*spec.rounds
@@ -136,13 +139,13 @@ def build_deck(catalog,names,spec,rng,guild,seat=0,*,readiness_hands=40,_rules=N
         spells=[r["name"] for r in pool if catalog.cards[r["name"]]["kind"]!="land"
             and (catalog.cards[r["name"]]["identity"]=="C" or set(catalog.cards[r["name"]]["identity"])<=set(identity))
             and (not commander or r["name"]!=commander["name"])]
-        spells.sort(key=lambda n:(-catalog.cards[n]["quality"],catalog.cards[n]["mv"],n))
+        spells.sort(key=lambda n:(-catalog.cards[n]["quality"],curve_value(catalog.cards[n]),n))
         spells=rules.select([commander['name']] if commander else [],spells)
         # Free basic lands are unlimited. Land count is a deck-building decision,
         # not a requirement that 37 drafted spells must be available.
         sample=spells[:38 if target==60 else 23]
-        avg=sum(catalog.cards[n]["mv"] for n in sample)/max(1,len(sample))
-        cheap_ramp=sum(catalog.cards[n]["ramp"] and catalog.cards[n]["mv"]<=3 for n in sample)
+        avg=sum(curve_value(catalog.cards[n]) for n in sample)/max(1,len(sample))
+        cheap_ramp=sum(catalog.cards[n]["ramp"] and curve_value(catalog.cards[n])<=3 for n in sample)
         land_target=max(22,min(28,round(23+(avg-2.5)*2-min(cheap_ramp,6)*.25))) if target==60 else 17
         needed=min(len(spells),target-land_target-int(bool(commander)))
         commander_quality=commander['quality'] if commander else 0
@@ -216,7 +219,7 @@ def stress_test(catalog,rows,spec,trials=100,progress=lambda x:None):
                 buildable_rate=round(valid_count/max(1,total_decks),3),guilds=group_summary,
                 examples=examples,packs=first_packs,seed=spec.seed,
                 mana_model=dict(version=MODEL_VERSION,starting_life=40 if spec.mode=='commander' else 20,assumptions=readiness_assumptions(40 if spec.mode=='commander' else 20),
-                    stream_version=READINESS_STREAM,sampling_version=OPENING_SAMPLER,hands_per_deck=40,cards_per_hand=11),
+                    stream_version=READINESS_STREAM,sampling_version=OPENING_SAMPLER,hands_per_deck=40,cards_per_hand=11,casting_version=CASTING_VERSION),
                 component_check=dict(decks=valid_count,decks_with_incomplete_packages=incomplete_packages,
                     note='实际入组牌的组件提示，不等于死牌率。'),
                 limitation="只测试轮抓组牌和起手法术力准备度；没有结算牌效、战斗、胜负或政治互动，不能解释为实战胜率。")
