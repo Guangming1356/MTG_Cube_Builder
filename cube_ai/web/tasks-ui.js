@@ -5,6 +5,17 @@ const taskLabels={build:'生成 Cube',repair:'修订 Cube',stress:'轮抓检查'
 const taskStateLabels={queued:'排队中',running:'运行中',pausing:'等待安全暂停',paused:'已暂停',cancelling:'正在结束',cancelled:'已结束',done:'已完成',failed:'未完成'};
 const liveTaskStates=new Set(['queued','running','pausing','paused','cancelling']);
 
+function taskConnection(connected){
+  const message=$('task-connection-status');
+  if(window.cubeServiceClosed){message.hidden=true;return;}
+  message.hidden=connected;
+  if(!connected){
+    message.textContent='暂时无法连接本地助手，正在重试。任务可能仍在后台运行；恢复连接后可继续查看和控制。';
+    taskPanelSignature='';
+    for(const button of $('task-monitor').querySelectorAll('button.task-control'))button.disabled=true;
+  }
+}
+
 function taskDuration(job){
   if(!job.created_at)return '';
   const seconds=Math.max(0,Math.floor((job.finished_at||Date.now()/1000)-job.created_at));
@@ -44,7 +55,10 @@ async function refreshTaskMonitor(){
   if(taskMonitorLoading)return;
   taskMonitorLoading=true;
   try{
-    const jobs=await api('/api/jobs'),panel=$('task-monitor');
+    let jobs;
+    try{jobs=await api('/api/jobs');taskConnection(true);}
+    catch(error){taskConnection(false);throw error;}
+    const panel=$('task-monitor');
     const completed=jobs.some(job=>liveTaskStates.has(taskObservedStates.get(job.id))&&!liveTaskStates.has(job.state));
     taskObservedStates=new Map(jobs.map(job=>[job.id,job.state]));
     if(completed)taskRuntimeStatusDirty=true;

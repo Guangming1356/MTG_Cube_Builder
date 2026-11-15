@@ -147,6 +147,7 @@ $('close-assistant').onclick=async()=>{
   try{
     const result=await api('/api/shutdown',{});
     window.cubeServiceClosed=true;clearTimeout(taskMonitorTimer);
+    $('task-connection-status').hidden=true;
     lock(true);$('connection').textContent='● 已退出，后台资源已释放';notice(result.message);
   }catch(error){notice(error.message,true);$('close-assistant').disabled=false;}
 };
