@@ -12,8 +12,10 @@ async function api(path,data){
     if(!response.ok)throw Error(result.error||`请求未完成（${response.status}）`);
     return result;
   }catch(error){
-    if(error.name==='AbortError')throw Error('助手暂时没有响应。后台任务可能仍在运行，连接恢复后可在任务区查看。');
-    if(error instanceof TypeError)throw Error('未能连接本地助手，请重新双击项目入口，再查看任务区。');
+    if(error.name==='AbortError'||error instanceof TypeError){
+      const message=error.name==='AbortError'?'助手暂时没有响应。后台任务可能仍在运行，连接恢复后可在任务区查看。':'未能连接本地助手，请重新双击项目入口，再查看任务区。';
+      const connectionError=Error(message);connectionError.retryable=true;throw connectionError;
+    }
     throw error;
   }finally{clearTimeout(timer);}
 }
@@ -27,7 +29,26 @@ $('mode').onchange=()=>fillSpec(statusInfo.presets[$('mode').value]);
 function lock(value){working=value;document.querySelectorAll('button').forEach(b=>{if(!b.closest('nav')&&!b.classList.contains('task-control')&&!['close-dialog','card-prev','card-next','home-cards','home-check','home-guide'].includes(b.id)&&!b.classList.contains('name-link'))b.disabled=value;});if(!value)refreshActions();}
 function refreshActions(){if(working)return;if($('undo-edit'))$('undo-edit').disabled=!cubeUndoStack.length;const connected=!!statusInfo?.gpt.configured;$('plan').disabled=!connected;$('chat').disabled=!connected||!current;for(const id of ['repair','stress'])$(id).disabled=!current;const forgeReady=!!current&&current.spec?.mode==='commander'&&current.spec?.players===3;if($('deck-study-run')){$('deck-study-run').disabled=!forgeReady||current.audit.hard_errors>0||!statusInfo?.features?.deck_study;$('deck-study-run').title=forgeReady&&current.audit.hard_errors===0?'':'先载入并修复一套三人 Commander Cube';}for(const id of ['forge-run','optimize-run','calibrate-speed']){$(id).disabled=!forgeReady||(id==='calibrate-speed'&&statusInfo?.speed_version!==2);$(id).title=forgeReady?'':'需要先载入三人 Commander Cube';}}
 async function guard(fn){if(working)return;lock(true);try{await fn();}catch(e){notice(e.message,!e.cancelled);}finally{lock(false);}}
-async function job(operation,extra={}){const payload={operation,spec:spec(),cards:current?.cards||[],run_id:current?.run_id,...extra};const {job_id}=await api('/api/tasks',payload);window.scheduleTaskMonitor?.(true);for(;;){const j=await api('/api/job?id='+job_id);notice(j.progress);if(j.state==='failed')throw Error(j.error);if(j.state==='cancelled'){const e=Error(j.progress||'任务已结束，已保存的结果保留。');e.cancelled=true;throw e;}if(j.state==='done'){window.scheduleTaskMonitor?.(true);return j.result;}await new Promise(r=>setTimeout(r,document.hidden?5000:j.state==='paused'?3000:1000));}}
+async function job(operation,extra={}){
+  const payload={operation,spec:spec(),cards:current?.cards||[],run_id:current?.run_id,...extra};
+  // Submit exactly once: a lost response cannot prove whether the task started.
+  const {job_id}=await api('/api/tasks',payload);window.scheduleTaskMonitor?.(true);
+  let failures=0;
+  for(;;){
+    let j;
+    try{j=await api('/api/job?id='+encodeURIComponent(job_id));failures=0;}
+    catch(error){
+      if(!error.retryable||++failures>3)throw error;
+      notice('连接暂时中断，正在重新读取任务状态；任务可能仍在后台运行。');
+      await new Promise(r=>setTimeout(r,Math.min(5000,failures*1500)));continue;
+    }
+    notice(j.progress);
+    if(j.state==='failed')throw Error(j.error);
+    if(j.state==='cancelled'){const e=Error(j.progress||'任务已结束，已保存的结果保留。');e.cancelled=true;throw e;}
+    if(j.state==='done'){window.scheduleTaskMonitor?.(true);return j.result;}
+    await new Promise(r=>setTimeout(r,document.hidden?5000:j.state==='paused'?3000:1000));
+  }
+}
 async function refreshRuns(){const lib=await api('/api/library');$('runs').innerHTML='<option value="">选择记录…</option>'+lib.saved.map(x=>`<option value="${esc(x.id)}">${esc(x.label)}${x.status==='experimental'?' · 实验候选':''}</option>`).join('');if(window.refreshHomeLibrary)window.refreshHomeLibrary(lib);}
 
 function setCube(c,{remember=true}={}){if(remember&&current&&JSON.stringify(current.cards.map(x=>[x.name,x.role]))!==JSON.stringify(c.cards.map(x=>[x.name,x.role]))){cubeUndoStack.push(current);if(cubeUndoStack.length>8)cubeUndoStack.shift();}current=c;$('cube-name').textContent=c.spec?.name||'当前 Cube';if(c.spec)fillSpec(c.spec);$('exports').innerHTML=(c.run_id?['cube.csv','cube.json','cubecobra.txt','report.md','spec.json'].map(f=>`<a href="/exports/${encodeURIComponent(c.run_id)}/${f}">${esc({'cube.csv':'下载牌表','cube.json':'完整备份','cubecobra.txt':'用于 CubeCobra','report.md':'检查报告','spec.json':'构筑参数'}[f])}</a>`).join(''):'')+'<button id="undo-edit">撤销上次修改</button><button id="save-version">保存为新版本</button>';$('undo-edit').disabled=!cubeUndoStack.length;$('undo-edit').onclick=()=>guard(async()=>{const previous=cubeUndoStack.pop();if(previous){setCube(previous,{remember:false});notice('已撤销上次牌表修改，保存记录仍保留。');}});$('save-version').onclick=()=>guard(async()=>{setCube(await api('/api/save',{spec:spec(),cards:current.cards}));await refreshRuns();notice('已保存新版本，CSV 和 JSON 会保留主牌 / 指挥官槽位。');});renderCards();renderReport();$('stress-result').innerHTML='';$('forge-result').innerHTML='';if(window.updateHome)window.updateHome();document.dispatchEvent(new Event('cube-changed'));if(!working)refreshActions();}
