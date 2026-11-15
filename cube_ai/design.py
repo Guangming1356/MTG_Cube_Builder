@@ -79,10 +79,13 @@ def package_report(cards,themes=None):
 
 def deck_design_report(catalog,deck):
     from .entry_costs import report as entry_cost_report
+    from .commander_rules import messages as commander_messages
     names=deck.get('spells',[])+([deck['commander']] if deck.get('commander') else [])
     cards=[catalog.cards[n] for n in names if n in catalog.cards]
     packages=package_report(cards)
+    commander=catalog.cards.get(deck.get('commander'))
     return dict(version=VERSION,packages=packages,entry_costs=entry_cost_report(cards),
+        **({'commander_setup':commander_messages(commander)} if commander and commander.get('commander_setup') else {}),
         incomplete_packages=sum(bool(p['missing']) for p in packages.values()),
         limitation='检查最终选入的咒语及指挥官，不把整套 Cube 的支持当作已抓到；组件来自保守文本规则，需结合牌面与实战复核。')
 

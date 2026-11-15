@@ -16,5 +16,7 @@ vm.createContext(context);vm.runInContext(source.slice(start,end),context);
   assert.ok(dialog.opened);assert.match(detail.innerHTML,/进场代价/);assert.match(detail.innerHTML,/高总力量/);assert.match(detail.innerHTML,/1\.83/);
   card={...card,name:'Sun Titan',quality:4.05,entry_cost_notes:undefined};
   await context.detail(card.name);assert.ok(!detail.innerHTML.includes('进场代价'));
-  console.log(JSON.stringify({passed:2,card_notes_rendered_without_desktop_control:true}));
+  card={...card,name:'Phage the Untouchable',commander_setup_notes:['从指挥区直接施放会触发自身败北 <提示>']};
+  await context.detail(card.name);assert.match(detail.innerHTML,/指挥官施放条件/);assert.match(detail.innerHTML,/自身败北/);assert.match(detail.innerHTML,/&lt;提示&gt;/);
+  console.log(JSON.stringify({passed:3,card_notes_rendered_without_desktop_control:true}));
 })().catch(error=>{console.error(error);process.exitCode=1;});

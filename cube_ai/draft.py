@@ -6,6 +6,7 @@ from collections import Counter
 from functools import lru_cache
 from .config import GUILDS
 from .brackets import DeckRules, card_reasons, deck_report
+from .commander_rules import automatic as automatic_commander,messages as commander_messages
 
 @lru_cache(maxsize=8192)
 def _mana_requirements(cost):
@@ -90,7 +91,6 @@ def draft_pod(catalog,rows,spec,rng,preferred_guilds=None,readiness_hands=40,_pa
     """A single table: decks, pools and packs are never mixed across tables."""
     packs=deal(catalog,rows,spec,rng) if _packs is None else _packs
     opened=[[r["name"] for r in p] for p in packs]
-    decks=[]
     rules=DeckRules(catalog,spec)
     pools=[[] for _ in range(spec.players)]
     preferred=list(preferred_guilds) if preferred_guilds is not None else [rng.choice(GUILDS) for _ in pools]
@@ -112,63 +112,74 @@ def draft_pod(catalog,rows,spec,rng,preferred_guilds=None,readiness_hands=40,_pa
                         if c["kind"]=="land":return 3.0+.4*len(set(c["fixing"]) & set(g))-.4*land_counts[seat]
                         themes=themes_by_seat[seat]
                         signal=.18*len(themes & set(c["enablers"]+c["payoffs"]))
-                        cmd=1.8 if spec.mode=="commander" and not have_cmd and c["commander"] and c["identity"]==g else 0
+                        cmd=1.8 if spec.mode=="commander" and not have_cmd and automatic_commander(c,spec) and c["identity"]==g else 0
                         return c["quality"]+signal+cmd+(1.4 if fits else -2.5)-.1*bucket_counts[seat][c['bucket']]
                     card=max(pack,key=grade);pack.remove(card);pool.append(card)
                     selected=catalog.cards[card['name']];bucket_counts[seat][selected['bucket']]+=1
                     land_counts[seat]+=card['role']=='Land'
-                    have_commanders[seat]|=bool(selected['commander'] and selected['identity']==g)
-    for seat,pool in enumerate(pools):
-        g=preferred[seat]
-        commands=[catalog.cards[r["name"]] for r in pool if catalog.cards[r["name"]]["commander"] and catalog.cards[r["name"]]['identity']!='C'] if spec.mode=="commander" else [None]
-        if spec.mode=='commander':commands=[c for c in commands if not card_reasons(c,spec)]
-        power=rules.power
-        if power:commands=[c for c in commands if c['quality']<=power['commander_ceiling']]
-        target=60 if spec.mode=="commander" else 40
-        best=None
-        for commander in commands:
-            identity=commander["identity"] if commander else g
-            spells=[r["name"] for r in pool if catalog.cards[r["name"]]["kind"]!="land"
-                and (catalog.cards[r["name"]]["identity"]=="C" or set(catalog.cards[r["name"]]["identity"])<=set(identity))
-                and (not commander or r["name"]!=commander["name"])]
-            spells.sort(key=lambda n:(-catalog.cards[n]["quality"],catalog.cards[n]["mv"],n))
-            spells=rules.select([commander['name']] if commander else [],spells)
-            # Free basic lands are unlimited. Land count is a deck-building decision,
-            # not a requirement that 37 drafted spells must be available.
-            sample=spells[:38 if target==60 else 23]
-            avg=sum(catalog.cards[n]["mv"] for n in sample)/max(1,len(sample))
-            cheap_ramp=sum(catalog.cards[n]["ramp"] and catalog.cards[n]["mv"]<=3 for n in sample)
-            land_target=max(22,min(28,round(23+(avg-2.5)*2-min(cheap_ramp,6)*.25))) if target==60 else 17
-            needed=min(len(spells),target-land_target-int(bool(commander)))
-            score=sum(catalog.cards[n]["quality"] for n in spells[:needed])
-            if not best or score>best[0]:best=(score,commander,identity,spells[:needed])
-        if best is None:
-            decks.append(dict(seat=seat,guild=g,buildable=False,deck_policy=spec.deck_policy,deck_policy_changes=[],drafted=[r["name"] for r in pool]));continue
-        _,commander,identity,spells=best
-        land_target=target-len(spells)-int(bool(commander))
-        lands=[r["name"] for r in pool if catalog.cards[r["name"]]["kind"]=="land"
-               and (catalog.cards[r["name"]]["identity"]=="C" or set(catalog.cards[r["name"]]["identity"])<=set(identity))
-               and set(catalog.cards[r["name"]]["fixing"]) & set(identity)]
-        lands=rules.select(([commander['name']] if commander else [])+spells,lands)[:land_target]
-        deck=dict(seat=seat,guild=g,identity=identity,buildable=True,
-            commander=commander and commander["name"],spells=spells,lands=lands,
-            land_count=land_target,spell_count=len(spells),deck_policy=spec.deck_policy,deck_policy_changes=[],
-            construction_warning="可用非地牌偏少，补地后合法但可能很弱" if land_target/target>.48 else None,
-            drafted=[r["name"] for r in pool])
-        if spec.deck_policy=='balanced':
-            from .deck_building import revise
-            deck=revise(catalog,deck,spec,'balanced',evaluate=False)
-            deck.pop('research_changes',None)
-        # Evaluate only the final spells. Commander stays outside opening hands.
-        # Both policies sample the same number of cards, preserving the draft RNG.
-        ready=opening_test(catalog,deck['spells'],lands,identity,target-int(bool(commander)),rng,hands=readiness_hands,commander=deck['commander'])
-        deck.update(ready=ready,basics=ready['basics']);decks.append(deck)
-    from .design import deck_design_report
-    for deck in decks:
-        if deck['buildable']:
-            deck['design']=deck_design_report(catalog,deck)
-            deck['bracket']=deck_report(catalog,deck,spec)
+                    have_commanders[seat]|=bool(automatic_commander(selected,spec) and selected['identity']==g)
+    decks=[build_deck(catalog,[r['name'] for r in pool],spec,rng,preferred[seat],seat,
+                      readiness_hands=readiness_hands,_rules=rules) for seat,pool in enumerate(pools)]
     return dict(decks=decks,packs=opened,deck_policy=spec.deck_policy)
+
+def build_deck(catalog,names,spec,rng,guild,seat=0,*,readiness_hands=40,_rules=None):
+    """Build from the actual picked pool; basics are free and commander counts in 60."""
+    if guild not in GUILDS:raise ValueError('无效的轮抓偏好色组')
+    unknown=[name for name in names if name not in catalog.cards]
+    if unknown:raise ValueError('抓牌池含未知牌名：'+', '.join(unknown))
+    pool=[dict(name=name) for name in names];g=guild;rules=_rules or DeckRules(catalog,spec)
+    legal_commands=[catalog.cards[r['name']] for r in pool if catalog.cards[r['name']]['commander'] and catalog.cards[r['name']]['identity']!='C'] if spec.mode=='commander' else []
+    commands=[c for c in legal_commands if automatic_commander(c,spec)] if spec.mode=='commander' else [None]
+    if spec.mode=='commander':commands=[c for c in commands if not card_reasons(c,spec)]
+    power=rules.power
+    if power:commands=[c for c in commands if c['quality']<=power['commander_ceiling']]
+    target=60 if spec.mode=="commander" else 40
+    best=None
+    for commander in commands:
+        identity=commander["identity"] if commander else g
+        spells=[r["name"] for r in pool if catalog.cards[r["name"]]["kind"]!="land"
+            and (catalog.cards[r["name"]]["identity"]=="C" or set(catalog.cards[r["name"]]["identity"])<=set(identity))
+            and (not commander or r["name"]!=commander["name"])]
+        spells.sort(key=lambda n:(-catalog.cards[n]["quality"],catalog.cards[n]["mv"],n))
+        spells=rules.select([commander['name']] if commander else [],spells)
+        # Free basic lands are unlimited. Land count is a deck-building decision,
+        # not a requirement that 37 drafted spells must be available.
+        sample=spells[:38 if target==60 else 23]
+        avg=sum(catalog.cards[n]["mv"] for n in sample)/max(1,len(sample))
+        cheap_ramp=sum(catalog.cards[n]["ramp"] and catalog.cards[n]["mv"]<=3 for n in sample)
+        land_target=max(22,min(28,round(23+(avg-2.5)*2-min(cheap_ramp,6)*.25))) if target==60 else 17
+        needed=min(len(spells),target-land_target-int(bool(commander)))
+        commander_quality=commander['quality'] if commander else 0
+        score=(round(sum(catalog.cards[n]["quality"] for n in spells[:needed])+commander_quality,6),commander_quality)
+        if not best or score>best[0]:best=(score,commander,identity,spells[:needed])
+    if best is None:
+        return dict(seat=seat,guild=g,buildable=False,deck_policy=spec.deck_policy,deck_policy_changes=[],
+            construction_warning='抓到的指挥官需要专门施放配合，当前未允许自动选择' if legal_commands and not any(automatic_commander(c,spec) for c in legal_commands) else '抓牌池没有可按当前设置使用的指挥官',
+            drafted=[r["name"] for r in pool])
+    _,commander,identity,spells=best
+    land_target=target-len(spells)-int(bool(commander))
+    lands=[r["name"] for r in pool if catalog.cards[r["name"]]["kind"]=="land"
+           and (catalog.cards[r["name"]]["identity"]=="C" or set(catalog.cards[r["name"]]["identity"])<=set(identity))
+           and set(catalog.cards[r["name"]]["fixing"]) & set(identity)]
+    lands=rules.select(([commander['name']] if commander else [])+spells,lands)[:land_target]
+    deck=dict(seat=seat,guild=g,identity=identity,buildable=True,
+        commander=commander and commander["name"],spells=spells,lands=lands,
+        land_count=land_target,spell_count=len(spells),deck_policy=spec.deck_policy,deck_policy_changes=[],
+        construction_warning="可用非地牌偏少，补地后合法但可能很弱" if land_target/target>.48 else None,
+        drafted=[r["name"] for r in pool])
+    if spec.deck_policy=='balanced':
+        from .deck_building import revise
+        deck=revise(catalog,deck,spec,'balanced',evaluate=False)
+        deck.pop('research_changes',None)
+    # Evaluate only the final spells. Commander stays outside opening hands.
+    # Both policies sample the same number of cards, preserving the draft RNG.
+    ready=opening_test(catalog,deck['spells'],lands,identity,target-int(bool(commander)),rng,hands=readiness_hands,commander=deck['commander'])
+    deck.update(ready=ready,basics=ready['basics'])
+    if commander and commander.get('commander_setup'):deck['commander_setup_notes']=commander_messages(commander)
+    from .design import deck_design_report
+    deck['design']=deck_design_report(catalog,deck)
+    deck['bracket']=deck_report(catalog,deck,spec)
+    return deck
 
 def stress_test(catalog,rows,spec,trials=100,progress=lambda x:None):
     if not 5<=trials<=500:raise ValueError("压力测试次数需在 5–500 之间")

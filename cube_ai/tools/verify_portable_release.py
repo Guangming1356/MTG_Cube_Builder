@@ -69,7 +69,7 @@ from cube_ai.design import applicable_themes,design_bonus
 from cube_ai.features import VERSION as FEATURE_VERSION
 assert not any(n=='scipy' or n.startswith('scipy.') for n in sys.modules)
 c=Catalog();pairs=name_pairs();index=card_index(configuration())
-assert FEATURE_VERSION=='ontology-1.4'
+assert FEATURE_VERSION=='ontology-1.5'
 assert c.cards['Phyrexian Dreadnought']['entry_risks']==['sacrifice_large_power']
 assert c.cards['Phyrexian Dreadnought']['quality']<2 and 'blink' not in c.cards['Phyrexian Dreadnought']['payoffs']
 assert not c.cards['Sun Titan'].get('entry_risks')
@@ -96,6 +96,13 @@ assert not card_reasons(c.cards['Mind Stone'],BuildSpec.from_dict(dict(bracket=3
 unknown=dict(c.cards['Mind Stone'],name='Unknown future card',oracle_id='11111111-1111-1111-1111-111111111111',released='2099-01-01')
 assert any('纸质印张' in r for r in card_reasons(unknown,BuildSpec()))
 bundle_asset(PAPER_ASSET)
+from cube_ai.commander_rules import automatic as automatic_commander
+assert c.cards['Grist, the Hunger Tide']['commander']
+assert c.cards['The Belligerent']['commander'] and c.cards['Hearthhull, the Worldseed']['commander']
+assert not c.cards['The Eternity Elevator']['commander']
+assert not BuildSpec().allow_setup_commanders
+assert not automatic_commander(c.cards['Phage the Untouchable'],BuildSpec())
+assert automatic_commander(c.cards['Phage the Untouchable'],BuildSpec(allow_setup_commanders=True))
 assert not BuildSpec().allow_colorless_costs
 assert requires_colorless_mana(c.cards['Warping Wail'])
 assert requires_colorless_mana(c.cards['Eldrazi Displacer'])
@@ -161,7 +168,7 @@ print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs(
                     lazy_solver_import=True,full_cube_generation=True,calibration_reference_validation=True,blocker_display_validation=True,
                     colorless_preference_validation=True,commander_mana_validation=True,paper_release_validation=True,
                     scoped_rules_validation=True,catalog_cache_format_validation=True,early_result_recording_validation=True,
-                    deck_policy_validation=True,entry_cost_validation=True)
+                    deck_policy_validation=True,entry_cost_validation=True,commander_selection_validation=True)
         args.out.write_text(json.dumps(report,indent=2),encoding='utf8');print(json.dumps(report),flush=True)
     finally:
         if url:

@@ -3,8 +3,9 @@ import math
 import re
 from functools import lru_cache
 from .entry_costs import entry_burden
+from .commander_rules import eligible as commander_eligible,setup_requirements
 
-VERSION = "ontology-1.4"
+VERSION = "ontology-1.5"
 FAST_MANA = set("Black Lotus|Lotus Petal|Mana Crypt|Mana Vault|Sol Ring|Chrome Mox|Mox Diamond|Mox Opal|Mox Amber|Mox Jasper|Lion's Eye Diamond|Jeweled Lotus|Grim Monolith|Simian Spirit Guide|Elvish Spirit Guide".split("|"))
 LOCKS = {"Stasis", "Winter Orb", "Static Orb", "Armageddon", "Ravages of War", "Jokulhaups", "Worldfire"}
 COMBOS = [
@@ -63,7 +64,7 @@ def tribal_pattern(tribes):
     for t in tribes:
         mapping[t] = t; mapping[irregular.get(t,t+"s")] = t
     noun = "(?:"+"|".join(re.escape(t) for t in sorted(mapping,key=len,reverse=True))+")"
-    pattern = re.compile(rf"\b(?:other|each|all|another|one or more|a|an|target|control) (?P<before>{noun})(?: creatures?| cards?)?\b|\b(?P<after>{noun}) (?:creatures?|spells you cast|you control)",re.I)
+    pattern = re.compile(rf"\b(?:other|each|all|another|one or more|a|an|target|control) (?P<before>{noun})(?: creatures?| cards?)?\b|\b(?P<after>{noun}) (?:creatures?|spells you cast|you control)|\byou may cast (?P<gravecast>{noun}) spells from your graveyard\b",re.I)
     return pattern,mapping
 
 def tribal_requirements(text, tribes):
@@ -91,7 +92,7 @@ def extract(raw, tribes):
     name = raw["name"]
     is_land = "Land" in typ
     creature = "Creature" in typ
-    commander = ("Legendary" in typ and creature) or "can be your commander" in text.lower()
+    commander = commander_eligible(raw)
     mana_cost = front.get("mana_cost", raw.get("mana_cost", ""))
     interaction = match(r"counter target (?:spell|activated|triggered)|(?:destroy|exile|return) (?:another )?target (?:[^.]{0,35})?(?:creature|artifact|enchantment|permanent|planeswalker)|target creature gets -|deals? (?:\d+|x) damage to (?:any target|target creature)|(?:each|target) (?:opponent|player) sacrifices", text)
     wipe = match(r"(?:destroy|exile) all (?:[^.]{0,20})?(?:creatures|artifacts|enchantments|nonland permanents)|(?:each|all) creatures? (?:gets?|get) -|(?:return|exile) all (?:[^.]{0,20})?creatures|damage to each creature|each creature deals", text)
@@ -126,6 +127,7 @@ def extract(raw, tribes):
     subtype_dependencies = tribal_requirements(dependency_text, tribes)
     front_unusable = raw.get('layout')=='meld' and not mana_cost
     if front_unusable:commander=False
+    commander_setup=setup_requirements(front.get('oracle_text',text),front.get('name',name),mana_cost) if commander else []
     extra_deck = match(r'\battractions?\b|\bstickers?\b|\bcontraptions?\b',text)
     named_dependency = match(r'(?:card|cards) named [^.]{2,100}',text) and match(r'search[^.]*named|control[^.]*named|exile[^.]*named',text)
     if extra_deck:score_penalty=.7
@@ -172,4 +174,5 @@ def extract(raw, tribes):
                 fast_mana=bool(fast), mld=mld, quality=round(score, 3), vector=vector,
                 front_unusable=bool(front_unusable),extra_deck=extra_deck,named_dependency=bool(named_dependency),
                 calibrated=name in CALIBRATION, mana_cost=mana_cost,
+                **({'commander_setup':commander_setup} if commander_setup else {}),
                 **({'entry_risks':burden['risks']} if burden['risks'] else {}))

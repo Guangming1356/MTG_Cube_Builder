@@ -15,6 +15,7 @@ import numpy as np
 from .catalog import exclusion_reasons
 from .config import GUILDS, TRIPLES, RUNS, WORKSPACE
 from .features import COMBOS, VERSION
+from .commander_rules import automatic as automatic_commander,messages as commander_messages
 from .feedback import FeedbackStore
 from .design import VERSION as DESIGN_VERSION, design_bonus, applicable_themes, cube_design_report, studies
 from .brackets import profile, is_gc, score_adjustment, cube_report, VERSION as BRACKET_VERSION
@@ -119,7 +120,7 @@ def build(catalog, spec, previous=None, progress=lambda x:None, store=None):
     progress("分配各色组指挥官和修色地")
     for group,amount in cmd_targets.items():
         if not amount: continue
-        pool=[c for c in eligible if c["commander"] and c["kind"]!="land" and c["identity"]==group and (not power or c['quality']<=power['commander_ceiling'])]
+        pool=[c for c in eligible if automatic_commander(c,spec) and c["kind"]!="land" and c["identity"]==group and (not power or c['quality']<=power['commander_ceiling'])]
         pool.sort(key=lambda c:(c["name"] not in remaining_pins,-score(c,'Commander')-.08*c["draw"]-.06*len(c["payoffs"]),c["name"]))
         chosen=[]
         for c in pool:
@@ -260,6 +261,8 @@ def audit(catalog,rows,spec,unresolved=None,strict=False):
             from .entry_costs import messages as entry_cost_messages
             issue('warning','entry_cost',c['name']+'：'+'；'.join(entry_cost_messages(c))+'。已计入独立使用评分，请结合配合判断。',[c['name']])
         if r["role"]=="Commander" and not c["commander"]:issue("error","commander",c["name"]+" 不能作为指挥官",[c["name"]])
+        if r['role']=='Commander' and c.get('commander_setup'):
+            issue('warning','commander_setup',c['name']+'：'+'；'.join(commander_messages(c))+('。当前已允许自动选择。' if spec.allow_setup_commanders else '。自动组牌默认不选作指挥官，可在设置中允许。'),[c['name']])
         if r["role"]=="Commander" and c["identity"]=='C':issue('error','colorless_commander',c['name']+'：当前轮抓不设置独立无色指挥官色组',[c['name']])
         if r["role"]=="Land" and c["kind"]!="land":issue("error","land_role",c["name"]+" 并非正面地牌",[c["name"]])
         if r["role"]!="Land" and c["kind"]=="land":issue("error","land_role",c["name"]+" 正面地牌应在地槽位",[c["name"]])
@@ -336,7 +339,7 @@ def audit(catalog,rows,spec,unresolved=None,strict=False):
         if max(values)-min(values)>4:issue("warning","fixing","各色修色地来源差超过 4")
     return dict(total=len(rows),roles=dict(roles),main_colors=dict(colors),curve=dict(curve),
         role_counts=role_counts,density_targets=density_minima(spec,spec.size-spec.commanders-spec.lands),quality_by_group=mean,pairs=pairs,fixing=dict(fixing),
-        eligible_commanders=sum(c["commander"] for c in cards),issues=issues,
+        eligible_commanders=sum(c["commander"] for c in cards),automatic_commanders=sum(automatic_commander(c,spec) for c in cards),issues=issues,
         hard_errors=sum(i["severity"]=="error" for i in issues),snapshot=catalog.snapshot,
         design=cube_design_report(catalog,rows,spec),bracket=bracket,
         limitation="牌力和协同由启发式规则估算，不是实战胜率；部族和组合识别不保证穷尽")
