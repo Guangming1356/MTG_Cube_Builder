@@ -16,4 +16,9 @@ context.renderStress({trials:5,buildable_rate:0,drafted_pool_sizes:{60:15},cards
   guilds:{UW:{decks:3,buildable_rate:0,ready_by_turn:{1:0}}},examples:[],limitation:'旧记录'});
 assert.match(result.innerHTML,/<td>UW<\/td><td>3 \/ 0%<\/td><td>—<\/td>/);
 assert.match(result.innerHTML,/组牌：质量优先/);
-console.log(JSON.stringify({passed:2,missing_observations_are_not_zero_rates:true}));
+assert.ok(!result.innerHTML.includes('费用准备度如何计算'));
+context.renderStress({trials:5,buildable_rate:1,deck_policy:'balanced',drafted_pool_sizes:{60:15},cards_discarded_per_pack:9,
+  guilds:{},examples:[],limitation:'轮抓检查',mana_model:{version:'printed-cost-2',assumptions:'没有法术力费用不等于 <0>；起始 40 生命'}});
+assert.match(result.innerHTML,/可组牌率/);assert.match(result.innerHTML,/费用准备度如何计算/);
+assert.match(result.innerHTML,/&lt;0>/);assert.match(result.innerHTML,/40 生命/);
+console.log(JSON.stringify({passed:3,missing_observations_are_not_zero_rates:true}));

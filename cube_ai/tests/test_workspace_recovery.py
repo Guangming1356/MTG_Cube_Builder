@@ -29,4 +29,4 @@ def test_stress_report_distinguishes_missing_observations_from_zero_success():
     script=Path(__file__).parent/'js/test_stress_rendering.cjs'
     result=subprocess.run([node,str(script)],capture_output=True,text=True,timeout=10)
     assert result.returncode==0,result.stdout+result.stderr
-    assert '"passed":2' in result.stdout
+    assert '"passed":3' in result.stdout

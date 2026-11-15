@@ -3,36 +3,12 @@ import math
 import random
 import re
 from collections import Counter
-from functools import lru_cache
 from .config import GUILDS
 from .brackets import DeckRules, card_reasons, deck_report
 from .commander_rules import automatic as automatic_commander,messages as commander_messages
+from .mana import affordable,_affordable_masks,land_source_mask,readiness_assumptions,MODEL_VERSION
 
-@lru_cache(maxsize=8192)
-def _mana_requirements(cost):
-    symbols=re.findall(r"\{([^}]+)\}",cost)
-    generic=sum(int(s) for s in symbols if s.isdigit()) + int("X" in symbols)
-    required=[]
-    for s in symbols:
-        if s in "WUBRGC" and len(s)==1:required.append(set(s))
-        elif "/" in s and "P" not in s:
-            opts=set(s.replace("/", "")) & set("WUBRGC")
-            if opts:required.append(opts)
-    required.sort(key=len)
-    return generic,tuple(frozenset(colors) for colors in required)
-
-
-def affordable(cost, lands, *, max_sources=None):
-    generic,required=_mana_requirements(cost)
-    available=len(lands) if max_sources is None else min(len(lands),max_sources)
-    if generic+len(required)>available:return False
-    def assign(index,used):
-        if index==len(required):return True
-        return any(assign(index+1,used|(1<<j)) for j,colors in enumerate(lands)
-                   if not used&(1<<j) and colors & required[index])
-    return assign(0,0)
-
-def opening_test(catalog,spells,land_names,identity,deck_size,rng,hands=40,*,commander=None):
+def opening_test(catalog,spells,land_names,identity,deck_size,rng,hands=40,*,commander=None,starting_life=40):
     pips=Counter()
     for n in spells:
         for p in re.findall(r"\{([WUBRG])\}",catalog.cards[n]["mana_cost"]):pips[p]+=1
@@ -49,19 +25,24 @@ def opening_test(catalog,spells,land_names,identity,deck_size,rng,hands=40,*,com
             allocated=repaired
             basics=[{'kind':'land','fixing':[color],'name':'基本地 '+color} for color,n in allocated.items() for _ in range(n)]
     deck=[catalog.cards[n] for n in spells+land_names]+basics
-    ready=Counter();landcounts=[]
+    land_masks={card['name']:land_source_mask(card) for card in deck if card['kind']=='land'}
+    ready=Counter();landcounts=[];life_budget=max(0,starting_life-1)
     for _ in range(hands):
         sample=rng.sample(deck,len(deck));hand=sample[:7];landcounts.append(sum(c["kind"]=="land" for c in hand))
+        sources=[land_masks[c['name']] for c in hand if c['kind']=='land' and land_masks[c['name']]]
+        costs=[c['mana_cost'] for c in hand if c['kind']!='land']
         for turn in range(1,5):
-            hand.append(sample[6+turn]);lands=[set(c["fixing"]) for c in hand if c["kind"]=="land"]
+            drawn=sample[6+turn]
+            if drawn['kind']=='land':
+                if land_masks[drawn['name']]:sources.append(land_masks[drawn['name']])
+            else:costs.append(drawn['mana_cost'])
             # Test feasible choices among every land seen, while respecting one
             # land drop per turn. The first lands in a shuffled hand need not be
             # the lands a player would actually choose to play.
-            spells_here=[c for c in hand if c["kind"]!="land"]
-            if any(affordable(c["mana_cost"],lands,max_sources=turn) for c in spells_here):ready[turn]+=1
+            if any(_affordable_masks(cost,sources,max_sources=turn,life_budget=life_budget) for cost in costs):ready[turn]+=1
     return dict(ready_by_turn={str(t):round(ready[t]/hands,3) for t in range(1,5)} if hands else {},
                 opening_2_to_4_lands=round(sum(2<=x<=4 for x in landcounts)/hands,3) if hands else None,
-                basics=dict(allocated), assumptions="每回合抽牌，每回合最多一地；在已见地牌中选择可行来源，以各回合最佳可行下地为上界。不结算法术力加速、进场横置、替代费用、调度、牌面效果或对手行为；复合法术力仅作近似处理。")
+                basics=dict(allocated),model_version=MODEL_VERSION,starting_life=starting_life,assumptions=readiness_assumptions(starting_life))
 
 def deal(catalog,rows,spec,rng):
     count=spec.players*spec.rounds
@@ -173,7 +154,7 @@ def build_deck(catalog,names,spec,rng,guild,seat=0,*,readiness_hands=40,_rules=N
         deck.pop('research_changes',None)
     # Evaluate only the final spells. Commander stays outside opening hands.
     # Both policies sample the same number of cards, preserving the draft RNG.
-    ready=opening_test(catalog,deck['spells'],lands,identity,target-int(bool(commander)),rng,hands=readiness_hands,commander=deck['commander'])
+    ready=opening_test(catalog,deck['spells'],lands,identity,target-int(bool(commander)),rng,hands=readiness_hands,commander=deck['commander'],starting_life=40 if spec.mode=='commander' else 20)
     deck.update(ready=ready,basics=ready['basics'])
     if commander and commander.get('commander_setup'):deck['commander_setup_notes']=commander_messages(commander)
     from .design import deck_design_report
@@ -212,6 +193,7 @@ def stress_test(catalog,rows,spec,trials=100,progress=lambda x:None):
                 cards_discarded_per_pack=spec.pack_size-spec.players*spec.pick_count if spec.discard_after_pass else 0,
                 buildable_rate=round(len(valid)/max(1,len(summary)),3),guilds=group_summary,
                 examples=examples,packs=first_packs,seed=spec.seed,
+                mana_model=dict(version=MODEL_VERSION,starting_life=40 if spec.mode=='commander' else 20,assumptions=readiness_assumptions(40 if spec.mode=='commander' else 20)),
                 component_check=dict(decks=len(valid),decks_with_incomplete_packages=sum(bool(d['design']['incomplete_packages']) for d in valid),
                     note='实际入组牌的组件提示，不等于死牌率。'),
                 limitation="只测试轮抓组牌和起手法术力准备度；没有结算牌效、战斗、胜负或政治互动，不能解释为实战胜率。")

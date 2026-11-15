@@ -57,10 +57,11 @@ function renderStress(s){
     return `<tr><td>${esc(guild)}</td><td>${sample}</td><td>${mana}</td></tr>`;
   }).join('');
   $('stress-result').innerHTML=`
-    <p><strong>${s.trials} 桌 · 合法组牌率 ${(s.buildable_rate*100).toFixed(1)}%</strong> · 组牌：${deckPolicyLabel(s.deck_policy)} · 抓牌池张数 ${esc(JSON.stringify(s.drafted_pool_sizes))} · 每包弃 ${s.cards_discarded_per_pack} 张</p>
-    <div class="table-wrap"><table><thead><tr><th>预设色组</th><th>样本 / 合法组牌率</th><th>第 1 / 2 / 3 / 4 回合法术力准备度</th></tr></thead><tbody>${groups}</tbody></table></div>
+    <p><strong>${s.trials} 桌 · 可组牌率 ${(s.buildable_rate*100).toFixed(1)}%</strong> · 组牌：${deckPolicyLabel(s.deck_policy)} · 抓牌池张数 ${esc(JSON.stringify(s.drafted_pool_sizes))} · 每包弃 ${s.cards_discarded_per_pack} 张</p>
+    <div class="table-wrap"><table><thead><tr><th>预设色组</th><th>样本 / 可组牌率</th><th>第 1 / 2 / 3 / 4 回合法术力准备度</th></tr></thead><tbody>${groups}</tbody></table></div>
     ${s.bracket_check?.target?`<p>Bracket ${s.bracket_check.target} 构筑限制检查：${s.bracket_check.decks_checked} 副牌 · ${s.bracket_check.violations} 副违规 · 每副牌最多观察到 ${s.bracket_check.max_deck_game_changers} 张 Game Changers。</p>`:''}
     ${s.component_check?`<p>实际组牌中 ${s.component_check.decks_with_incomplete_packages} / ${s.component_check.decks} 副的牺牲或返场组件需要复核。</p>`:''}
+    ${s.mana_model?.assumptions?`<details><summary>费用准备度如何计算</summary><p class="sub">${esc(s.mana_model.assumptions)}</p></details>`:''}
     <p class="sub">${esc(s.limitation)}</p>
     <details><summary>查看抓牌包与实际组牌样例</summary><pre>${esc(JSON.stringify(s.examples,null,2))}</pre></details>`;
 }

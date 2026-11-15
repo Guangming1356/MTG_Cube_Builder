@@ -70,6 +70,14 @@ from cube_ai.features import VERSION as FEATURE_VERSION
 assert not any(n=='scipy' or n.startswith('scipy.') for n in sys.modules)
 c=Catalog();pairs=name_pairs();index=card_index(configuration())
 assert FEATURE_VERSION=='ontology-1.5'
+from cube_ai.mana import affordable,MODEL_VERSION
+assert MODEL_VERSION=='printed-cost-2'
+assert not affordable('',[]) and affordable('{0}',[])
+assert not affordable('{1}',[set()])
+assert affordable('{2/W}',[{'U'},{'U'}])
+assert not affordable('{X}{X}',[{'U'}])
+assert not affordable('{S}',[{'U'}]) and affordable('{S}',[{'S','U'}])
+assert not affordable('{W/P}',[],life_budget=1) and affordable('{W/P}',[],life_budget=2)
 assert c.cards['Phyrexian Dreadnought']['entry_risks']==['sacrifice_large_power']
 assert c.cards['Phyrexian Dreadnought']['quality']<2 and 'blink' not in c.cards['Phyrexian Dreadnought']['payoffs']
 assert not c.cards['Sun Titan'].get('entry_risks')
@@ -157,6 +165,8 @@ print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs(
         assert result['state']=='done',result.get('error')
         assert result['result']['trials']==5 and result['result']['drafted_pool_sizes']=={'60':15}
         assert result['result']['deck_policy']=='balanced'
+        assert result['result']['mana_model']['version']=='printed-cost-2'
+        assert result['result']['mana_model']['starting_life']==40
         assert all(d['deck_policy']=='balanced' for d in result['result']['examples'])
         request(url+'api/shutdown',{});time.sleep(1);url=start()
         restored=request(url+'api/job?id='+job)
@@ -168,7 +178,7 @@ print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs(
                     lazy_solver_import=True,full_cube_generation=True,calibration_reference_validation=True,blocker_display_validation=True,
                     colorless_preference_validation=True,commander_mana_validation=True,paper_release_validation=True,
                     scoped_rules_validation=True,catalog_cache_format_validation=True,early_result_recording_validation=True,
-                    deck_policy_validation=True,entry_cost_validation=True,commander_selection_validation=True)
+                    deck_policy_validation=True,entry_cost_validation=True,commander_selection_validation=True,mana_payment_validation=True)
         args.out.write_text(json.dumps(report,indent=2),encoding='utf8');print(json.dumps(report),flush=True)
     finally:
         if url:

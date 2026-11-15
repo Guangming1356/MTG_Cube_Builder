@@ -76,7 +76,7 @@ def revise(catalog,deck,spec,variant='balanced',*,evaluate=True):
     assert len(selected)==len(deck['spells']) and set(selected)<=set(deck['drafted'])
     if evaluate:
         target=60 if spec.mode=='commander' else 40
-        result['ready']=opening_test(catalog,selected,deck['lands'],deck['identity'],target-int(bool(commander)),random.Random(0),hands=0,commander=commander)
+        result['ready']=opening_test(catalog,selected,deck['lands'],deck['identity'],target-int(bool(commander)),random.Random(0),hands=0,commander=commander,starting_life=40 if spec.mode=='commander' else 20)
         result['basics']=result['ready']['basics'];result['design']=deck_design_report(catalog,result)
         result['bracket']=deck_report(catalog,result,spec)
         assert len(selected)+len(result['lands'])+sum(result['basics'].values())+int(bool(commander))==target
