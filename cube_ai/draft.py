@@ -8,7 +8,18 @@ from .brackets import DeckRules, card_reasons, deck_report
 from .commander_rules import automatic as automatic_commander,messages as commander_messages
 from .mana import affordable,_affordable_masks,land_source_mask,readiness_assumptions,MODEL_VERSION
 
+READINESS_STREAM='readiness-fork-1'
+OPENING_SAMPLER='ordered-prefix-11-v1'
+
+
+def _readiness_rng(rng,seat):
+    """Derive a per-seat generator without advancing the caller's draft RNG."""
+    child=random.Random(0);child.setstate(rng.getstate())
+    child.seed(f'{READINESS_STREAM}:{seat}:{child.getrandbits(128)}')
+    return child
+
 def opening_test(catalog,spells,land_names,identity,deck_size,rng,hands=40,*,commander=None,starting_life=40):
+    if type(hands) is not int or hands<0:raise ValueError('起手抽样次数必须为非负整数')
     pips=Counter()
     for n in spells:
         for p in re.findall(r"\{([WUBRG])\}",catalog.cards[n]["mana_cost"]):pips[p]+=1
@@ -25,10 +36,13 @@ def opening_test(catalog,spells,land_names,identity,deck_size,rng,hands=40,*,com
             allocated=repaired
             basics=[{'kind':'land','fixing':[color],'name':'基本地 '+color} for color,n in allocated.items() for _ in range(n)]
     deck=[catalog.cards[n] for n in spells+land_names]+basics
+    if hands and len(deck)<11:raise ValueError('起手与前四回合抽牌测试至少需要 11 张牌')
     land_masks={card['name']:land_source_mask(card) for card in deck if card['kind']=='land'}
     ready=Counter();landcounts=[];life_budget=max(0,starting_life-1)
     for _ in range(hands):
-        sample=rng.sample(deck,len(deck));hand=sample[:7];landcounts.append(sum(c["kind"]=="land" for c in hand))
+        # An ordered sample of eleven has the same distribution as the first
+        # eleven cards of a full shuffle; the unseen tail is never inspected.
+        sample=rng.sample(deck,11);hand=sample[:7];landcounts.append(sum(c["kind"]=="land" for c in hand))
         sources=[land_masks[c['name']] for c in hand if c['kind']=='land' and land_masks[c['name']]]
         costs=[c['mana_cost'] for c in hand if c['kind']!='land']
         for turn in range(1,5):
@@ -42,7 +56,8 @@ def opening_test(catalog,spells,land_names,identity,deck_size,rng,hands=40,*,com
             if any(_affordable_masks(cost,sources,max_sources=turn,life_budget=life_budget) for cost in costs):ready[turn]+=1
     return dict(ready_by_turn={str(t):round(ready[t]/hands,3) for t in range(1,5)} if hands else {},
                 opening_2_to_4_lands=round(sum(2<=x<=4 for x in landcounts)/hands,3) if hands else None,
-                basics=dict(allocated),model_version=MODEL_VERSION,starting_life=starting_life,assumptions=readiness_assumptions(starting_life))
+                basics=dict(allocated),model_version=MODEL_VERSION,starting_life=starting_life,assumptions=readiness_assumptions(starting_life),
+                sampling_version=OPENING_SAMPLER,hands=hands,cards_per_hand=11)
 
 def deal(catalog,rows,spec,rng):
     count=spec.players*spec.rounds
@@ -153,8 +168,11 @@ def build_deck(catalog,names,spec,rng,guild,seat=0,*,readiness_hands=40,_rules=N
         deck=revise(catalog,deck,spec,'balanced',evaluate=False)
         deck.pop('research_changes',None)
     # Evaluate only the final spells. Commander stays outside opening hands.
-    # Both policies sample the same number of cards, preserving the draft RNG.
-    ready=opening_test(catalog,deck['spells'],lands,identity,target-int(bool(commander)),rng,hands=readiness_hands,commander=deck['commander'],starting_life=40 if spec.mode=='commander' else 20)
+    # Readiness is an observation, not part of dealing the next table. Its
+    # sample count and the selected policy must never consume the draft RNG.
+    ready_rng=_readiness_rng(rng,seat) if readiness_hands else rng
+    ready=opening_test(catalog,deck['spells'],lands,identity,target-int(bool(commander)),ready_rng,hands=readiness_hands,commander=deck['commander'],starting_life=40 if spec.mode=='commander' else 20)
+    ready['stream_version']=READINESS_STREAM
     deck.update(ready=ready,basics=ready['basics'])
     if commander and commander.get('commander_setup'):deck['commander_setup_notes']=commander_messages(commander)
     from .design import deck_design_report
@@ -167,33 +185,38 @@ def stress_test(catalog,rows,spec,trials=100,progress=lambda x:None):
     from .engine import audit
     report=audit(catalog,rows,spec)
     if report['hard_errors']:raise ValueError('牌表存在合法性、槽位或数量错误；请先审计并修复，再测试轮抓')
-    rng=random.Random(spec.seed);examples=[];summary=[];sizes=Counter();guilds=Counter()
-    first_packs=None
+    rng=random.Random(spec.seed);examples=[];sizes=Counter();first_packs=None
+    groups={g:dict(decks=0,buildable=0,ready=Counter()) for g in GUILDS}
+    total_decks=valid_count=bracket_violations=max_deck_gc=incomplete_packages=0
     for trial in range(trials):
         pod=draft_pod(catalog,rows,spec,rng)
         if first_packs is None:first_packs=pod["packs"]
         for deck in pod["decks"]:
-            sizes[len(deck["drafted"])]+=1;guilds[deck["guild"]]+=1
-            summary.append(deck)
-            if deck["buildable"] and len(examples)<spec.players:
-                examples.append({k:v for k,v in deck.items() if k not in {"ready","buildable"}})
+            sizes[len(deck['drafted'])]+=1;total_decks+=1
+            group=groups[deck['guild']];group['decks']+=1
+            if not deck['buildable']:continue
+            valid_count+=1;group['buildable']+=1
+            for turn in range(1,5):group['ready'][str(turn)]+=deck['ready']['ready_by_turn'][str(turn)]
+            bracket=deck['bracket'];bracket_violations+=bool(bracket and bracket['violations'])
+            if bracket:max_deck_gc=max(max_deck_gc,len(bracket['game_changers']))
+            incomplete_packages+=bool(deck['design']['incomplete_packages'])
+            if len(examples)<spec.players:examples.append({k:v for k,v in deck.items() if k not in {'ready','buildable'}})
         if trial%20==0:progress(f"完成 {trial+1}/{trials} 桌轮抓")
-    valid=[x for x in summary if x["buildable"]]
     group_summary={}
     for g in GUILDS:
-        all_g=[x for x in summary if x["guild"]==g];ok=[x for x in all_g if x["buildable"]]
-        group_summary[g]=dict(decks=len(all_g),buildable_rate=round(len(ok)/max(1,len(all_g)),3),
-            ready_by_turn={str(t):round(sum(x["ready"]["ready_by_turn"][str(t)] for x in ok)/max(1,len(ok)),3) for t in range(1,5)})
+        group=groups[g]
+        group_summary[g]=dict(decks=group['decks'],buildable_rate=round(group['buildable']/max(1,group['decks']),3),
+            ready_by_turn={str(t):round(group['ready'][str(t)]/max(1,group['buildable']),3) for t in range(1,5)})
     return dict(trials=trials,players=spec.players,deck_policy=spec.deck_policy,drafted_pool_sizes=dict(sizes),
-                bracket_check=dict(target=spec.bracket,decks_checked=len(valid) if spec.bracket else 0,
-                    violations=sum(bool(d['bracket'] and d['bracket']['violations']) for d in valid),
-                    max_deck_game_changers=max((len(d['bracket']['game_changers']) for d in valid if d['bracket']),default=0),
+                bracket_check=dict(target=spec.bracket,decks_checked=valid_count if spec.bracket else 0,
+                    violations=bracket_violations,max_deck_game_changers=max_deck_gc,
                     certified=False),
                 cards_opened=spec.players*spec.rounds*spec.pack_size,
                 cards_discarded_per_pack=spec.pack_size-spec.players*spec.pick_count if spec.discard_after_pass else 0,
-                buildable_rate=round(len(valid)/max(1,len(summary)),3),guilds=group_summary,
+                buildable_rate=round(valid_count/max(1,total_decks),3),guilds=group_summary,
                 examples=examples,packs=first_packs,seed=spec.seed,
-                mana_model=dict(version=MODEL_VERSION,starting_life=40 if spec.mode=='commander' else 20,assumptions=readiness_assumptions(40 if spec.mode=='commander' else 20)),
-                component_check=dict(decks=len(valid),decks_with_incomplete_packages=sum(bool(d['design']['incomplete_packages']) for d in valid),
+                mana_model=dict(version=MODEL_VERSION,starting_life=40 if spec.mode=='commander' else 20,assumptions=readiness_assumptions(40 if spec.mode=='commander' else 20),
+                    stream_version=READINESS_STREAM,sampling_version=OPENING_SAMPLER,hands_per_deck=40,cards_per_hand=11),
+                component_check=dict(decks=valid_count,decks_with_incomplete_packages=incomplete_packages,
                     note='实际入组牌的组件提示，不等于死牌率。'),
                 limitation="只测试轮抓组牌和起手法术力准备度；没有结算牌效、战斗、胜负或政治互动，不能解释为实战胜率。")

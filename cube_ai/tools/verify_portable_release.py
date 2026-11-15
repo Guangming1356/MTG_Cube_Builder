@@ -72,6 +72,12 @@ c=Catalog();pairs=name_pairs();index=card_index(configuration())
 assert FEATURE_VERSION=='ontology-1.5'
 from cube_ai.mana import affordable,MODEL_VERSION
 assert MODEL_VERSION=='printed-cost-2'
+from cube_ai.draft import OPENING_SAMPLER,READINESS_STREAM,_readiness_rng
+import random
+assert OPENING_SAMPLER=='ordered-prefix-11-v1' and READINESS_STREAM=='readiness-fork-1'
+parent_rng=random.Random(37);before_state=parent_rng.getstate()
+assert _readiness_rng(parent_rng,0).getstate()!=_readiness_rng(parent_rng,1).getstate()
+assert parent_rng.getstate()==before_state
 assert not affordable('',[]) and affordable('{0}',[])
 assert not affordable('{1}',[set()])
 assert affordable('{2/W}',[{'U'},{'U'}])
@@ -167,6 +173,9 @@ print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs(
         assert result['result']['deck_policy']=='balanced'
         assert result['result']['mana_model']['version']=='printed-cost-2'
         assert result['result']['mana_model']['starting_life']==40
+        assert result['result']['mana_model']['sampling_version']=='ordered-prefix-11-v1'
+        assert result['result']['mana_model']['stream_version']=='readiness-fork-1'
+        assert result['result']['mana_model']['hands_per_deck']==40 and result['result']['mana_model']['cards_per_hand']==11
         assert all(d['deck_policy']=='balanced' for d in result['result']['examples'])
         request(url+'api/shutdown',{});time.sleep(1);url=start()
         restored=request(url+'api/job?id='+job)
@@ -178,7 +187,7 @@ print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs(
                     lazy_solver_import=True,full_cube_generation=True,calibration_reference_validation=True,blocker_display_validation=True,
                     colorless_preference_validation=True,commander_mana_validation=True,paper_release_validation=True,
                     scoped_rules_validation=True,catalog_cache_format_validation=True,early_result_recording_validation=True,
-                    deck_policy_validation=True,entry_cost_validation=True,commander_selection_validation=True,mana_payment_validation=True)
+                    deck_policy_validation=True,entry_cost_validation=True,commander_selection_validation=True,mana_payment_validation=True,readiness_stream_validation=True)
         args.out.write_text(json.dumps(report,indent=2),encoding='utf8');print(json.dumps(report),flush=True)
     finally:
         if url:
