@@ -185,7 +185,7 @@ def test_learning_excludes_other_engines_and_legacy_reports_before_loading_logs(
 
 def test_valid_model_is_rejected_after_engine_change_and_restored_for_original_scope(monkeypatch):
     model=dict(active=True,version=surrogate.VERSION,catalog='fixture',engine=['original'],kind='ridge',
-        mean=[0]*54,scale=[1]*54,weights=np.zeros((55,3)).tolist())
+        mean=[0]*60,scale=[1]*60,weights=np.zeros((61,3)).tolist())
     surrogate.MODELS.mkdir();(surrogate.MODELS/'active.json').write_text(json.dumps(model))
     catalog=SimpleNamespace(signature='fixture')
     monkeypatch.setattr(surrogate,'engine_scope',lambda:['patched']);assert surrogate.active_model(catalog) is None
@@ -225,7 +225,7 @@ def test_activity_training_counts_offturn_actions_censors_short_games_and_dedupl
                 games=[game,dict(game,seed=2,log='full.log'),dict(game,seed=2,log='full.log'),dict(game,seed=3,log='full.log',cache_hit=True)])
     (folder/'report.json').write_text(json.dumps(report),encoding='utf8')
     data=surrogate.collect(catalog)
-    assert data['games']==1 and data['censored_games']==1 and data['x'].shape==(3,54)
+    assert data['games']==1 and data['censored_games']==1 and data['x'].shape==(3,60)
     assert data['y'][:,0].tolist()==[1,0,1]
     assert data['family_scope_complete'] and data['family_report']['families']==1
     # Raw files remain, but unverified source rows cannot manufacture families.

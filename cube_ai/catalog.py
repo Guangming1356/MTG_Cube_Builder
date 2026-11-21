@@ -106,10 +106,15 @@ def _write_catalog_cache(value,path):
 
 class Catalog:
     def __init__(self, source=None, use_cache=True):
+        default_source=source is None and not os.getenv('CUBE_CARD_POOL')
         self.source = Path(source or card_pool_path())
         DATA.mkdir(exist_ok=True)
         stat = self.source.stat()
         signature = f"{self.source.resolve()}:{stat.st_size}:{stat.st_mtime_ns}:{VERSION}"
+        from .vintage_data import ASSET as VINTAGE_ASSET
+        if default_source and VINTAGE_ASSET.is_file():
+            extra=VINTAGE_ASSET.stat()
+            signature+=f':vintage:{extra.st_size}:{extra.st_mtime_ns}'
         cache = DATA / "catalog.json"
         j = None;cache_legacy=False
         if use_cache and cache.exists():
@@ -123,6 +128,10 @@ class Catalog:
         if j is None:
             raw = _read_catalog_json(self.source)
             cards = list(raw["cards"].values())
+            if default_source and VINTAGE_ASSET.is_file():
+                from .vintage_data import load as load_vintage
+                known={c['name'] for c in cards}
+                cards.extend(c for c in load_vintage() if c['name'] not in known)
             tribes = tribes_from_cards(cards)
             records = []
             for c in cards:
@@ -249,7 +258,10 @@ class Catalog:
 def exclusion_reasons(c, spec, *, power=None):
     from .brackets import card_reasons, is_gc
     reasons = []
-    if c["legalities"].get(spec.legality_format) != "legal": reasons.append("该赛制不合法/受限")
+    legality=c['legalities'].get(spec.legality_format)
+    # Vintage restrictions permit one copy, and this Cube already enforces singleton.
+    if legality!='legal' and not (spec.legality_format=='vintage' and legality=='restricted'):
+        reasons.append("该赛制不合法/受限")
     if c["digital"]: reasons.append("数字专属")
     if c.get('front_unusable'):reasons.append('合体结果面不能作为独立牌张/指挥官')
     if c.get('extra_deck'):reasons.append('需要额外 Attraction/贴纸/机关组件；当前环境未配置')

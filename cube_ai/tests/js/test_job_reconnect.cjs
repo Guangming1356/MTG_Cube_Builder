@@ -15,6 +15,8 @@ async function checkRequests(){
   }
   context.fetch=async()=>({ok:false,status:404,json:async()=>({error:'任务不存在'})});
   await assert.rejects(context.api('/test'),e=>e.message==='任务不存在'&&!e.retryable);
+  context.fetch=async()=>({ok:false,status:503,json:async()=>({error:'稍后重试'})});
+  await assert.rejects(context.api('/test'),e=>e.message==='稍后重试'&&e.retryable===true);
 }
 
 async function runJob(events){

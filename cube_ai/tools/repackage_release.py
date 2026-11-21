@@ -62,6 +62,11 @@ def overlay_files(source):
     if (app/'release_dates.py').is_file():
         from cube_ai.release_dates import bundle_asset
         files.update(bundle_asset(app/'data/paper_release_witnesses.json'))
+    if (app/'vintage_data.py').is_file():
+        from cube_ai.vintage_data import bundle_asset
+        files.update(bundle_asset(app/'data/vintage_supplement.json'))
+    if (app/'mtg_draft_metrics.py').is_file():
+        files['cube_ai/data/mtg_draft_LICENSE.txt']=(app/'data/mtg_draft_LICENSE.txt').read_bytes()
     public_docs=DOCS|{p.name for p in (app/'docs').glob('OPTIMIZATION_*.md') if re.fullmatch(r'OPTIMIZATION_20\d{6}\.md',p.name)}
     for name in public_docs:
         path=app/'docs'/name
@@ -114,6 +119,10 @@ def repackage(base,source,output,version,expected_sha256,commit='unknown'):
         for name in ['README.md','先看这里.txt']:
             full='Cube助手/'+name
             if full in names:replacements[name]=(archive.read(full).decode('utf-8-sig')+update).encode('utf8')
+        english_readme=source/'README.en.md'
+        if english_readme.is_file():
+            data=english_readme.read_bytes();scan_overlay('README.en.md',data)
+            replacements['README.en.md']=data
         hashes={name:hashlib.sha256(data).hexdigest() for name,data in replacements.items() if name.startswith('cube_ai/')}
         replacements['隐私检查.json']=json.dumps(dict(files_overlaid=len(hashes),private_patterns_found=0,state_files_included=0,base_archive_verified=True),ensure_ascii=False,indent=2).encode('utf8')
         with zipfile.ZipFile(destination,'w',zipfile.ZIP_DEFLATED,compresslevel=6,allowZip64=True) as target:

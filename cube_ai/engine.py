@@ -245,6 +245,7 @@ def build(catalog, spec, previous=None, progress=lambda x:None, store=None):
 
 def audit(catalog,rows,spec,unresolved=None,strict=False):
     power=profile(spec)
+    strict_design=strict and spec.audit_profile=='constrained'
     issues=[];names=[r["name"] for r in rows]
     def issue(severity,code,message,cards=None):issues.append(dict(severity=severity,code=code,message=message,cards=cards or []))
     if unresolved:issue("error","unknown","有无法确认的牌名，未猜测补全",unresolved)
@@ -278,7 +279,7 @@ def audit(catalog,rows,spec,unresolved=None,strict=False):
     bracket=cube_report(catalog,rows,spec)
     if bracket:
         for message in bracket['violations']:issue('error','bracket_budget',message)
-    if strict:
+    if strict_design:
         main_targets,cmd_targets,curve_targets=quotas(spec)
         cmd_colors=Counter(catalog.cards[r['name']]['identity'] for r in rows if r['role']=='Commander' and r['name'] in catalog.cards)
         for g,count in cmd_targets.items():
@@ -314,7 +315,7 @@ def audit(catalog,rows,spec,unresolved=None,strict=False):
             if pa and len(en)<3:issue("warning","unsupported",f"{g} 的 {theme} 回报缺少支持",pa[:6])
         pairs[g]=dict(main_cards=len(accessible),interaction=sum(c["interaction"] for c in accessible),
                       wipes=sum(c["wipe"] for c in accessible),finishers=sum(c["finisher"] for c in accessible),themes=support)
-        if strict and main_targets[g]:
+        if strict_design and main_targets[g]:
             floor=power['gold_floor'] if power else 3.05
             if mean[g]<floor-.001:issue('error','guild_quality',g+f' 多色牌平均启发式评价不足 {floor}')
             if pairs[g]['interaction']<max(4,round(len(main)*.035)):issue('error','guild_interaction',g+' 可用互动不足')
@@ -327,9 +328,9 @@ def audit(catalog,rows,spec,unresolved=None,strict=False):
         if role_counts['finisher']<math.ceil(len(main)*spec.finisher_min_ratio):issue('warning','finishers','终结手段密度低于设置的下限')
         if role_counts["ramp"]>math.ceil(len(main)*.15):issue("warning","ramp","加速密度过高，可能挤压互动和威胁")
         active=[mean[g] for g in "WUBRG" if colors[g]]
-        if active and max(active)-min(active)>.321:issue('error' if strict else 'warning',"color_quality","单色平均启发式评价差超过 0.32")
+        if active and max(active)-min(active)>.321:issue('error' if strict_design else 'warning',"color_quality","单色平均启发式评价差超过 0.32")
         guild_mean=[mean[g] for g in GUILDS if colors[g]]
-        if guild_mean and max(guild_mean)-min(guild_mean)>.321:issue('error' if strict else 'warning',"guild_quality","多色色组平均启发式评价差超过 0.32")
+        if guild_mean and max(guild_mean)-min(guild_mean)>.321:issue('error' if strict_design else 'warning',"guild_quality","多色色组平均启发式评价差超过 0.32")
     fixing=Counter()
     for r in rows:
         c=catalog.cards.get(r["name"])

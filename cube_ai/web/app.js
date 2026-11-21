@@ -9,7 +9,7 @@ async function api(path,data){
   try{
     const response=await fetch(path,{signal:controller.signal,...(data===undefined?{}:{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})});
     let result;try{result=await response.json();}catch{throw Error('助手返回的内容不完整，请稍后重试。');}
-    if(!response.ok)throw Error(result.error||`请求未完成（${response.status}）`);
+    if(!response.ok){const e=Error(result.error||`请求未完成（${response.status}）`);if(response.status>=500)e.retryable=true;throw e;}
     return result;
   }catch(error){
     if(error.name==='AbortError'||error instanceof TypeError){
@@ -23,8 +23,8 @@ function notice(message,error=false){$('notice').hidden=false;$('notice').classN
 function view(id){viewChanges++;activeView=id;document.querySelectorAll('.view').forEach(s=>s.hidden=s.id!==id);document.querySelectorAll('nav button').forEach(b=>b.classList.toggle('active',b.dataset.view===id));$('page-title').textContent=({home:'从这里开始。',guide:'好 Cube，来自有目的的设计。',design:'让每一张牌都有位置。',cards:'每张牌，都可以追溯。',report:'检验结构，发现缺口。',advisor:'有依据的构筑建议。','ai-settings':'连接你的 AI。',learning:'让构筑更懂你的偏好。'})[id];document.dispatchEvent(new Event('workspace-view'));if(id==='learning')refreshFeedbackStatus().catch(error=>notice(error.message,true));}
 document.querySelector('.brand').onclick=e=>{if(!e.ctrlKey&&!e.metaKey){e.preventDefault();view('home');}};
 document.querySelectorAll('nav button').forEach(b=>b.onclick=()=>view(b.dataset.view));
-function fillSpec(s){for(const [k,d] of [['interaction_min_ratio',.18],['wipe_min_ratio',.035],['finisher_min_ratio',.085]])$(k).value=Number(((s[k]??d)*100).toFixed(3));$('curve_profile').value=s.curve_profile||'balanced';$('deck_policy').value=s.deck_policy||'quality';if($('report-deck-policy'))$('report-deck-policy').value=$('deck_policy').value;$('bracket').value=s.bracket??'';$('power_tuning').value=s.power_tuning||'balanced';$('commander_tuning').value=s.commander_tuning||'matched';$('cube_gc_limit').value=s.cube_gc_limit??'';for(const k of ['mode','name','size','commanders','lands','seed'])$(k).value=s[k];for(const k of ['avoid_tribal','exclude_game_changers','allow_fast_mana','allow_infinite_combos','allow_mass_land_destruction','allow_colorless_costs','allow_setup_commanders','allow_extra_turns'])$(k).checked=s[k]??(k==='allow_extra_turns'&&s.bracket==null);for(const k of ['pins','exclude'])$(k).value=(s[k]||[]).join('\n');const basic=new Set(['interaction_min_ratio','wipe_min_ratio','finisher_min_ratio','curve_profile','deck_policy','mode','name','size','commanders','lands','seed','avoid_tribal','exclude_game_changers','allow_fast_mana','allow_infinite_combos','allow_mass_land_destruction','allow_colorless_costs','allow_setup_commanders','allow_extra_turns','pins','exclude','bracket','power_tuning','commander_tuning','cube_gc_limit']);$('advanced').value=JSON.stringify(Object.fromEntries(Object.entries(s).filter(([k])=>!basic.has(k))),null,2);if(window.updateBracketControls)window.updateBracketControls();}
-function spec(){const s={...statusInfo.presets[$('mode').value],...JSON.parse($('advanced').value||'{}')};for(const k of ['mode','name'])s[k]=$(k).value;for(const k of ['size','commanders','lands','seed'])s[k]=Number($(k).value);for(const k of ['avoid_tribal','exclude_game_changers','allow_fast_mana','allow_infinite_combos','allow_mass_land_destruction','allow_colorless_costs','allow_setup_commanders','allow_extra_turns'])s[k]=$(k).checked;for(const k of ['pins','exclude'])s[k]=$(k).value.split(/\n/).map(x=>x.trim()).filter(Boolean);s.bracket=$('mode').value==='commander'&&$('bracket').value?Number($('bracket').value):null;s.power_tuning=$('power_tuning').value;s.commander_tuning=$('commander_tuning').value;s.cube_gc_limit=s.bracket&&$('cube_gc_limit').value!==''?Number($('cube_gc_limit').value):null;for(const k of ['interaction_min_ratio','wipe_min_ratio','finisher_min_ratio'])s[k]=Number($(k).value)/100;s.curve_profile=$('curve_profile').value;s.deck_policy=$('deck_policy').value;return s;}
+function fillSpec(s){for(const [k,d] of [['interaction_min_ratio',.18],['wipe_min_ratio',.035],['finisher_min_ratio',.085]])$(k).value=Number(((s[k]??d)*100).toFixed(3));$('curve_profile').value=s.curve_profile||'balanced';$('deck_policy').value=s.deck_policy||'quality';for(const [k,d] of [['players',s.mode==='classic'?8:3],['rounds',s.mode==='classic'?3:10],['pack_size',15],['pick_count',s.mode==='classic'?1:2]])$(k).value=s[k]??d;$('discard_after_pass').checked=s.discard_after_pass??(s.mode!=='classic');$('pack_collation').value=s.pack_collation||'seeded';if($('report-deck-policy'))$('report-deck-policy').value=$('deck_policy').value;$('bracket').value=s.bracket??'';$('power_tuning').value=s.power_tuning||'balanced';$('commander_tuning').value=s.commander_tuning||'matched';$('cube_gc_limit').value=s.cube_gc_limit??'';for(const k of ['mode','name','size','commanders','lands','seed'])$(k).value=s[k];for(const k of ['avoid_tribal','exclude_game_changers','allow_fast_mana','allow_infinite_combos','allow_mass_land_destruction','allow_colorless_costs','allow_setup_commanders','allow_extra_turns'])$(k).checked=s[k]??(k==='allow_extra_turns'&&s.bracket==null);for(const k of ['pins','exclude'])$(k).value=(s[k]||[]).join('\n');const basic=new Set(['interaction_min_ratio','wipe_min_ratio','finisher_min_ratio','curve_profile','deck_policy','mode','name','size','commanders','lands','seed','avoid_tribal','exclude_game_changers','allow_fast_mana','allow_infinite_combos','allow_mass_land_destruction','allow_colorless_costs','allow_setup_commanders','allow_extra_turns','pins','exclude','bracket','power_tuning','commander_tuning','cube_gc_limit','players','rounds','pack_size','pick_count','discard_after_pass','pack_collation']);$('advanced').value=JSON.stringify(Object.fromEntries(Object.entries(s).filter(([k])=>!basic.has(k))),null,2);if(window.updateBracketControls)window.updateBracketControls();}
+function spec(){const s={...statusInfo.presets[$('mode').value],...JSON.parse($('advanced').value||'{}')};for(const k of ['mode','name'])s[k]=$(k).value;for(const k of ['size','commanders','lands','seed'])s[k]=Number($(k).value);for(const k of ['players','rounds','pack_size','pick_count'])s[k]=Number($(k).value);s.discard_after_pass=$('discard_after_pass').checked;s.pack_collation=$('pack_collation').value;for(const k of ['avoid_tribal','exclude_game_changers','allow_fast_mana','allow_infinite_combos','allow_mass_land_destruction','allow_colorless_costs','allow_setup_commanders','allow_extra_turns'])s[k]=$(k).checked;for(const k of ['pins','exclude'])s[k]=$(k).value.split(/\n/).map(x=>x.trim()).filter(Boolean);s.bracket=$('mode').value==='commander'&&$('bracket').value?Number($('bracket').value):null;s.power_tuning=$('power_tuning').value;s.commander_tuning=$('commander_tuning').value;s.cube_gc_limit=s.bracket&&$('cube_gc_limit').value!==''?Number($('cube_gc_limit').value):null;for(const k of ['interaction_min_ratio','wipe_min_ratio','finisher_min_ratio'])s[k]=Number($(k).value)/100;s.curve_profile=$('curve_profile').value;s.deck_policy=$('deck_policy').value;return s;}
 $('mode').onchange=()=>fillSpec(statusInfo.presets[$('mode').value]);
 function lock(value){working=value;document.querySelectorAll('button').forEach(b=>{if(!b.closest('nav')&&!b.classList.contains('task-control')&&!['close-dialog','card-prev','card-next','home-cards','home-check','home-guide'].includes(b.id)&&!b.classList.contains('name-link'))b.disabled=value;});if(!value)refreshActions();}
 function refreshActions(){if(working)return;if($('undo-edit'))$('undo-edit').disabled=!cubeUndoStack.length;const connected=!!statusInfo?.gpt.configured;$('plan').disabled=!connected;$('chat').disabled=!connected||!current;for(const id of ['repair','stress'])$(id).disabled=!current;const forgeReady=!!current&&current.spec?.mode==='commander'&&current.spec?.players===3;if($('deck-study-run')){$('deck-study-run').disabled=!forgeReady||current.audit.hard_errors>0||!statusInfo?.features?.deck_study;$('deck-study-run').title=forgeReady&&current.audit.hard_errors===0?'':'先载入并修复一套三人 Commander Cube';}for(const id of ['forge-run','optimize-run','calibrate-speed']){$(id).disabled=!forgeReady||(id==='calibrate-speed'&&statusInfo?.speed_version!==2);$(id).title=forgeReady?'':'需要先载入三人 Commander Cube';}}
@@ -49,7 +49,7 @@ async function job(operation,extra={}){
     await new Promise(r=>setTimeout(r,document.hidden?5000:j.state==='paused'?3000:1000));
   }
 }
-async function refreshRuns(){const lib=await api('/api/library');$('runs').innerHTML='<option value="">选择记录…</option>'+lib.saved.map(x=>`<option value="${esc(x.id)}">${esc(x.label)}${x.status==='experimental'?' · 实验候选':''}</option>`).join('');if(window.refreshHomeLibrary)window.refreshHomeLibrary(lib);}
+async function refreshRuns(lib){if(lib===undefined)lib=await api('/api/library');$('runs').innerHTML='<option value="">选择记录…</option>'+lib.saved.map(x=>`<option value="${esc(x.id)}">${esc(x.label)}${x.status==='experimental'?' · 实验候选':''}</option>`).join('');if(window.refreshHomeLibrary)window.refreshHomeLibrary(lib);}
 
 function setCube(c,{remember=true}={}){if(remember&&current&&JSON.stringify(current.cards.map(x=>[x.name,x.role]))!==JSON.stringify(c.cards.map(x=>[x.name,x.role]))){cubeUndoStack.push(current);if(cubeUndoStack.length>8)cubeUndoStack.shift();}current=c;$('cube-name').textContent=c.spec?.name||'当前 Cube';if(c.spec)fillSpec(c.spec);$('exports').innerHTML=(c.run_id?['cube.csv','cube.json','cubecobra.txt','report.md','spec.json'].map(f=>`<a href="/exports/${encodeURIComponent(c.run_id)}/${f}">${esc({'cube.csv':'下载牌表','cube.json':'完整备份','cubecobra.txt':'用于 CubeCobra','report.md':'检查报告','spec.json':'构筑参数'}[f])}</a>`).join(''):'')+'<button id="undo-edit">撤销上次修改</button><button id="save-version">保存为新版本</button>';$('undo-edit').disabled=!cubeUndoStack.length;$('undo-edit').onclick=()=>guard(async()=>{const previous=cubeUndoStack.pop();if(previous){setCube(previous,{remember:false});notice('已撤销上次牌表修改，保存记录仍保留。');}});$('save-version').onclick=()=>guard(async()=>{setCube(await api('/api/save',{spec:spec(),cards:current.cards}));await refreshRuns();notice('已保存新版本，CSV 和 JSON 会保留主牌 / 指挥官槽位。');});renderCards();renderReport();$('stress-result').innerHTML='';$('forge-result').innerHTML='';if(window.updateHome)window.updateHome();document.dispatchEvent(new Event('cube-changed'));if(!working)refreshActions();}
 function displayLabel(key){return ({creature:'生物',interaction:'互动',wipe:'扫场',ramp:'法术力加速',draw:'抓牌',finisher:'终结手段'})[key]||statusInfo?.themes?.[key]||key;}
@@ -82,6 +82,7 @@ function renderStress(s){
     <div class="table-wrap"><table><thead><tr><th>预设色组</th><th>样本 / 可组牌率</th><th>第 1 / 2 / 3 / 4 回合法术力准备度</th></tr></thead><tbody>${groups}</tbody></table></div>
     ${s.bracket_check?.target?`<p>Bracket ${s.bracket_check.target} 构筑限制检查：${s.bracket_check.decks_checked} 副牌 · ${s.bracket_check.violations} 副违规 · 每副牌最多观察到 ${s.bracket_check.max_deck_game_changers} 张 Game Changers。</p>`:''}
     ${s.component_check?`<p>实际组牌中 ${s.component_check.decks_with_incomplete_packages} / ${s.component_check.decks} 副的牺牲或返场组件需要复核。</p>`:''}
+    ${s.external_evaluation?.decks?`<p>外部评估（<a href="https://github.com/albertngo1/mtg-draft" target="_blank" rel="noopener">mtg-draft</a>）：${esc(s.external_evaluation.decks)} 副牌的平均可识别去除评价 ${esc(s.external_evaluation.mean_removal_power)}；识别 ${esc(s.external_evaluation.classified)} / ${esc(s.external_evaluation.interactions)} 张互动。${esc(s.external_evaluation.limitation)}</p>`:''}
     ${s.mana_model?.assumptions?`<details><summary>费用准备度如何计算</summary><p class="sub">${esc(s.mana_model.assumptions)}</p>${s.mana_model.hands_per_deck!=null?`<p class="sub">每副牌 ${esc(s.mana_model.hands_per_deck)} 手 · 每手观察 ${esc(s.mana_model.cards_per_hand)} 张牌。准备度抽样不影响后续轮抓。</p>`:''}</details>`:''}
     <p class="sub">${esc(s.limitation)}</p>
     <details><summary>查看抓牌包与实际组牌样例</summary><pre>${esc(JSON.stringify(s.examples,null,2))}</pre></details>`;
@@ -174,7 +175,48 @@ function configureExperiments(){
   $('optimization-profile').onchange=updateBudget;$('optimization-swaps').onchange=updateBudget;updateBudget();
 }
 
-(async()=>{try{statusInfo=await api('/api/status');$('application-version').textContent='Cube 助手 '+statusInfo.version;configureExperiments();if(!window.workspaceHasDraftEdits?.())fillSpec(statusInfo.presets.commander);$('connection').textContent='● 本地服务已连接';$('snapshot').textContent='合法性快照 '+statusInfo.snapshot;$('catalog-count').textContent=statusInfo.cards.toLocaleString();$('knowledge-count').textContent=statusInfo.knowledge_chunks;if(window.updateAIStatus)updateAIStatus(statusInfo.gpt);renderFeedback(statusInfo.feedback);$('color-filter').innerHTML+=[...'WUBRG','UW','BU','BR','GR','GW','BW','RU','BG','RW','GU','C'].map(g=>`<option>${g}</option>`).join('');const examples=await api('/api/examples');$('examples').innerHTML+=examples.map(x=>`<option value="${esc(x.id)}">${esc(x.label)}</option>`).join('');await refreshRuns();await window.restoreWorkspace?.();lock(false);window.cubeReady=true;document.dispatchEvent(new Event('cube-ready'));}catch(e){notice(e.message,true);}})();
+let startupNotice='';
+function showStartupNotice(message,error=false){startupNotice=message;notice(message,error);}
+async function startupRead(path){
+  for(let failures=0;;){
+    try{return await api(path);}
+    catch(error){
+      if(!error.retryable||++failures>3||window.cubeServiceClosed)throw error;
+      showStartupNotice('本地助手暂时未响应，正在重新连接…');
+      await new Promise(resolve=>setTimeout(resolve,failures*1500));
+    }
+  }
+}
+let startupLoading=false;
+async function startApp(){
+  if(startupLoading||window.cubeReady||window.cubeServiceClosed)return;
+  startupLoading=true;$('startup-retry').disabled=true;
+  try{
+    // Load first so a partial response cannot duplicate options on a retry.
+    const status=await startupRead('/api/status');
+    const examples=await startupRead('/api/examples');
+    const library=await startupRead('/api/library');
+    if(window.cubeServiceClosed)return;
+    statusInfo=status;$('application-version').textContent='Cube 助手 '+statusInfo.version;configureExperiments();
+    if(!window.workspaceHasDraftEdits?.())fillSpec(statusInfo.presets.commander);
+    $('connection').textContent='● 本地服务已连接';$('snapshot').textContent='合法性快照 '+statusInfo.snapshot;
+    $('catalog-count').textContent=statusInfo.cards.toLocaleString();$('knowledge-count').textContent=statusInfo.knowledge_chunks;
+    if(window.updateAIStatus)updateAIStatus(statusInfo.gpt);renderFeedback(statusInfo.feedback);
+    const filter=$('color-filter');
+    if(!filter.dataset.startupLoaded){filter.innerHTML+=[...'WUBRG','UW','BU','BR','GR','GW','BW','RU','BG','RW','GU','C'].map(g=>`<option>${g}</option>`).join('');filter.dataset.startupLoaded='1';}
+    const selected=$('examples').value;
+    $('examples').innerHTML='<option value="">选择牌表…</option>'+examples.map(x=>`<option value="${esc(x.id)}">${esc(x.label)}</option>`).join('');
+    $('examples').value=selected;await refreshRuns(library);
+    if(startupNotice&&$('notice').textContent===startupNotice)$('notice').hidden=true;
+    startupNotice='';await window.restoreWorkspace?.();
+    if(window.cubeServiceClosed)return;
+    $('startup-retry').hidden=true;lock(false);window.cubeReady=true;document.dispatchEvent(new Event('cube-ready'));
+  }catch(error){
+    if(!window.cubeServiceClosed){$('connection').textContent='● 本地服务未连接';$('startup-retry').hidden=false;showStartupNotice(error.message+' 请使用“重新连接本地助手”重试。',true);}
+  }finally{startupLoading=false;$('startup-retry').disabled=false;}
+}
+$('startup-retry').onclick=()=>startApp();
+startApp();
 
 function renderBracketReport(b){return `<article class="panel"><h2>构筑目标：Bracket ${b.target} · ${esc(b.name)}</h2><p>主牌平均评价 ${b.main_mean}（项目目标 ${b.project_mean_band.join('–')}）· 高评价主牌 ${b.high_quality_main}/${b.project_high_quality_limit} · 指挥官平均评价 ${b.commander_mean}</p><p>整个 Cube 的 Game Changers ${b.game_changers.length}/${b.cube_gc_limit} · 组牌后的每副牌上限：${b.official_deck_gc_limit??'不限'}，含指挥官与地牌。</p><details><summary>查看 Game Changers 与标准来源</summary><p>${b.game_changers.map(esc).join(' · ')||'无'}</p><p>核验日期 ${esc(b.reviewed)} · ${b.sources.map((u,i)=>`<a href="${esc(u)}" target="_blank" rel="noopener">官方资料 ${i+1}</a>`).join(' · ')}</p></details><p class="sub">${esc(b.limitation)}</p></article>`;}
 

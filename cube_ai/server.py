@@ -430,6 +430,9 @@ def handler_for(app):
                     if parts[3] not in {'report.json','report.md','evidence.zip','games.json','cube.json'} and not re.fullmatch(r'pod[0-9]{3}_game[0-9]{3}\.log',parts[3]):raise FileNotFoundError()
                     return self.file(MATCHES/parts[2]/parts[3],True)
                 if path.path=="/api/examples":return self.json(200,[{"id":n,"label":example_label(n)} for n in sorted(app.examples)])
+                if path.path=='/api/vintage':
+                    from .vintage_data import reference
+                    return self.json(200,reference(app.catalog))
                 if path.path=="/api/example":
                     example=app.examples.get(q("id"))
                     if not example:raise FileNotFoundError("示例牌表不存在")

@@ -48,3 +48,12 @@ def test_submitted_job_reconnects_without_resubmitting():
     result=subprocess.run([node,str(script)],capture_output=True,text=True,encoding='utf8',timeout=10)
     assert result.returncode==0,result.stdout+result.stderr
     assert '"passed":7' in result.stdout
+
+
+def test_startup_recovers_temporary_errors_and_offers_manual_retry():
+    node=shutil.which('node')
+    if node is None:pytest.skip('Node is needed for the browser-state regression')
+    script=Path(__file__).parent/'js/test_startup_recovery.cjs'
+    result=subprocess.run([node,str(script)],capture_output=True,text=True,encoding='utf8',timeout=10)
+    assert result.returncode==0,result.stdout+result.stderr
+    assert '"passed":4' in result.stdout

@@ -13,7 +13,8 @@ from .config import ROOT
 from .acceleration import linear
 
 MODELS=ROOT/'models'
-VERSION='activity-7'
+VERSION='activity-8'
+DECK_FEATURES=20
 _training_lock=threading.Lock()
 
 def engine_scope():
@@ -29,12 +30,15 @@ def fingerprint(deck):
 
 def deck_vector(catalog,deck):
     cards=[catalog.cards[n] for n in deck['spells']];cmd=catalog.cards[deck['commander']]
+    from .external_deck_evaluator import evaluate
+    removal=evaluate(cards+[cmd])
     return np.array([len(cards)/40,deck['land_count']/60,
         statistics.mean(c['mv'] for c in cards)/6 if cards else 0,
         statistics.mean(c['quality'] for c in cards)/5 if cards else 0,
         sum(c['mv']<=2 for c in cards)/40,
         *[sum(c[k] for c in cards)/40 for k in ['creature','interaction','wipe','ramp','draw','finisher']],
-        cmd['mv']/8,cmd['quality']/5,*[float(c in cmd['identity']) for c in 'WUBRG']],dtype=np.float32)
+        cmd['mv']/8,cmd['quality']/5,*[float(c in cmd['identity']) for c in 'WUBRG'],
+        removal['removal_power']/10,removal['classified']/10],dtype=np.float32)
 
 def contexts(vectors):
     x=np.asarray(vectors,dtype=np.float32);other=(x.sum(axis=0)-x)/max(1,len(x)-1)
@@ -201,10 +205,11 @@ def _train(catalog,progress=lambda _:None):
         model=dict(base,kind='ridge',weights=w.tolist(),alpha=alpha)
         candidates.append((float(np.mean((predict(model,x[va],'cpu')-y[va])**2)),model))
     # Ablation: does opponent context help beyond the deck's own features?
-    own=aug[:,:19].copy();own[:,-1]=1
-    penalty=np.eye(19);penalty[-1,-1]=0
+    own_features=x.shape[1]//3
+    own=aug[:,:own_features+1].copy();own[:,-1]=1
+    penalty=np.eye(own_features+1);penalty[-1,-1]=0
     small=np.linalg.solve(own[tr].T@own[tr]+penalty,own[tr].T@y[tr])
-    weights=np.zeros((aug.shape[1],3));weights[:18]=small[:18];weights[-1]=small[-1]
+    weights=np.zeros((aug.shape[1],3));weights[:own_features]=small[:own_features];weights[-1]=small[-1]
     model=dict(base,kind='ridge',weights=weights.tolist(),alpha=1,ablation='own_deck_only')
     candidates.append((float(np.mean((predict(model,x[va],'cpu')-y[va])**2)),model))
     # A small nonlinear challenger. Adam, fixed seed and validation stopping only.
@@ -271,8 +276,8 @@ def active_model(catalog):
         scope=engine_scope()
         if scope is None or model.get('engine')!=scope:return None
         if model.get('kind') not in {'ridge','mlp'}:return None
-        shapes=dict(mean=(54,),scale=(54,))
-        shapes.update(dict(weights=(55,3)) if model.get('kind')=='ridge' else dict(w1=(54,32),b1=(32,),w2=(32,3),b2=(3,)))
+        width=DECK_FEATURES*3;shapes=dict(mean=(width,),scale=(width,))
+        shapes.update(dict(weights=(width+1,3)) if model.get('kind')=='ridge' else dict(w1=(width,32),b1=(32,),w2=(32,3),b2=(3,)))
         for k,shape in shapes.items():
             a=np.asarray(model[k],dtype=float)
             if a.shape!=shape or not np.isfinite(a).all():return None

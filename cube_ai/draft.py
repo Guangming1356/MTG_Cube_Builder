@@ -69,8 +69,7 @@ def opening_test(catalog,spells,land_names,identity,deck_size,rng,hands=40,*,com
 def deal(catalog,rows,spec,rng):
     count=spec.players*spec.rounds
     if count*spec.pack_size>len(rows):raise ValueError("Cube 张数不足以按当前规则开包")
-    if not spec.discard_after_pass:
-        if spec.pick_count!=1:raise ValueError("完整传包模式目前只支持每次抓 1 张")
+    if not spec.discard_after_pass or spec.pack_collation=='random':
         cards=list(rows);rng.shuffle(cards)
         return [cards[i*spec.pack_size:(i+1)*spec.pack_size] for i in range(count)]
     commanders=[r for r in rows if r["role"]=="Commander"]
@@ -102,7 +101,7 @@ def draft_pod(catalog,rows,spec,rng,preferred_guilds=None,readiness_hands=40,_pa
     themes_by_seat=[set(spec.pair_themes.get(g,[])) for g in preferred]
     for rd in range(spec.rounds):
         current=packs[rd*spec.players:(rd+1)*spec.players]
-        steps=spec.players if spec.discard_after_pass else spec.pack_size
+        steps=spec.players if spec.discard_after_pass else math.ceil(spec.pack_size/spec.pick_count)
         for step in range(steps):
             for seat in range(spec.players):
                 index=(seat+step*(1 if rd%2==0 else -1))%spec.players;pack=current[index]
@@ -195,6 +194,7 @@ def stress_test(catalog,rows,spec,trials=100,progress=lambda x:None):
     rng=random.Random(spec.seed);examples=[];sizes=Counter();first_packs=None
     groups={g:dict(decks=0,buildable=0,ready=Counter()) for g in GUILDS}
     total_decks=valid_count=bracket_violations=max_deck_gc=incomplete_packages=0
+    external_count=external_removal=external_classified=external_interactions=0
     for trial in range(trials):
         pod=draft_pod(catalog,rows,spec,rng)
         if first_packs is None:first_packs=pod["packs"]
@@ -207,6 +207,10 @@ def stress_test(catalog,rows,spec,trials=100,progress=lambda x:None):
             bracket=deck['bracket'];bracket_violations+=bool(bracket and bracket['violations'])
             if bracket:max_deck_gc=max(max_deck_gc,len(bracket['game_changers']))
             incomplete_packages+=bool(deck['design']['incomplete_packages'])
+            ext=deck['design'].get('external_evaluation')
+            if ext:
+                external_count+=1;external_removal+=ext['removal_power']
+                external_classified+=ext['classified'];external_interactions+=ext['interactions']
             if len(examples)<spec.players:examples.append({k:v for k,v in deck.items() if k not in {'ready','buildable'}})
         if trial%20==0:progress(f"完成 {trial+1}/{trials} 桌轮抓")
     group_summary={}
@@ -219,11 +223,15 @@ def stress_test(catalog,rows,spec,trials=100,progress=lambda x:None):
                     violations=bracket_violations,max_deck_game_changers=max_deck_gc,
                     certified=False),
                 cards_opened=spec.players*spec.rounds*spec.pack_size,
-                cards_discarded_per_pack=spec.pack_size-spec.players*spec.pick_count if spec.discard_after_pass else 0,
+                cards_discarded_per_pack=max(0,spec.pack_size-spec.players*spec.pick_count) if spec.discard_after_pass else 0,
                 buildable_rate=round(valid_count/max(1,total_decks),3),guilds=group_summary,
                 examples=examples,packs=first_packs,seed=spec.seed,
                 mana_model=dict(version=MODEL_VERSION,starting_life=40 if spec.mode=='commander' else 20,assumptions=readiness_assumptions(40 if spec.mode=='commander' else 20),
                     stream_version=READINESS_STREAM,sampling_version=OPENING_SAMPLER,hands_per_deck=40,cards_per_hand=11,casting_version=CASTING_VERSION),
                 component_check=dict(decks=valid_count,decks_with_incomplete_packages=incomplete_packages,
                     note='实际入组牌的组件提示，不等于死牌率。'),
+                external_evaluation=dict(source='mtg-draft',decks=external_count,
+                    mean_removal_power=round(external_removal/external_count,3) if external_count else None,
+                    classified=external_classified,interactions=external_interactions,
+                    limitation='仅评估可识别的指向性去除；未识别互动不代表无效，不是胜率。'),
                 limitation="只测试轮抓组牌和起手法术力准备度；没有结算牌效、战斗、胜负或政治互动，不能解释为实战胜率。")

@@ -117,7 +117,7 @@ for name in ['Mind Stone','Warping Wail','Time Warp','Chrome Mox']:
     assert score_adjustment(card,spec,power=power)==score_adjustment(card,spec)
     assert design_bonus(card,spec,available=applicable_themes(card['identity'],spec))==design_bonus(card,spec)
 assert not any(n=='scipy' or n.startswith('scipy.') for n in sys.modules)
-assert ACTIVITY_VERSION=='activity-7'
+assert ACTIVITY_VERSION=='activity-8'
 from cube_ai.optimize import feedback_model
 sample_evidence=dict(summary=dict(mean_early_no_spell_rate=.4,no_finisher_cast_rate=.2),
     guilds={'BR':dict(appearances=3,wins=3)},preferred_guilds={'BR':dict(appearances=3,wins=0)},

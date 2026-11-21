@@ -21,16 +21,18 @@ const oldLock=lock;
 lock=value=>{oldLock(value);window.updateHome();};
 $('home-library').onchange=window.updateHome;
 window.updateQuickMode=(reset=true)=>{
-  const edh=$('quick-mode').value==='commander';$('quick-power-controls').hidden=!edh;
-  if(reset){$('quick-deck-policy').value=edh?'balanced':'quality';$('quick-name').value=edh?'我的三人 EDH Cube':'我的传统 Cube';}
+  const mode=$('quick-mode').value,edh=mode==='commander',vintage=mode==='vintage';$('quick-power-controls').hidden=!edh;$('quick-build').textContent=vintage?'打开官方 Vintage Cube':'生成我的 Cube';
+  if(reset){$('quick-deck-policy').value=edh?'balanced':'quality';$('quick-name').value=edh?'我的三人 EDH Cube':vintage?'MTGO Vintage Cube':'我的传统 Cube';}
   $('quick-rules').textContent=edh?'三人每包 15 张，每人取 2 张，传过三人后弃 9 张；每人抓 60 张。选入任意张，再加基本地，组至少 60 张含指挥官的牌组。':'传统轮抓：8 人，每人 3 包 15 张，每次取 1 张；从抓到的牌中组 40 张牌组，基本地不限。';
 };
 $('quick-mode').onchange=()=>window.updateQuickMode();
 $('quick-build').onclick=()=>guard(async()=>{
-  const mode=$('quick-mode').value;fillSpec({...statusInfo.presets[mode],...quickPowerSpec(),name:$('quick-name').value.trim()||'我的 Cube',seed:Math.floor(Math.random()*1000000000)});
+  const mode=$('quick-mode').value;
+  if(mode==='vintage'){const reference=await api('/api/vintage');const chosen={...reference.spec,name:$('quick-name').value.trim()||reference.spec.name,deck_policy:$('quick-deck-policy').value};fillSpec(chosen);setCube(await api('/api/save',{spec:chosen,cards:reference.cards,require_valid:true}));await refreshRuns();view('home');focusCurrent();notice('已保存官方 Vintage Cube 参考牌表。可继续检查轮抓；该模式包含黑莲花等高强度牌。');return;}
+  fillSpec({...statusInfo.presets[mode],...quickPowerSpec(),name:$('quick-name').value.trim()||'我的 Cube',seed:Math.floor(Math.random()*1000000000)});
   notice('正在构筑，请稍等。完成后会自动保存。');setCube(await job('build'));await refreshRuns();view('home');focusCurrent();notice('牌表已生成并保存。可以下载牌表，或继续检查轮抓与实战。');
 });
-$('quick-details').onclick=()=>{fillSpec({...statusInfo.presets[$('quick-mode').value],...quickPowerSpec(),name:$('quick-name').value.trim()||'我的 Cube'});view('design');};
+$('quick-details').onclick=()=>guard(async()=>{const mode=$('quick-mode').value;const base=mode==='vintage'?(await api('/api/vintage')).spec:statusInfo.presets[mode];fillSpec({...base,...quickPowerSpec(),name:$('quick-name').value.trim()||'我的 Cube'});view('design');});
 $('home-open').onclick=()=>guard(async()=>{
   const value=$('home-library').value;if(!value)throw Error('请先选择一套牌表');const [kind,id]=value.split(':');
   if(kind==='run'){
@@ -49,7 +51,7 @@ $('home-upload').onchange=()=>guard(async()=>{
     const saved=JSON.parse(text);if(!saved.cards||!saved.spec)throw Error('请选择本工具导出的完整备份');
     fillSpec(saved.spec);const c=await analyzeRows(saved.cards);c.provenance=saved.provenance;setCube(c);
   }else{
-    fillSpec(statusInfo.presets[$('quick-mode').value]);$('name').value=file.name.replace(/\.[^.]+$/,'');
+    const mode=$('quick-mode').value;fillSpec(mode==='vintage'?(await api('/api/vintage')).spec:statusInfo.presets[mode]);$('name').value=file.name.replace(/\.[^.]+$/,'');
     setCube(await api('/api/analyze',{spec:spec(),text}));
   }
   if(current.audit.hard_errors)notice('文件已打开。发现部分不符合当前玩法的内容，请点击“检查轮抓与实战”查看。',true);

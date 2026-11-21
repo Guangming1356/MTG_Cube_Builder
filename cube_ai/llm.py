@@ -335,6 +335,8 @@ def plan_schema():
         "commander_tuning":{"type":"string","enum":["gentle","matched","strong"]},
         "curve_profile":{"type":"string","enum":["balanced","low","late"]},
         "deck_policy":{"type":"string","enum":["quality","balanced"]},
+        "audit_profile":{"type":"string","enum":["constrained","open"]},
+        "pack_collation":{"type":"string","enum":["seeded","random"]},
         "interaction_min_ratio":{"type":"number","minimum":.10,"maximum":.30},
         "wipe_min_ratio":{"type":"number","minimum":.01,"maximum":.08},
         "finisher_min_ratio":{"type":"number","minimum":.06,"maximum":.20},

@@ -45,6 +45,7 @@ class BuildSpec:
     curve_profile: str = 'balanced'
     # Missing in old recipes means the original quality-first spell selection.
     deck_policy: str = 'quality'
+    audit_profile: str = 'constrained'
     max_card_price: float | None = None
     exclude: list[str] = field(default_factory=list)
     pins: list[str] = field(default_factory=list)
@@ -58,6 +59,7 @@ class BuildSpec:
     pack_size: int = 15
     pick_count: int = 2
     discard_after_pass: bool = True
+    pack_collation: str = 'seeded'
 
     @classmethod
     def from_dict(cls, data=None):
@@ -107,6 +109,7 @@ class BuildSpec:
         if main<40:raise ValueError('至少需要 40 个主牌槽位')
         if self.curve_profile not in {'balanced','low','late'}:raise ValueError('curve_profile 必须为 balanced/low/late')
         if not isinstance(self.deck_policy,str) or self.deck_policy not in {'quality','balanced'}:raise ValueError('deck_policy 必须为 quality/balanced')
+        if not isinstance(self.audit_profile,str) or self.audit_profile not in {'constrained','open'}:raise ValueError('audit_profile 必须为 constrained/open')
         for key,low,high in [('interaction_min_ratio',.10,.30),('wipe_min_ratio',.01,.08),('finisher_min_ratio',.06,.20)]:
             value=getattr(self,key)
             if type(value) not in {int,float} or not low<=value<=high:raise ValueError(f'{key} 必须在 {low}–{high} 之间')
@@ -114,8 +117,8 @@ class BuildSpec:
             raise ValueError("轮抽人数或轮数无效")
         if not 1 <= self.pick_count <= self.pack_size or not 5<=self.pack_size<=60:
             raise ValueError("每次抓牌数/包大小无效")
-        if self.discard_after_pass and self.pack_size <= self.players * self.pick_count:
-            raise ValueError("该规则下每包需要能留下弃牌")
+        if not isinstance(self.pack_collation,str) or self.pack_collation not in {'seeded','random'}:
+            raise ValueError('pack_collation 必须为 seeded/random')
         if self.max_card_price is not None and (type(self.max_card_price) not in {int,float} or not 0<self.max_card_price<1e9):
             raise ValueError("单卡价格上限必须大于 0")
         for key in ['min_year','max_year']:
