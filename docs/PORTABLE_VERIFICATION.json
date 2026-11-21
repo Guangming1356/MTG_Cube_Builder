@@ -1,7 +1,7 @@
 {
   "passed": true,
-  "application_version": "0.2.26",
-  "cards": 31070,
+  "application_version": "0.2.27",
+  "cards": 31123,
   "offline_ai": true,
   "forge_available": true,
   "embedded_runtime": true,
