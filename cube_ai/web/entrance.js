@@ -10,7 +10,7 @@ window.refreshHomeLibrary=lib=>{
   $('home-library').value=before;window.updateHome();
 };
 window.updateHome=()=>{
-  const has=!!current;$('home-current-title').textContent=has?(current.spec?.name||'当前 Cube'):'还没有打开牌表';
+  const has=!!current;$('home-current-title').toggleAttribute('data-user-content',!!(has&&current.spec?.name));$('home-current-title').textContent=has?(current.spec?.name||'当前 Cube'):'还没有打开牌表';
   $('home-current-info').textContent=has?`${current.cards.length} 张 · ${current.audit.hard_errors===0?'已通过当前构筑检查':`有 ${current.audit.hard_errors} 项需要处理，请查看检查报告`}`:'先生成一套，或打开已有牌表。';
   $('home-assessment').textContent=current?.provenance?.validation_status==='experimental'?'实验候选：尚未通过全部独立测试，不代表已证实更强。':'';
   ['home-cards','home-check','home-save','home-optimize'].forEach(id=>$(id).disabled=working||!has||(id==='home-optimize'&&(current.spec?.mode!=='commander'||current.spec?.players!==3)));

@@ -246,12 +246,13 @@ def replacements(catalog,spec,rows,name,limit=8):
         if len(accepted)>=limit:break
     return accepted
 
-def advise(catalog,knowledge,spec,rows,message,client=None):
+def advise(catalog,knowledge,spec,rows,message,client=None,language='zh-CN'):
     client=client or LLMClient();trace=[];usage=[]
     before_audit=audit(catalog,rows,spec,strict=True) if rows else None
     context=dict(spec=spec.to_dict(),current_cards=rows,initial_audit=before_audit,
                  knowledge=knowledge.search(message,3))
-    messages=[{"role":"system","content":SYSTEM},{"role":"user","content":json.dumps(context,ensure_ascii=False)+"\n用户需求:\n"+message}]
+    system=SYSTEM.replace('用中文回答。','Answer in English.') if language=='en' else SYSTEM
+    messages=[{"role":"system","content":system},{"role":"user","content":json.dumps(context,ensure_ascii=False)+"\n用户需求:\n"+message}]
     def execute(name,args):
         if name=="search_cards":
             return [dict(name=c["name"],mv=c["mv"],identity=c["identity"],text=c["text"],quality=c["quality"])
@@ -351,7 +352,7 @@ def plan_schema():
     return {"type":"object","properties":fields,"required":list(fields),"additionalProperties":False}
 
 
-def plan(message,base_spec,knowledge,client=None):
+def plan(message,base_spec,knowledge,client=None,language='zh-CN'):
     client=client or LLMClient();schema=plan_schema()
     prompt="""把用户 Cube 需求转换成完整的构筑参数，所有字段均须返回。只输出符合 Schema 的 JSON。
 同一玩法只修改需求涉及的字段，其余沿用 current。切换玩法时只重置玩法相关默认值：size、commanders、lands、legality_format、bracket、cube_gc_limit 和轮抓字段；预算、年份、系列、排除牌、锁定牌、互动/扫场/终结及曲线偏好仍沿用 current，除非用户另有要求。不要把 Commander 的槽位、赛制或轮抓规则带入传统 Cube。
@@ -363,6 +364,7 @@ deck_policy 控制抓牌后的自动组牌：balanced（均衡费用，适当增
 max_card_price 是单卡美元价格过滤，min_year/max_year 是发行年份过滤，sets 为系列代码；不受支持的筛选或偏好写入 unapplied_requests，不能在 explanation 中声称已经落实。
 不要生成整份牌表。保持各项安全偏好；Bracket 1–3 不允许已知无限组合、大规模毁地、额外回合。普通 Cube 的 commanders 为 0、bracket/cube_gc_limit 为 null。
 解释仅说明实际参数变化和未能落实的要求，不承诺未经验证的胜率或娱乐性。"""
+    if language=='en':prompt+='\nWrite explanation and unapplied_requests in English; preserve all schema keys and card names.'
     context={"current":base_spec.to_dict(),"presets":{"commander":BuildSpec.from_dict({'bracket':3,'deck_policy':'balanced'}).to_dict(),"classic":BuildSpec.from_dict({'mode':'classic'}).to_dict()},"knowledge":knowledge.search(message,3),"request":message}
     messages=[{"role":"system","content":prompt},{"role":"user","content":json.dumps(context,ensure_ascii=False)}]
     response=client.request(messages,schema=schema)

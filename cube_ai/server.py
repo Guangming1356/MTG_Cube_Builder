@@ -91,10 +91,12 @@ def execute_operation(app,operation,spec,rows,data,progress):
     elif operation=='learn-games':value=surrogate.train(app.catalog,progress)
     elif operation=="chat":
         progress("AI 正在检索牌库、技能与构筑审计")
-        value=advise(app.catalog,app.knowledge,spec,rows,data.get("message",""),client)
+        kwargs={'language':'en'} if data.get('language')=='en' else {}
+        value=advise(app.catalog,app.knowledge,spec,rows,data.get("message",""),client,**kwargs)
     else:
         progress("AI 将需求转换为构筑参数")
-        value=plan(data.get("message",""),spec,app.knowledge,client)
+        kwargs={'language':'en'} if data.get('language')=='en' else {}
+        value=plan(data.get("message",""),spec,app.knowledge,client,**kwargs)
     return value
 
 DEFAULT_ISOLATED_JOBS=True
@@ -296,7 +298,7 @@ class Application:
                 self.controls.pop(k,None)
                 self.job_paths.pop(k,None)
         if self.isolated_jobs:
-            allowed={'operation','message','trials','run_id','pods','games_per_pod','clock_seconds','workers','profile','max_swaps','training_pods','scoring_backend','search_mode','mode','goal','study_seed','deck_variant','calibration_workers','calibration_profiles','calibration_apply','source_type','source_id','game_index','pod_seeds','preferred_guilds'}
+            allowed={'operation','message','language','trials','run_id','pods','games_per_pod','clock_seconds','workers','profile','max_swaps','training_pods','scoring_backend','search_mode','mode','goal','study_seed','deck_variant','calibration_workers','calibration_profiles','calibration_apply','source_type','source_id','game_index','pod_seeds','preferred_guilds'}
             request={k:v for k,v in data.items() if k in allowed};request.update(spec=spec.to_dict(),cards=rows)
             snapshot=None
             if operation in {'stress','forge','calibrate','deck-study'}:
@@ -480,6 +482,31 @@ def handler_for(app):
             except Exception:self.json(500,{"error":"请求处理失败"})
         def file(self,target,download=False):
             if not target.is_file():raise FileNotFoundError()
+            # Existing stored reports stay untouched. Localize a copy on download.
+            if download and target.name=='report.md' and parse_qs(urlparse(self.path).query).get('lang')==['en']:
+                from .localization import audit_report_english,diagnostic_report_english,match_report_english,optimization_report_english,report_english,study_report_english
+                saved=target.parent/'cube.json'
+                path=urlparse(self.path).path
+                try:
+                    if path.startswith('/exports/') and saved.is_file():
+                        value=audit_report_english(json.loads(saved.read_text(encoding='utf8')))
+                    elif path.startswith('/matches/') and (target.parent/'report.json').is_file():
+                        value=match_report_english(json.loads((target.parent/'report.json').read_text(encoding='utf8')))
+                    elif path.startswith('/optimizations/') and (target.parent/'report.json').is_file():
+                        value=optimization_report_english(json.loads((target.parent/'report.json').read_text(encoding='utf8')))
+                    elif path.startswith('/studies/') and (target.parent/'report.json').is_file():
+                        value=study_report_english(json.loads((target.parent/'report.json').read_text(encoding='utf8')))
+                    elif path.startswith('/diagnostics/') and (target.parent/'report.json').is_file():
+                        value=diagnostic_report_english(json.loads((target.parent/'report.json').read_text(encoding='utf8')))
+                    else:value=report_english(target.read_text(encoding='utf8'))
+                except (KeyError,TypeError,ValueError):
+                    value=report_english(target.read_text(encoding='utf8'))
+                raw=value.encode('utf8')
+                self.send_response(200);self.send_header('Content-Type','text/markdown; charset=utf-8')
+                self.send_header('Content-Length',str(len(raw)));self.send_header('Cache-Control','no-store')
+                self.send_header('X-Content-Type-Options','nosniff')
+                self.send_header('Content-Disposition','attachment; filename="report.en.md"')
+                self.end_headers();self.wfile.write(raw);return
             with target.open('rb') as source:
                 stat=os.fstat(source.fileno());etag=f'"{stat.st_mtime_ns:x}-{stat.st_size:x}"'
                 if not download and self.headers.get('If-None-Match')==etag:

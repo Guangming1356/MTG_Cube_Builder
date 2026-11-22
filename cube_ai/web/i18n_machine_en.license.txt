@@ -1,0 +1,10 @@
+The generated English message catalog includes translations produced offline
+with Argos Translate's Chinese–English model version 1.9. The original OPUS-MT
+model is attributed to Jörg Tiedemann and Santhosh Thottingal, “OPUS-MT —
+Building open translation services for the World”, EAMT 2020, and is licensed
+under Creative Commons Attribution 4.0 International (CC BY 4.0):
+https://creativecommons.org/licenses/by/4.0/
+
+Model package: https://argos-net.com/v1/translate-zh_en-1_9.argosmodel
+The catalog also contains project-specific human corrections. No user content
+is sent to a translation provider by the application.
