@@ -213,12 +213,20 @@ print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs(
         assert all(d['deck_policy']=='balanced' for d in result['result']['examples'])
         vintage=request(url+'api/vintage');vintage['spec']['players']=2
         classic_job=request(url+'api/tasks',dict(operation='forge',cards=vintage['cards'],spec=vintage['spec'],
-            pods=1,games_per_pod=2,clock_seconds=20,pod_seeds=[9000],workers=1))['job_id']
+            pods=1,games_per_pod=2,clock_seconds=60,pod_seeds=[9000],workers=1))['job_id']
         classic=wait_until(lambda:(j if (j:=request(url+'api/job?id='+classic_job))['state'] in {'done','failed'} else None),timeout=210)
         assert classic['state']=='done',classic.get('error')
         classic_result=classic['result'];assert classic_result['rules']['starting_life']==20 and classic_result['rules']['deck_total_exported']==40
         assert len(classic_result['games'])==2 and classic_result['skipped_games']==0
-        assert all(g['outcome'] in {'win','draw','engine_timeout'} for g in classic_result['games'])
+        unexpected=[g for g in classic_result['games'] if g['outcome'] not in {'win','draw','engine_timeout'}]
+        if unexpected:
+            for game in unexpected:
+                print('Classic Forge unexpected outcome:',json.dumps({k:game.get(k) for k in ['game','outcome','error','diagnostics','returncode']},ensure_ascii=True),flush=True)
+                try:
+                    with urllib.request.urlopen(url+f"matches/{classic_result['match_id']}/{game['log']}",timeout=15) as response:
+                        print('Classic Forge log tail:',response.read().decode('utf8',errors='replace')[-2500:],flush=True)
+                except (OSError,ValueError):pass
+            raise AssertionError('Classic Forge native game did not produce a recognized outcome')
         request(url+'api/shutdown',{});time.sleep(1);url=start()
         restored=request(url+'api/job?id='+job)
         assert restored['state']=='done' and restored['result']==result['result']
