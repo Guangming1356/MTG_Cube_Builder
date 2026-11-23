@@ -1,5 +1,5 @@
 {
-  "version": "20261122-r1-portable-ai",
+  "version": "20261124-portable-ai",
   "platform": "Windows 10/11 x64",
   "python": "3.13.16",
   "python_sha256": "97dae5274cc54867065e8d5a3226e48c35017ed332a0fdb0e27d5b5821961297",
@@ -67,7 +67,7 @@
     "preferences_included": false
   },
   "card_snapshot": "2026-10-08",
-  "application_version": "0.2.28",
-  "source_commit": "34339a294e55b60760f9ef3217b2d93b949edef0",
-  "base_archive_sha256": "ef36d8ee779e9ec74fdff214e789dbc148f7a50cbf0be9f49dac35c4a7f67755"
+  "application_version": "0.2.29",
+  "source_commit": "3dfb12138a08d03547772fbfcec800635e39a432",
+  "base_archive_sha256": "0c6c1b6b7578bcb3885fcf4ec1dbba87f069592c9d3aa7665d907280a9cadac3"
 }
