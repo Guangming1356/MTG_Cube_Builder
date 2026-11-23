@@ -20,6 +20,7 @@ from .feedback import FeedbackStore
 from .design import VERSION as DESIGN_VERSION, design_bonus, applicable_themes, cube_design_report, studies
 from .brackets import profile, is_gc, score_adjustment, cube_report, VERSION as BRACKET_VERSION
 from .casting_costs import curve_value,report as casting_cost_report
+from .mana import land_fixing_colors
 
 def apportion(total, weights):
     if total == 0: return {k:0 for k in weights}
@@ -335,7 +336,7 @@ def audit(catalog,rows,spec,unresolved=None,strict=False):
     for r in rows:
         c=catalog.cards.get(r["name"])
         if c and r["role"]=="Land":
-            for color in set(c["fixing"]) & set("WUBRG"):fixing[color]+=1
+            for color in land_fixing_colors(c) & set("WUBRG"):fixing[color]+=1
     if spec.lands and fixing:
         values=[fixing[c] for c in "WUBRG"]
         if max(values)-min(values)>4:issue("warning","fixing","各色修色地来源差超过 4")

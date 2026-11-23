@@ -32,7 +32,7 @@ NORMAL={'win','draw'}
 
 def snapshot_sources(catalog,rows,out):
     """Preserve the code and trusted card features used before native outcomes."""
-    names=['deck_study','deck_building','mana','casting_costs','external_deck_evaluator','mtg_draft_metrics','release_dates','optimize','draft','forge','forge_worker','game_queue','entry_costs','commander_rules',
+    names=['deck_study','deck_building','draft_strength','mana','casting_costs','external_deck_evaluator','mtg_draft_metrics','release_dates','optimize','draft','forge','forge_worker','game_queue','entry_costs','commander_rules',
            'task_control','config','brackets','design','catalog','features','sim_cache',
            'tuning','experiment','resources','acceleration','engine','forge_card_names','forge_compat']
     folder=out/'source';folder.mkdir()
@@ -46,6 +46,10 @@ def snapshot_sources(catalog,rows,out):
         (folder/name).write_bytes(data);hashes[name]=hashlib.sha256(data).hexdigest()
     from .release_dates import ASSET as PAPER_ASSET,bundle_asset
     for target,data in bundle_asset(PAPER_ASSET).items():
+        name=Path(target).name
+        (folder/name).write_bytes(data);hashes[name]=hashlib.sha256(data).hexdigest()
+    from .draft_strength import bundle_asset as bundle_prior
+    for target,data in bundle_prior().items():
         name=Path(target).name
         (folder/name).write_bytes(data);hashes[name]=hashlib.sha256(data).hexdigest()
     cards=[catalog.cards[name] for name in sorted({row['name'] for row in rows})]

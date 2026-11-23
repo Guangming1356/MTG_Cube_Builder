@@ -83,6 +83,7 @@ function renderStress(s){
     <div class="table-wrap"><table><thead><tr><th>预设色组</th><th>样本 / 可组牌率</th><th>第 1 / 2 / 3 / 4 回合法术力准备度</th></tr></thead><tbody>${groups}</tbody></table></div>
     ${s.bracket_check?.target?`<p>Bracket ${s.bracket_check.target} 构筑限制检查：${s.bracket_check.decks_checked} 副牌 · ${s.bracket_check.violations} 副违规 · 每副牌最多观察到 ${s.bracket_check.max_deck_game_changers} 张 Game Changers。</p>`:''}
     ${s.component_check?`<p>实际组牌中 ${s.component_check.decks_with_incomplete_packages} / ${s.component_check.decks} 副的牺牲或返场组件需要复核。</p>`:''}
+    ${s.draft_strength?`<p>Vintage 抓牌参考 CubeCobra 全站选牌评分：${s.draft_strength.covered} / ${s.draft_strength.total} 张有数据；其余牌沿用本项目评分。来源快照：${esc(s.draft_strength.source_last_modified)}。这不是实战胜率。</p>`:''}
     ${s.external_evaluation?.decks?`<p>外部评估（<a href="https://github.com/albertngo1/mtg-draft" target="_blank" rel="noopener">mtg-draft</a>）：${esc(s.external_evaluation.decks)} 副牌的平均可识别去除评价 ${esc(s.external_evaluation.mean_removal_power)}；识别 ${esc(s.external_evaluation.classified)} / ${esc(s.external_evaluation.interactions)} 张互动。${esc(s.external_evaluation.limitation)}</p>`:''}
     ${s.mana_model?.assumptions?`<details><summary>费用准备度如何计算</summary><p class="sub">${esc(s.mana_model.assumptions)}</p>${s.mana_model.hands_per_deck!=null?`<p class="sub">每副牌 ${esc(s.mana_model.hands_per_deck)} 手 · 每手观察 ${esc(s.mana_model.cards_per_hand)} 张牌。准备度抽样不影响后续轮抓。</p>`:''}</details>`:''}
     <p class="sub">${esc(s.limitation)}</p>

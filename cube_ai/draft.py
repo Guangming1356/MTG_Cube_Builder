@@ -3,14 +3,44 @@ import math
 import random
 import re
 from collections import Counter
+from functools import lru_cache
 from .config import GUILDS
 from .brackets import DeckRules, card_reasons, deck_report
 from .commander_rules import automatic as automatic_commander,messages as commander_messages
-from .mana import affordable,_affordable_masks,land_source_mask,readiness_assumptions,MODEL_VERSION
+from .mana import affordable,_affordable_masks,land_fixing_colors,land_source_mask,readiness_assumptions,MODEL_VERSION
 from .casting_costs import curve_value,mana_cost as casting_mana_cost,VERSION as CASTING_VERSION
+from .draft_strength import draft_score,report as draft_strength_report
 
 READINESS_STREAM='readiness-fork-1'
 OPENING_SAMPLER='ordered-prefix-11-v1'
+
+
+@lru_cache(maxsize=16384)
+def _classic_cost_colors_fit(cost,colors):
+    """Check only colored casting requirements, allowing hybrid and life payments.
+
+    Generic, snow and colorless sources are checked separately by readiness;
+    this predicate does not claim the draft actually supplies those sources.
+    """
+    from .mana import MANA_BITS,_payment_plans
+    # Snow and explicitly colorless mana are not additional *color* choices.
+    normalized=cost.replace('{C}','{1}').replace('{S}','{1}')
+    plans=_payment_plans(normalized)
+    if not plans:return None
+    mask=sum(MANA_BITS[c] for c in colors if c in 'WUBRG')
+    # One flexible source per possible payment is enough to test which colors
+    # the symbols require; actual mana-source availability is tested later.
+    return _affordable_masks(normalized,tuple([mask or MANA_BITS['C']]*256),life_budget=19)
+
+
+def spell_fits_deck(card,identity,mode):
+    """Commander uses color identity; traditional decks use casting colors."""
+    if mode=='commander':return card['identity']=='C' or set(card['identity'])<=set(identity)
+    cost=casting_mana_cost(card)
+    fits=_classic_cost_colors_fit(cost,identity) if cost else None
+    # Cards without a conventional cost or with unknown symbols keep the
+    # previous conservative identity behavior rather than being guessed.
+    return fits if fits is not None else card['identity']=='C' or set(card['identity'])<=set(identity)
 
 
 def _readiness_rng(rng,seat):
@@ -110,12 +140,16 @@ def draft_pod(catalog,rows,spec,rng,preferred_guilds=None,readiness_hands=40,_pa
                     g=preferred[seat];pool=pools[seat]
                     have_cmd=have_commanders[seat]
                     def grade(r):
-                        c=catalog.cards[r["name"]];fits=c["identity"]=="C" or set(c["identity"])<=set(g)
-                        if c["kind"]=="land":return 3.0+.4*len(set(c["fixing"]) & set(g))-.4*land_counts[seat]
+                        c=catalog.cards[r["name"]];fits=spell_fits_deck(c,g,spec.mode)
+                        if c["kind"]=="land":
+                            fixing=land_fixing_colors(c)
+                            if spec.mode=='classic' and spec.legality_format=='vintage' and 'C' in fixing and not fixing.intersection(g):
+                                return 2.0+.45*draft_score(c,spec)-.4*land_counts[seat]
+                            return 3.0+.4*len(fixing & set(g))-.4*land_counts[seat]
                         themes=themes_by_seat[seat]
                         signal=.18*len(themes & set(c["enablers"]+c["payoffs"]))
                         cmd=1.8 if spec.mode=="commander" and not have_cmd and automatic_commander(c,spec) and c["identity"]==g else 0
-                        return c["quality"]+signal+cmd+(1.4 if fits else -2.5)-.1*bucket_counts[seat][c['bucket']]
+                        return draft_score(c,spec)+signal+cmd+(1.4 if fits else -2.5)-.1*bucket_counts[seat][c['bucket']]
                     card=max(pack,key=grade);pack.remove(card);pool.append(card)
                     selected=catalog.cards[card['name']];bucket_counts[seat][selected['bucket']]+=1
                     land_counts[seat]+=card['role']=='Land'
@@ -140,9 +174,9 @@ def build_deck(catalog,names,spec,rng,guild,seat=0,*,readiness_hands=40,_rules=N
     for commander in commands:
         identity=commander["identity"] if commander else g
         spells=[r["name"] for r in pool if catalog.cards[r["name"]]["kind"]!="land"
-            and (catalog.cards[r["name"]]["identity"]=="C" or set(catalog.cards[r["name"]]["identity"])<=set(identity))
+            and spell_fits_deck(catalog.cards[r["name"]],identity,spec.mode)
             and (not commander or r["name"]!=commander["name"])]
-        spells.sort(key=lambda n:(-catalog.cards[n]["quality"],curve_value(catalog.cards[n]),n))
+        spells.sort(key=lambda n:(-draft_score(catalog.cards[n],spec),curve_value(catalog.cards[n]),n))
         spells=rules.select([commander['name']] if commander else [],spells)
         # Free basic lands are unlimited. Land count is a deck-building decision,
         # not a requirement that 37 drafted spells must be available.
@@ -152,7 +186,7 @@ def build_deck(catalog,names,spec,rng,guild,seat=0,*,readiness_hands=40,_rules=N
         land_target=max(22,min(28,round(23+(avg-2.5)*2-min(cheap_ramp,6)*.25))) if target==60 else 17
         needed=min(len(spells),target-land_target-int(bool(commander)))
         commander_quality=commander['quality'] if commander else 0
-        score=(round(sum(catalog.cards[n]["quality"] for n in spells[:needed])+commander_quality,6),commander_quality)
+        score=(round(sum(draft_score(catalog.cards[n],spec) for n in spells[:needed])+commander_quality,6),commander_quality)
         if not best or score>best[0]:best=(score,commander,identity,spells[:needed])
     if best is None:
         return dict(seat=seat,guild=g,buildable=False,deck_policy=spec.deck_policy,deck_policy_changes=[],
@@ -161,9 +195,20 @@ def build_deck(catalog,names,spec,rng,guild,seat=0,*,readiness_hands=40,_rules=N
     _,commander,identity,spells=best
     land_target=target-len(spells)-int(bool(commander))
     lands=[r["name"] for r in pool if catalog.cards[r["name"]]["kind"]=="land"
-           and (catalog.cards[r["name"]]["identity"]=="C" or set(catalog.cards[r["name"]]["identity"])<=set(identity))
-           and set(catalog.cards[r["name"]]["fixing"]) & set(identity)]
+           and (spec.mode!='commander' or catalog.cards[r["name"]]["identity"]=="C" or set(catalog.cards[r["name"]]["identity"])<=set(identity))
+           and land_fixing_colors(catalog.cards[r["name"]]) & set(identity)]
     lands=rules.select(([commander['name']] if commander else [])+spells,lands)[:land_target]
+    if spec.mode=='classic':
+        # Utility lands that only produce colorless mana are legal in a normal
+        # draft, but reserve most of the mana base for colored sources. Restricted
+        # mana (e.g. artifact-only) is not treated as generally available.
+        utility=[r['name'] for r in pool if catalog.cards[r['name']]['kind']=='land'
+            and r['name'] not in lands and catalog.cards[r['name']]['identity']=='C'
+            and 'C' in land_fixing_colors(catalog.cards[r['name']])
+            and 'spend this mana only' not in catalog.cards[r['name']].get('text','').lower()
+            and draft_score(catalog.cards[r['name']],spec)>=2.7]
+        utility.sort(key=lambda n:(-draft_score(catalog.cards[n],spec),n))
+        lands+=rules.select(spells+lands,utility)[:min(2,max(0,land_target-len(lands)))]
     deck=dict(seat=seat,guild=g,identity=identity,buildable=True,
         commander=commander and commander["name"],spells=spells,lands=lands,
         land_count=land_target,spell_count=len(spells),deck_policy=spec.deck_policy,deck_policy_changes=[],
@@ -225,7 +270,7 @@ def stress_test(catalog,rows,spec,trials=100,progress=lambda x:None):
                 cards_opened=spec.players*spec.rounds*spec.pack_size,
                 cards_discarded_per_pack=max(0,spec.pack_size-spec.players*spec.pick_count) if spec.discard_after_pass else 0,
                 buildable_rate=round(valid_count/max(1,total_decks),3),guilds=group_summary,
-                examples=examples,packs=first_packs,seed=spec.seed,
+                examples=examples,packs=first_packs,seed=spec.seed,draft_strength=draft_strength_report(rows,spec),
                 mana_model=dict(version=MODEL_VERSION,starting_life=40 if spec.mode=='commander' else 20,assumptions=readiness_assumptions(40 if spec.mode=='commander' else 20),
                     stream_version=READINESS_STREAM,sampling_version=OPENING_SAMPLER,hands_per_deck=40,cards_per_hand=11,casting_version=CASTING_VERSION),
                 component_check=dict(decks=valid_count,decks_with_incomplete_packages=incomplete_packages,

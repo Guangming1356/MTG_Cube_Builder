@@ -21,7 +21,7 @@ Drafted decks receive local structural and mana-readiness diagnostics. A conserv
 
 Your decklists, settings, logs and learned models remain local. Download the portable release rather than sharing a used installation folder. Before upgrading, back up your data and extract a new release to a separate directory.
 
-Select **English** in the header to switch the interface and report downloads without an internet connection. The catalog combines reviewed translations and offline machine-assisted translations. User-authored text, card names and original Oracle text retain their source language. AI advice requests ask the connected provider to answer in the selected language. Source code and issue discussions are welcome in either Chinese or English.
+English is the default for a new installation. Select **中文** or **English** in the header to switch the interface and report downloads without an internet connection; your selection is remembered. The catalog combines reviewed translations and offline machine-assisted translations. User-authored text, card names and original Oracle text retain their source language. AI advice requests ask the connected provider to answer in the selected language. Source code and issue discussions are welcome in either Chinese or English.
 
 Draft settings include the number of players and packs, cards per pack, picks per turn, and either passing each pack once or drafting all cards. Random collation is available; seeded packs apply only to the single-pass mode. Automatic drafters currently favor two-color decks and do not model every Vintage combo or player decision.
 

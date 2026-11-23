@@ -8,6 +8,8 @@
 
 0.2.28 扩展中英文切换与报告下载，AI 顾问按所选语言回答；部分词条由离线机器翻译辅助，用户文字和原始牌面规则保留原文。
 
+0.2.29 新安装默认英文并保留已有语言选择；Vintage 轮抽改按施放颜色组牌，并参考有来源的选牌数据。详见 [项目持续目标](cube_ai/docs/PROJECT_GOALS.md) 与 [Vintage 轮抽说明](cube_ai/docs/VINTAGE_DRAFT.md)。
+
 ## 普通玩家从这里开始
 
 1. 打开 [最新版本下载](https://github.com/Guangming1356/MTG_Cube_Builder/releases/latest)。

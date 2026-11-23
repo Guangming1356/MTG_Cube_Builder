@@ -17,8 +17,21 @@ def _source_mask(colors):
     return mask|(MANA_BITS['S'] if mask and 'S' in colors else 0)
 
 
+@lru_cache(maxsize=2048)
+def _fetches_any_basic(text):
+    return bool(re.search(r'\{T\}, (?:Pay \d+ life, )?Sacrifice this land: Search your library for a basic land card, put it onto the battlefield',text,re.I))
+
+
+def land_fixing_colors(card):
+    """Return known mana colors, including simple sacrifice-for-basic fetches."""
+    colors=set(card.get('fixing',()))
+    if card.get('kind')=='land' and _fetches_any_basic(card.get('text') or ''):
+        colors.update('WUBRG')
+    return colors
+
+
 def land_source_mask(card):
-    mask=_source_mask(frozenset(card.get('fixing',())))
+    mask=_source_mask(frozenset(land_fixing_colors(card)))
     return mask|(MANA_BITS['S'] if mask and 'Snow' in card.get('type','').split() else 0)
 
 
@@ -126,7 +139,7 @@ def commander_basic_sources(catalog,spells,land_names,basics,commander=None):
     cost=casting_mana_cost(catalog.cards[commander])
     needed=Counter(re.findall(r'\{([WUBRG])\}',cost))
     if not needed:return dict(basics)
-    fixed=[set(catalog.cards[n]['fixing'])|({'S'} if 'Snow' in catalog.cards[n].get('type','').split() else set()) for n in land_names]
+    fixed=[land_fixing_colors(catalog.cards[n])|({'S'} if 'Snow' in catalog.cards[n].get('type','').split() else set()) for n in land_names]
     counts=Counter(color for land in fixed for color in land)
     if all(counts[c]+basics.get(c,0)>=n for c,n in needed.items()):return dict(basics)
     def sources(allocation):return fixed+[{c} for c,n in allocation.items() for _ in range(n)]

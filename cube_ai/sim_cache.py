@@ -20,9 +20,9 @@ _local=threading.local()
 def code_signature():
     base=Path(__file__).parent
     digest=hashlib.sha256()
-    for name in ['draft.py','deck_building.py','mana.py','casting_costs.py','external_deck_evaluator.py','mtg_draft_metrics.py','release_dates.py','design.py','features.py','entry_costs.py','commander_rules.py','brackets.py','optimize.py','sim_cache.py']:
+    for name in ['draft.py','draft_strength.py','deck_building.py','mana.py','casting_costs.py','external_deck_evaluator.py','mtg_draft_metrics.py','release_dates.py','design.py','features.py','entry_costs.py','commander_rules.py','brackets.py','optimize.py','sim_cache.py']:
         digest.update((base/name).read_bytes())
-    for p in [base/'data/cube_studies.json',base/'data/paper_release_witnesses.json',base.parent/'ref_thecommandercube.csv']:
+    for p in [base/'data/cube_studies.json',base/'data/paper_release_witnesses.json',base/'data/vintage_pick_prior.json',base.parent/'ref_thecommandercube.csv']:
         if p.is_file():digest.update(p.read_bytes())
     return digest.hexdigest()[:20]
 

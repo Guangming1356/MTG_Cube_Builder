@@ -4,8 +4,9 @@ import random
 
 from .brackets import DeckRules,deck_report,is_gc
 from .design import deck_design_report,package_roles
-from .draft import opening_test
+from .draft import opening_test,spell_fits_deck
 from .casting_costs import curve_value
+from .draft_strength import draft_score
 
 VARIANTS={
     'conservative':dict(low=10,high=8,swaps=4),
@@ -31,7 +32,7 @@ def revise(catalog,deck,spec,variant='balanced',*,evaluate=True,_rules=None):
     selected=list(deck['spells']);commander=deck.get('commander');power=rules.power
     prefix=([commander] if commander else [])+deck['lands']
     candidates=[name for name in deck['drafted'] if name not in prefix and cards[name]['kind']!='land'
-                and (cards[name]['identity']=='C' or set(cards[name]['identity'])<=set(deck['identity']))
+                and spell_fits_deck(cards[name],deck['identity'],spec.mode)
                 and rules.allowed(name)]
     vectors={name:roles(cards[name]) for name in candidates}
     counts=Counter()
@@ -51,7 +52,7 @@ def revise(catalog,deck,spec,variant='balanced',*,evaluate=True,_rules=None):
         nonlocal gc
         if options.get('preserve_finishers') and cards[outgoing]['finisher']:return False
         add=vectors[incoming];remove=vectors[outgoing]
-        if cards[incoming]['quality']<cards[outgoing]['quality']-.75:return False
+        if draft_score(cards[incoming],spec)<draft_score(cards[outgoing],spec)-.75:return False
         if any(counts[key]-remove.get(key,0)+add.get(key,0)<floor for key,floor in floors.items()):return False
         delta=int(is_gc(cards[incoming]))-int(is_gc(cards[outgoing]))
         if power and power['deck_gc'] is not None and gc+delta>power['deck_gc']:return False
@@ -64,14 +65,14 @@ def revise(catalog,deck,spec,variant='balanced',*,evaluate=True,_rules=None):
         swapped=False
         for goal in (['low'] if low_need else [])+(['high'] if high_need else []):
             incoming=sorted((name for name in candidates if name not in selected and (vectors[name]['low'] if goal=='low' else not vectors[name]['high'])),
-                            key=lambda name:(-cards[name]['quality'],curve_value(cards[name]),name))
+                            key=lambda name:(-draft_score(cards[name],spec),curve_value(cards[name]),name))
             outgoing=sorted((name for name in selected if not vectors[name]['low'] and (True if goal=='low' else vectors[name]['high'])),
-                            key=lambda name:(not vectors[name]['high'],cards[name]['quality'],-curve_value(cards[name]),name))
+                            key=lambda name:(not vectors[name]['high'],draft_score(cards[name],spec),-curve_value(cards[name]),name))
             for add in incoming:
                 if any(exchange(add,remove) for remove in outgoing):swapped=True;break
             if swapped:break
         if not swapped:break
-    selected.sort(key=lambda name:(-cards[name]['quality'],curve_value(cards[name]),name))
+    selected.sort(key=lambda name:(-draft_score(cards[name],spec),curve_value(cards[name]),name))
     result=dict(deck,spells=selected)
     result['deck_policy']=variant;result['deck_policy_changes']=changes
     result['research_changes']=changes

@@ -49,8 +49,11 @@ def main():
         assert status['feedback']['model_compatible'] is False and status['feedback']['model_reason']=='not_trained'
         assert status['features']['feedback_scope'] is True
         assert request(url+'api/feedback/status?context=legacy%3Aclassic')['comparisons']==0
-        for asset in ['workspace.js','tasks-ui.js','deck-study-ui.js','style.css']:
+        for asset in ['workspace.js','tasks-ui.js','deck-study-ui.js','style.css','i18n.js','i18n_en.json','i18n_machine_en.json']:
             with urllib.request.urlopen(url+asset,timeout=10) as response:assert response.status==200
+        with urllib.request.urlopen(url,timeout=10) as response:
+            html=response.read().decode('utf8')
+            assert '<html lang="en">' in html and '<option value="en" selected>' in html
         names_code='''import json,sys
 from cube_ai.catalog import Catalog,exclusion_reasons,ReadOnlyLegalities,CATALOG_CACHE_FORMAT
 from cube_ai.forge import configuration,card_index,engine_name,parse_log,verified_game_result
@@ -62,7 +65,7 @@ from cube_ai.config import BuildSpec,ROOT
 from cube_ai.task_control import TaskControl
 from pathlib import Path
 import tempfile
-from cube_ai.mana import requires_colorless_mana,commander_basic_sources
+from cube_ai.mana import requires_colorless_mana,commander_basic_sources,land_fixing_colors
 from cube_ai.release_dates import paper_witness,ASSET as PAPER_ASSET,bundle_asset
 from cube_ai.brackets import card_reasons,profile,score_adjustment
 from cube_ai.design import applicable_themes,design_bonus
@@ -75,6 +78,14 @@ assert c.cards['Benevolent River Spirit']['cast_mv']==7
 from cube_ai.mana import affordable,MODEL_VERSION
 assert MODEL_VERSION=='printed-cost-2'
 from cube_ai.draft import OPENING_SAMPLER,READINESS_STREAM,_readiness_rng
+from cube_ai.draft import spell_fits_deck
+from cube_ai.draft_strength import draft_score,vintage_prior,bundle_asset as bundle_prior
+vintage=BuildSpec.from_dict(dict(mode='classic',legality_format='vintage'))
+assert len(vintage_prior()['elos'])==522 and bundle_prior()
+assert draft_score(c.cards['Black Lotus'],vintage)>draft_score(c.cards['Solemn Simulacrum'],vintage)
+assert spell_fits_deck(c.cards['Kenrith, the Returned King'],'UW','classic')
+assert not spell_fits_deck(c.cards['Kenrith, the Returned King'],'UW','commander')
+assert set('WUBRG')<=land_fixing_colors(c.cards['Prismatic Vista'])
 import random
 assert OPENING_SAMPLER=='ordered-prefix-11-v1' and READINESS_STREAM=='readiness-fork-1'
 parent_rng=random.Random(37);before_state=parent_rng.getstate()

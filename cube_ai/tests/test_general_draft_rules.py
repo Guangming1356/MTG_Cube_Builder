@@ -6,7 +6,7 @@ import pytest
 
 from cube_ai.catalog import Catalog,exclusion_reasons
 from cube_ai.config import BuildSpec
-from cube_ai.draft import deal,draft_pod
+from cube_ai.draft import build_deck,deal,draft_pod,spell_fits_deck
 from cube_ai.engine import audit
 from cube_ai.vintage_data import reference
 
@@ -52,6 +52,48 @@ def test_vintage_restricted_card_allowed_once_but_not_in_legacy(pool):
     legacy=BuildSpec.from_dict(dict(mode='classic',legality_format='legacy',allow_fast_mana=True,allow_colorless_costs=True))
     assert '该赛制不合法/受限' not in exclusion_reasons(card,vintage)
     assert '该赛制不合法/受限' in exclusion_reasons(card,legacy)
+
+
+def test_traditional_draft_uses_casting_colors_not_commander_identity(pool):
+    catalog,_=pool
+    cards=catalog.cards
+    assert spell_fits_deck(cards['Tasigur, the Golden Fang'],'WB','classic')
+    assert spell_fits_deck(cards['Kenrith, the Returned King'],'WB','classic')
+    assert spell_fits_deck(cards['Lurrus of the Dream-Den'],'WU','classic')
+    assert spell_fits_deck(cards['Memnarch'],'WB','classic')
+    assert not spell_fits_deck(cards['Oko, Thief of Crowns'],'WB','classic')
+    assert not spell_fits_deck(cards['Tasigur, the Golden Fang'],'WB','commander')
+    assert not spell_fits_deck(cards['Kenrith, the Returned King'],'WB','commander')
+
+
+@pytest.mark.parametrize('policy',['quality','balanced'])
+def test_traditional_deck_includes_castable_cards_and_useful_off_color_lands(pool,policy):
+    catalog,_=pool
+    names=['Tasigur, the Golden Fang','Kenrith, the Returned King','Memnarch',
+           'Lurrus of the Dream-Den','Oko, Thief of Crowns','Raugrin Triome','Taiga']
+    spec=BuildSpec.from_dict(dict(mode='classic',legality_format='vintage',deck_policy=policy,
+        allow_fast_mana=True,allow_colorless_costs=True))
+    deck=build_deck(catalog,names,spec,random.Random(22),'UW',readiness_hands=0)
+    assert {'Kenrith, the Returned King','Memnarch','Lurrus of the Dream-Den'}<=set(deck['spells'])
+    assert 'Tasigur, the Golden Fang' not in deck['spells']
+    assert 'Oko, Thief of Crowns' not in deck['spells']
+    assert 'Raugrin Triome' in deck['lands'] and 'Taiga' not in deck['lands']
+    assert len(deck['spells'])+len(deck['lands'])+sum(deck['basics'].values())==40
+
+
+def test_basic_fetches_and_colorless_utility_lands_in_traditional_decks(pool):
+    from cube_ai.mana import land_fixing_colors,land_source_mask,MANA_BITS
+    catalog,_=pool
+    vista=catalog.cards['Prismatic Vista']
+    assert set('WUBRG')<=land_fixing_colors(vista)
+    assert land_source_mask(vista)&MANA_BITS['U']
+    names=['Swords to Plowshares','Prismatic Vista','Strip Mine','Wasteland','Ancient Tomb',"Mishra's Workshop"]
+    spec=BuildSpec.from_dict(dict(mode='classic',legality_format='vintage',allow_fast_mana=True,allow_colorless_costs=True))
+    deck=build_deck(catalog,names,spec,random.Random(22),'UW',readiness_hands=0)
+    assert 'Prismatic Vista' in deck['lands']
+    assert len(set(deck['lands']) & {'Strip Mine','Wasteland','Ancient Tomb'})==2
+    assert "Mishra's Workshop" not in deck['lands']
+    assert len(deck['spells'])+len(deck['lands'])+sum(deck['basics'].values())==40
 
 
 def test_official_vintage_reference_supports_power_and_eight_player_drafting(pool):
