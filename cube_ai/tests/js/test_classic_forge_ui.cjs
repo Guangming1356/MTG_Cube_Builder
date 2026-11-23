@@ -1,0 +1,18 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const vm=require('node:vm');
+const text=fs.readFileSync(process.argv[2],'utf8');
+const start=text.indexOf('function updateForgeMode()'),end=text.indexOf('async function guard(',start);
+assert(start>=0&&end>start);
+const games={value:'3'},description={textContent:''};
+const context={current:{spec:{mode:'classic',players:8}},$:id=>id==='forge-games'?games:description};
+vm.runInNewContext(text.slice(start,end),context);
+context.updateForgeMode();
+assert.equal(games.min,'8');assert.equal(games.step,'8');assert.equal(games.value,'8');
+assert(description.textContent.includes('40 张牌组'));
+context.current.spec.players=3;context.updateForgeMode();
+assert.equal(games.min,'4');assert.equal(games.step,'2');assert.equal(games.value,'8');
+context.current.spec={mode:'commander',players:3};context.updateForgeMode();
+assert.equal(games.min,'3');assert.equal(games.step,'3');assert.equal(games.value,'3');
+assert(description.textContent.includes('60 张牌组'));
+console.log('classic Forge UI checks passed');

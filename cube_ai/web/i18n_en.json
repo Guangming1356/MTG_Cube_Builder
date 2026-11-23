@@ -300,5 +300,13 @@
   "结构化结果": "Structured results",
   "下载全部牌组与日志": "Download decks and logs",
   "日志": "Log",
-  "仅评估可识别的指向性去除；未识别互动不代表无效，不是胜率。": "Only recognizable targeted removal is evaluated. Unclassified interaction is not necessarily ineffective, and this is not a win rate."
+  "仅评估可识别的指向性去除；未识别互动不代表无效，不是胜率。": "Only recognizable targeted removal is evaluated. Unclassified interaction is not necessarily ineffective, and this is not a win rate.",
+  "Forge 实战模拟": "Forge game simulation",
+  "自动轮抓、挑选主牌并自由补基本地；Forge 原生 AI 实际结算牌效、战斗与胜负。": "Draft cards, build decks and add basic lands. Forge’s native AI plays the games using the actual rules.",
+  "传统轮抽每桌按配对进行两人对局，40 张牌组、20 点生命；对手交换先后手。引擎不支持的牌组仅跳过相关配对，不替换卡牌。": "Traditional drafts play two-player games with 40-card decks and 20 starting life; each pairing switches starting order. Only pairings involving unsupported decks are skipped; cards are never substituted.",
+  "三人 Commander 轮抽使用 60 张牌组（含指挥官）、40 点生命，每三局轮换座位。Forge 原生 AI 实际结算牌效、战斗与胜负。": "Three-player Commander drafts use 60-card decks including the commander and 40 starting life, rotating seats every three games. Forge’s native AI resolves card effects, combat and game outcomes.",
+  "需要载入三人 Commander 或传统 Cube": "Load a three-player Commander or traditional Cube",
+  "请先载入一套 Cube": "Load a Cube first",
+  "真实 Forge Draft 规则与原生 AI；每局两人、40 张、20 点生命。未支持的牌组仅跳过相关配对，不替换牌。小样本和同桌对局不能证明颜色平衡或人类胜率；异常和超时不计为正常胜负。": "Games use Forge Draft rules and native AI: two players, 40 cards and 20 starting life. Only pairings involving unsupported decks are skipped; cards are not replaced. Small samples and same-pod games do not establish color balance or human win rates. Errors and timeouts are excluded from normal outcomes.",
+  "双引擎入口诊断目前仅支持三人 Commander 对局": "The two-engine entry diagnostic currently supports only three-player Commander games."
 }

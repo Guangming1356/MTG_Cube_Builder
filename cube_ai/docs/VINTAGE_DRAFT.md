@@ -25,5 +25,20 @@ small structural observations of one scripted drafter, not human pick rates,
 game outcomes, or proof of a stronger deck. The prior and color/land changes were
 applied together, so these results do not isolate either change's effect.
 
+Traditional draft pods can now run native Forge Draft games in two-player
+pairings with 40-card decks and 20 starting life. The isolated process backend
+is used because the resident bridge currently supports Commander only. The
+same pair plays from both starting seats. Unsupported drafted decks are kept
+unchanged; only pairings involving them are skipped and counted. These games do
+not train the three-player Commander model. A separate Vintage training and
+validation pipeline remains future work.
+
+On 2026-11-24, one fixed-seed eight-player Vintage pod was drafted and all
+eight 40-card decks played in four pairs with reversed starting order. All
+eight Forge games ended normally, and their saved winner records matched the
+native logs. This is an integration check, not evidence of balanced colors or
+human win rates; additional independent pods are needed for evaluation.
+
 默认英文；轮抽报告会说明评级覆盖数量和局限。上述对照只是自动组牌的
-结构观察，不是 Forge 对局，也不能证明胜率或娱乐性。
+结构观察，不能证明胜率或娱乐性。传统轮抽已接入 Forge 两人对局，但暂不
+用这些对局训练指挥官模型。

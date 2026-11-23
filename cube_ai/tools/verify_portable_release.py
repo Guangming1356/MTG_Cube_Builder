@@ -48,6 +48,7 @@ def main():
         assert status['feedback']['comparisons']==0 and status['feedback']['model'] is None
         assert status['feedback']['model_compatible'] is False and status['feedback']['model_reason']=='not_trained'
         assert status['features']['feedback_scope'] is True
+        assert status['features']['classic_forge'] is True
         assert request(url+'api/feedback/status?context=legacy%3Aclassic')['comparisons']==0
         for asset in ['workspace.js','tasks-ui.js','deck-study-ui.js','style.css','i18n.js','i18n_en.json','i18n_machine_en.json']:
             with urllib.request.urlopen(url+asset,timeout=10) as response:assert response.status==200
@@ -80,6 +81,8 @@ assert MODEL_VERSION=='printed-cost-2'
 from cube_ai.draft import OPENING_SAMPLER,READINESS_STREAM,_readiness_rng
 from cube_ai.draft import spell_fits_deck
 from cube_ai.draft_strength import draft_score,vintage_prior,bundle_asset as bundle_prior
+from cube_ai.forge_classic import classic_pairings,classic_min_games
+assert classic_min_games(8)==8 and len(classic_pairings([str(i) for i in range(8)],8))==8
 vintage=BuildSpec.from_dict(dict(mode='classic',legality_format='vintage'))
 assert len(vintage_prior()['elos'])==522 and bundle_prior()
 assert draft_score(c.cards['Black Lotus'],vintage)>draft_score(c.cards['Solemn Simulacrum'],vintage)
@@ -208,6 +211,14 @@ print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs(
         assert result['result']['mana_model']['stream_version']=='readiness-fork-1'
         assert result['result']['mana_model']['hands_per_deck']==40 and result['result']['mana_model']['cards_per_hand']==11
         assert all(d['deck_policy']=='balanced' for d in result['result']['examples'])
+        vintage=request(url+'api/vintage');vintage['spec']['players']=2
+        classic_job=request(url+'api/tasks',dict(operation='forge',cards=vintage['cards'],spec=vintage['spec'],
+            pods=1,games_per_pod=2,clock_seconds=20,pod_seeds=[9000],workers=1))['job_id']
+        classic=wait_until(lambda:(j if (j:=request(url+'api/job?id='+classic_job))['state'] in {'done','failed'} else None),timeout=210)
+        assert classic['state']=='done',classic.get('error')
+        classic_result=classic['result'];assert classic_result['rules']['starting_life']==20 and classic_result['rules']['deck_total_exported']==40
+        assert len(classic_result['games'])==2 and classic_result['skipped_games']==0
+        assert all(g['outcome'] in {'win','draw','engine_timeout'} for g in classic_result['games'])
         request(url+'api/shutdown',{});time.sleep(1);url=start()
         restored=request(url+'api/job?id='+job)
         assert restored['state']=='done' and restored['result']==result['result']
@@ -218,7 +229,7 @@ print(json.dumps(dict(front_aliases=len(pairs),trace_names=len(trace_name_pairs(
                     lazy_solver_import=True,full_cube_generation=True,calibration_reference_validation=True,blocker_display_validation=True,
                     colorless_preference_validation=True,commander_mana_validation=True,paper_release_validation=True,
                     scoped_rules_validation=True,catalog_cache_format_validation=True,early_result_recording_validation=True,
-                    deck_policy_validation=True,entry_cost_validation=True,commander_selection_validation=True,mana_payment_validation=True,readiness_stream_validation=True,rules_scope_validation=True)
+                    deck_policy_validation=True,entry_cost_validation=True,commander_selection_validation=True,mana_payment_validation=True,readiness_stream_validation=True,rules_scope_validation=True,classic_forge_validation=True)
         args.out.write_text(json.dumps(report,indent=2),encoding='utf8');print(json.dumps(report),flush=True)
     finally:
         if url:

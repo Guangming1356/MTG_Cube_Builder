@@ -9,7 +9,7 @@ MTG Cube Builder is a local workspace for designing, checking, drafting and refi
 1. Download the Windows x64 portable ZIP from the [releases page](https://github.com/Guangming1356/MTG_Cube_Builder/releases).
 2. Extract the entire archive and double-click **启动Cube助手.exe**. The application opens at a local address in your browser.
 3. Choose Commander, a conventional Cube, or the MTGO Vintage Cube reference. The Vintage reference deliberately includes powerful cards such as Black Lotus.
-4. Configure the draft rules, run draft checks, and inspect the resulting decks. Forge multiplayer game simulation currently supports three-player Commander.
+4. Configure the draft rules, run draft checks, and inspect the resulting decks. Forge supports three-player Commander and two-player games between decks from a traditional draft pod.
 
 The Vintage reference is the [MTGO October 7, 2026 card list](https://www.mtgo.com/vintage-cube-cardlist), not a new official list. Card data is a dated snapshot and needs updating as new sets or rules appear.
 
@@ -25,4 +25,4 @@ English is the default for a new installation. Select **中文** or **English** 
 
 Draft settings include the number of players and packs, cards per pack, picks per turn, and either passing each pack once or drafting all cards. Random collation is available; seeded packs apply only to the single-pass mode. Automatic drafters currently favor two-color decks and do not model every Vintage combo or player decision.
 
-The current game-outcome learner runs after Forge optimization rather than after every standalone draft. Vintage drafts are evaluated structurally but cannot yet be played through this project's Forge integration or used to train a Vintage game-outcome model.
+The current game-outcome learner runs after Commander Forge optimization rather than after every standalone draft. Vintage decks can now play two-player Forge Draft games, but these games do not yet train a separate Vintage model.

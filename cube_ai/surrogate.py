@@ -54,6 +54,10 @@ def collect(catalog,progress=lambda _:None):
     for path in sorted(MATCHES.glob('*/report.json')):
         try:
             r=json.loads(path.read_text(encoding='utf8'));tables={p['pod']:p for p in r['tables']}
+            # The existing feature/target model is trained on 60-card,
+            # three-player Commander. Classic two-player games require a
+            # separate model and must never become Commander labels.
+            if r.get('spec',{}).get('mode','commander')!='commander':continue
             if scope is None or r.get('engine',{}).get('fingerprint')!=scope:
                 excluded_engine_games+=len(r.get('games',[]));continue
             try:

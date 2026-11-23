@@ -17,12 +17,12 @@ The current scope also includes:
   report heuristics as measured match outcomes.
 - Deck assessment and learning grounded in drafted decks and actual Forge game
   data, with separate validation and transparent limitations. Vintage game
-  simulation and automatic learning after standalone drafts remain outstanding.
+  learning and automatic learning after standalone drafts remain outstanding.
 - Preserve the user's local data, avoid controlling the user's desktop, and
   verify releases before publishing. Do not retain redundant release archives
   on the user's computer.
 
 项目持续优化范围包括中英文界面与报告、可配置轮抽规则、Commander 和
 Vintage Cube、基于轮抽与真实 Forge 对局的评估学习，以及速度、内存和界面。
-新安装默认英语，已有语言选择应保留。现阶段传统赛制的 Forge 实战与每次
-独立轮抽后的自动学习仍未完成，不能将静态评估称为实战结果。
+新安装默认英语，已有语言选择应保留。传统赛制已接入 Forge 两人对局；其
+实战学习和每次独立轮抽后的自动学习仍未完成，不能将静态评估称为实战结果。

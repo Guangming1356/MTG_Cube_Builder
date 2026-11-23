@@ -27,6 +27,8 @@ def load_case(source_type,source_id,game_index):
     validate_case(source_type,source_id,game_index)
     folder=(ROOT/'matches' if source_type=='match' else ROOT/'private/deck-studies')/source_id
     report=json.loads((folder/'report.json').read_text(encoding='utf8'))
+    if source_type=='match' and report.get('spec',{}).get('mode')=='classic':
+        raise ValueError('双引擎入口诊断目前仅支持三人 Commander 对局')
     games=report.get('games',[])
     if game_index>=len(games):raise ValueError('该局记录不存在')
     game=games[game_index];order=game.get('order')

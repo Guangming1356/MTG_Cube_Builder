@@ -73,8 +73,13 @@ def execute_operation(app,operation,spec,rows,data,progress):
             if field in data:options[argument]=data[field]
         value=tuning.calibrate(app.catalog,rows,spec,progress,**options)
     elif operation=="forge":
-        value=forge_simulate(app.catalog,rows,spec,data.get('pods',10),data.get('games_per_pod',3),data.get('clock_seconds',90),progress,workers=data.get('workers',0),
-                             pod_seeds=data.get('pod_seeds'),preferred_guilds=data.get('preferred_guilds'))
+        if spec.mode=='classic':
+            from .forge_classic import simulate as classic_simulate,classic_min_games
+            value=classic_simulate(app.catalog,rows,spec,data.get('pods',10),data.get('games_per_pod',classic_min_games(spec.players)),data.get('clock_seconds',90),progress,workers=data.get('workers',0),
+                                   pod_seeds=data.get('pod_seeds'),preferred_guilds=data.get('preferred_guilds'))
+        else:
+            value=forge_simulate(app.catalog,rows,spec,data.get('pods',10),data.get('games_per_pod',3),data.get('clock_seconds',90),progress,workers=data.get('workers',0),
+                                 pod_seeds=data.get('pod_seeds'),preferred_guilds=data.get('preferred_guilds'))
     elif operation=='deck-study':
         from .deck_study import compare
         policy_options=dict(variant=data['deck_variant']) if 'deck_variant' in data else {}
@@ -387,7 +392,7 @@ def handler_for(app):
                 if path.path=="/api/status":
                     with app.lock:active_jobs=sum(j['state'] in ACTIVE for j in app.jobs.values())
                     return self.json(200,dict(version=__version__,workspace_id=WORKSPACE_ID,cards=len(app.catalog.cards),snapshot=app.catalog.snapshot,
-                        active_jobs=active_jobs,speed_version=2,task_controls=True,features=dict(deck_study=True,protected_deck_study=True,calibration_preview=True,native_diagnostic=True,persistent_job_history=True,workspace_restore=True,feedback_scope=True),
+                        active_jobs=active_jobs,speed_version=2,task_controls=True,features=dict(deck_study=True,protected_deck_study=True,calibration_preview=True,native_diagnostic=True,persistent_job_history=True,workspace_restore=True,feedback_scope=True,classic_forge=True),
                         experiments=dict(profiles={k:experiment_budget(k) for k in PROFILES},resources=execution_resources()),
                         knowledge_chunks=len(app.knowledge.chunks),gpt=app.ai_status(),themes=THEME_NAMES,
                         presets={"commander":BuildSpec.from_dict({'bracket':3,'deck_policy':'balanced'}).to_dict(),"classic":BuildSpec.from_dict({"mode":"classic"}).to_dict()},brackets=public_profiles(),

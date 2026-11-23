@@ -94,6 +94,7 @@ def match_report_english(result):
         f"Completed normally: {summary['completed']}/{len(result['games'])} games.",
         f"Outcomes: {json.dumps(summary['outcomes'],ensure_ascii=False,sort_keys=True)}.",
         f"Skipped draft pods: {result['skipped_pods']}; engine card coverage: {coverage['supported']}/{coverage['total']}.",
+        *([f"Skipped pairings involving unsupported decks: {result['skipped_games']}."] if 'skipped_games' in result else []),
         '',('Results reflect the specific drafting, deck-building, and Forge AI strategies. '
             'Small samples do not establish color balance or human win rates. Engine failures and timeouts are excluded from ordinary results.'),
         '','## Game records','']

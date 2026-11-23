@@ -306,6 +306,7 @@ def _cached_battle(config,deck_dir,order,seed,clock_seconds,out,log_name):
             bridge_signature() if config.get('backend')=='resident' else '',
             config.get('backend','isolated'),config.get('heap_mib',2048),config.get('jvm_options',[]),order,seed,clock_seconds,
             [fingerprint(deck_dir/(n+'.dck')) for n in order]]
+        if config.get('game_format','Commander')!='Commander':identity.extend(['format',config['game_format']])
         if compat:identity.extend(['compatibility',compat])
         cache_key=key('game',identity)
         cached=get(cache_key)
@@ -330,6 +331,8 @@ def _file_hash(path,size,mtime):return sha256(Path(path))
 def _run_battle(config,deck_dir,order,seed,clock_seconds,out,log_name):
     """One native game, usable for both a draft pod and controlled cross-Cube matches."""
     fallback=None
+    if config.get('backend')=='resident' and config.get('game_format','Commander')!='Commander':
+        raise ValueError('常驻引擎当前仅支持 Commander；传统轮抽须使用独立 Forge 进程')
     if config.get('backend')=='resident':
         from .forge_worker import run,WorkerUnavailable
         def fresh_home(c,o):
@@ -352,7 +355,7 @@ def _run_battle(config,deck_dir,order,seed,clock_seconds,out,log_name):
         command += ['-cp',os.pathsep.join([*config['extra_classpath'],config['jar']]),config['native_main_class']]
     else:command += ['-jar',config['jar']]
     command += ['sim','-D',str(deck_dir.resolve()),'-d',*[n+'.dck' for n in order],
-        '-f','Commander','-n','1','-s',str(seed),'-c',str(clock_seconds)]
+        '-f',config.get('game_format','Commander'),'-n','1','-s',str(seed),'-c',str(clock_seconds)]
     home=worker_home(config,out)
     started=time.monotonic();timeout=False
     try:
